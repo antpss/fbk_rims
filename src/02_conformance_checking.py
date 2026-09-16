@@ -1,0 +1,47 @@
+import argparse
+import pm4py
+
+def main():
+    # CLI setup to pick which model to evaluate
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--miner", choices=["split", "inductive"], default="split")
+    args = parser.parse_args()
+
+    input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
+    input_pnml_path = f"../models/discovered_model_{args.miner}.pnml"
+
+    # data loading
+    print(f"Loading log: {input_log_path}")
+    log = pm4py.read_xes(input_log_path)
+    
+    print(f"Loading model: {input_pnml_path}")
+    net, initial_marking, final_marking = pm4py.read_pnml(input_pnml_path)
+
+    # Calculate fitness via alignments
+    print("Calculating fitness...")
+    fitness_dict = pm4py.fitness_alignments(log, net, initial_marking, final_marking)
+    
+    # dict to overall log fitness
+    fitness = fitness_dict.get('log_fitness', 0.0)
+
+    # Calculate precision
+    print("Calculating precision...")
+    precision = pm4py.precision_alignments(log, net, initial_marking, final_marking)
+
+    # Calculate F1-score
+    if fitness + precision > 0:
+        f1_score = 2 * (fitness * precision) / (fitness + precision)
+    else:
+        f1_score = 0.0
+
+    #final metrics
+    print("\n--- Conformance Results ---")
+    print(f"Model: {args.miner.upper()} MINER")
+    print(f"Fitness:   {fitness:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"F1-Score:  {f1_score:.4f}")
+    print("---------------------------\n")
+
+if __name__ == "__main__":
+    main()
+

@@ -1,0 +1,137 @@
+{
+    "interTriggerTimer": {
+        "type": "custom"
+    },
+    "processing_time": {
+        "A_SUBMITTED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_PARTLYSUBMITTED": {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_PREACCEPTED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_ACCEPTED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_FINALIZED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_CANCELLED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_DECLINED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_APPROVED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_REGISTERED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        },
+        "A_ACTIVATED":  {
+            "name": "uniform",
+            "parameters": {
+                "low": 3600,
+                "high": 7200
+            }
+        }
+    },
+    "resource": {
+        "Role 1": {
+            "resources": ["Sara", "Mike"],
+            "calendar": {
+                "days": [0, 1, 2, 3, 4],
+                "hour_min": 8,
+                "hour_max": 16
+            }
+        },
+        "Role 2": {
+            "resources": ["Ellen", "Sue"],
+            "calendar": {
+                "days": [0, 1, 2, 3, 4, 5],
+                "hour_min": 8,
+                "hour_max": 19
+            }
+        }
+    },
+    "resource_table": [
+        {
+            "role": "Role 1",
+            "task": "A_SUBMITTED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_PARTLYSUBMITTED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_PREACCEPTED"
+        },
+        {
+            "role": "Role 1",
+            "task": "A_ACCEPTED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_FINALIZED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_CANCELLED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_DECLINED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_APPROVED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_REGISTERED"
+        },
+        {
+            "role": "Role 2",
+            "task": "A_ACTIVATED"
+        }
+    ]
+}
