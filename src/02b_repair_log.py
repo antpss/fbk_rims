@@ -3,7 +3,7 @@ import pm4py
 from pm4py.objects.log.obj import EventLog, Trace, Event
 
 def main():
-    input_log_path = "../data/raw/BPI_Challenge_2012.xes"
+    input_log_path = "../data/processed/BPI_2012_W_only.xes"
     input_pnml_path = "../models/discovered_model_split.pnml"
     output_log_path = "../data/processed/aligned_BPI_2012.xes"
 

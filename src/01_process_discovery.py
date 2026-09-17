@@ -10,7 +10,7 @@ def main():
 
     #paths
     #input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
-    input_log_path = "../data/raw/BPI_Challenge_2012.xes"
+    input_log_path = "../data/processed/BPI_2012_W_only.xes"
     output_pnml_path = f"../models/discovered_model_{args.miner}.pnml"
 
     print(f"Loading event log from: {input_log_path}...")
@@ -23,6 +23,7 @@ def main():
         bpmn_model = pm4py.discover_bpmn_split_miner(log)
         print("Converting BPMN to Petri Net...")
         net, initial_marking, final_marking = pm4py.convert_to_petri_net(bpmn_model)
+
     elif args.miner == "inductive":
         # Discover Petri Net directly using Inductive Miner (with noise filtering)
         print("Discovering Petri Net using Inductive Miner...")

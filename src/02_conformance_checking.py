@@ -8,7 +8,7 @@ def main():
     args = parser.parse_args()
 
     #input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
-    input_log_path = "../data/raw/BPI_Challenge_2012.xes"
+    input_log_path = "../data/processed/BPI_2012_W_only.xes"
     input_pnml_path = f"../models/discovered_model_{args.miner}.pnml"
 
     # data loading
