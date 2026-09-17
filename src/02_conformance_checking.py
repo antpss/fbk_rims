@@ -7,7 +7,8 @@ def main():
     parser.add_argument("--miner", choices=["split", "inductive"], default="split")
     args = parser.parse_args()
 
-    input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
+    #input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
+    input_log_path = "../data/raw/BPI_Challenge_2012.xes"
     input_pnml_path = f"../models/discovered_model_{args.miner}.pnml"
 
     # data loading
@@ -17,16 +18,23 @@ def main():
     print(f"Loading model: {input_pnml_path}")
     net, initial_marking, final_marking = pm4py.read_pnml(input_pnml_path)
 
-    # Calculate fitness via alignments
-    print("Calculating fitness...")
-    fitness_dict = pm4py.fitness_alignments(log, net, initial_marking, final_marking)
-    
-    # dict to overall log fitness
+    # --- FULL ALIGNMENTS (SLOW) ---
+    # print("Calculating fitness (hang tight, computing alignments)...")
+    # fitness_dict = pm4py.fitness_alignments(log, net, initial_marking, final_marking)
+    # fitness = fitness_dict.get('log_fitness', 0.0)
+
+    # --- TOKEN-BASED REPLAY (FAST) ---
+    print("Calculating fitness (Fast Token-Based Replay)...")
+    fitness_dict = pm4py.fitness_token_based_replay(log, net, initial_marking, final_marking)
     fitness = fitness_dict.get('log_fitness', 0.0)
 
-    # Calculate precision
-    print("Calculating precision...")
-    precision = pm4py.precision_alignments(log, net, initial_marking, final_marking)
+    # --- FULL ALIGNMENTS PRECISION (SLOW) ---
+    # print("Calculating precision...")
+    # precision = pm4py.precision_alignments(log, net, initial_marking, final_marking)
+
+    # --- TOKEN-BASED PRECISION (FAST) ---
+    print("Calculating precision (Fast Token-Based Replay)...")
+    precision = pm4py.precision_token_based_replay(log, net, initial_marking, final_marking)
 
     # Calculate F1-score
     if fitness + precision > 0:

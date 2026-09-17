@@ -9,7 +9,8 @@ def main():
     args = parser.parse_args()
 
     #paths
-    input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
+    #input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
+    input_log_path = "../data/raw/BPI_Challenge_2012.xes"
     output_pnml_path = f"../models/discovered_model_{args.miner}.pnml"
 
     print(f"Loading event log from: {input_log_path}...")
