@@ -4,13 +4,23 @@ __pycache__
 venv
 .env
 
+# reference repos (local only)
+RIMS_tool/
+RIMS/
+
 #project description
 context.md
-
-RIMS/
-venv/
 
 
 #generated models
 models/
 *.pnml
+
+#datasets and large logs
+data/
+*.xes
+*.xes.gz
+*.csv
+
+#visual artifacts
+*.png
