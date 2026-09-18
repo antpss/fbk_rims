@@ -11,7 +11,7 @@ INPUT_LOG = "../data/raw/BPI_Challenge_2012.xes"
 OUTPUT_LOG = "../data/processed/BPI_2012_W_only.xes"
 
 # Choose prefixes to keep different event types
-# For example: ("W_", "A_") or ("A_",)
+# For example: ("W_", "A_", "O_",) or ("A_",)
 PREFIXES_TO_KEEP = ("W_",) 
 # ==========================================
 
@@ -30,6 +30,19 @@ def filter_log():
     case_counts = df_filtered.groupby('case:concept:name').size()
     valid_cases = case_counts[case_counts > 0].index
     df_filtered = df_filtered[df_filtered['case:concept:name'].isin(valid_cases)]
+
+    # Translate Dutch activities to English
+    translation_map = {
+        "W_Afhandelen leads": "W_Handle leads",
+        "W_Completeren aanvraag": "W_Complete application",
+        "W_Valideren aanvraag": "W_Validate application",
+        "W_Nabellen offertes": "W_Call after offers",
+        "W_Beoordelen fraude": "W_Assess fraud",
+        "W_Wijzigen contractgegevens": "W_Change contract details",
+        "W_Nabellen incomplete dossiers": "W_Call after incomplete files"
+    }
+    print("Translating activities to English...")
+    df_filtered['concept:name'] = df_filtered['concept:name'].replace(translation_map)
 
     print(f"Filtered events: {len(df_filtered)}")
 
