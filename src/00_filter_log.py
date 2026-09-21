@@ -21,7 +21,7 @@ def filter_log():
     df = pm4py.read_xes(INPUT_LOG)
     print(f"Original events: {len(df)}")
 
-    #filtering using Pandas (faster)
+    #filtering using Pandas
     print(f"Filtering to keep only activities starting with: {PREFIXES_TO_KEEP}")
     df_filtered = df[df['concept:name'].str.startswith(PREFIXES_TO_KEEP)]
     
