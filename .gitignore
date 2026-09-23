@@ -4,7 +4,7 @@ __pycache__
 venv
 .env
 
-# reference repos (local only)
+# reference repos
 RIMS_tool/
 RIMS/
 
@@ -15,6 +15,7 @@ context.md
 #generated models
 models/
 *.pnml
+src/catboost_info
 
 #datasets and large logs
 data/
