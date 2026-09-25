@@ -1,0 +1,88 @@
+# ===================================================================
+# RIMS+ Central Configuration File
+# 
+# Centralized pipeline configuration for process discovery, dataset
+# extraction, feature engineering, model training, and simulation.
+# ===================================================================
+
+project:
+  name: "BPI_2012"
+  random_seed: 42
+
+paths:
+  raw_log: "data/processed/BPI_2012_W_only.xes"
+  aligned_log: "data/processed/aligned_BPI_2012.xes"
+  petri_net: "models/discovered_model_split.pnml"
+  output_base_dir: "data/processed"
+  models_dir: "models_no_zeros"
+
+# Process Discovery Settings
+discovery:
+  miner: "split"                  # Options: "split", "inductive"
+  inductive_noise_threshold: 0.2  # Noise threshold for inductive miner
+
+# Feature Engineering Settings
+features:
+  #prefix_window_size: 5
+  prefix_window_size: 10          # History window of past activities (trace prefix)
+  
+  # Tier 1: Universal Features (Calculated from standard XES schema)
+  universal:
+    use_wip: true                 # Process-level active case count (WIP)
+    use_ac_wip: true              # Activity-level active case count (AC_WIP)
+    use_role_occupancy: true      # Relative role occupancy (Role_*_OC)
+    use_calendar_time: true       # Daytime (0-1) and Weekday (one-hot)
+    use_prev_duration: true       # Duration of previous activity in trace
+
+  # Tier 2: Domain-Specific Attributes
+  # Empty list [] will completely exclude domain attributes, making the pipeline strictly agnostic.
+  case_attributes:
+    - column: "case:AMOUNT_REQ"
+      feature_name: "RequestedAmount"
+      type: "continuous"
+      fill_value: 0.0
+
+  # Event-level attributes (e.g. Resource_ID, cost, channel). Empty by default for resource-agnostic modeling.
+  event_attributes: []
+
+# Human activities to model
+target_activities:
+  - "W_Assess fraud"
+  - "W_Call after incomplete files"
+  - "W_Call after offers"
+  - "W_Complete application"
+  - "W_Handle leads"
+  - "W_Validate application"
+
+# ===================================================================
+# Config-Driven Task Specifications
+# Controls zero-handling, targets, and sample weighting per task
+# ===================================================================
+tasks:
+  duration:
+    description: "Activity processing time duration prediction"
+    target_column: "Duration_Seconds"
+    output_file: "datasets_no_zeros/dataset_duration_global.csv"
+    filter_zero_duration: true    # Drop instant automated/pass-through events
+    sample_weighting:
+      enabled: true
+      smoothing: "sqrt"           # Options: "sqrt", "linear", "none"
+      max_weight_cap: 8.0         # Hard ceiling to prevent rare activity gradient explosion
+      output_weights_file: "datasets_no_zeros/activity_weights.json"
+
+  waiting_time:
+    description: "Queue / waiting time before activity starts"
+    target_column: "Wait_Time_Seconds"
+    output_file: "datasets_no_zeros/dataset_waiting_time_global.csv"
+    filter_zero_duration: false   # Zero waiting time is physically valid (immediate pickup)
+    sample_weighting:
+      enabled: false
+
+  routing:
+    description: "Decision point / next activity prediction at XOR splits"
+    target_column: "Next_Activity"
+    output_file: "datasets_no_zeros/dataset_routing_global.csv"
+    filter_zero_duration: false   # Never drop zero-duration events: control-flow truth must be kept
+    sample_weighting:
+      enabled: false
+
