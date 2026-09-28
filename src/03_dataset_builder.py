@@ -1,6 +1,7 @@
 import os
 import json
 import argparse
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 import pm4py
@@ -38,15 +39,15 @@ def main():
 
     # Feature extraction settings
     feat_cfg = cfg.get("features", {})
-    prefix_window = feat_cfg.get("prefix_window_size", 10
+    prefix_window = feat_cfg.get("prefix_window_size", 10)
     univ_cfg = feat_cfg.get("universal", {})
     case_attrs = feat_cfg.get("case_attributes", [])
     event_attrs = feat_cfg.get("event_attributes", [])
 
     print(f"Prefix Window: {prefix_window}")
     print(f"Universal Features: WIP={univ_cfg.get('use_wip')}, Roles={univ_cfg.get('use_role_occupancy')}, Calendar={univ_cfg.get('use_calendar_time')}")
-    print(f"Domain Case Attributes (Tier 2): {[c['feature_name'] for c in case_attrs] if case_attrs else 'None (Strictly Agnostic)'}")
-    print(f"Domain Event Attributes (Tier 2): {event_attrs if event_attrs else 'None (Resource-Agnostic)'}")
+    print(f"Domain Case Attributes (Tier 2): {[c['feature_name'] for c in case_attrs]}")
+    print(f"Domain Event Attributes (Tier 2): {event_attrs}")
 
     # Pre-calculate original complete distributions for sample weighting
     completes_df = df[(df['concept:name'].isin(activities)) & (df['lifecycle:transition'].str.upper() == 'COMPLETE')]
@@ -66,7 +67,7 @@ def main():
         activity_capacity = {}
     activity_capacity = {k: max(1, v) for k, v in activity_capacity.items()}
 
-    ac_wip = {act: 0 for act in activities}
+    ac_wip = defaultdict(int)
     case_event_counts = df['case:concept:name'].value_counts().to_dict()
     seen_events = {case_id: 0 for case_id in case_event_counts}
 
@@ -172,8 +173,9 @@ def main():
                 }
 
             row_dict = {
+                "Case_ID": case_id,
                 "Target_Activity": activity_name,
-                "Prefix": ",".join(case_prefixes[case_id][-prefix_window:]),
+                "Prefix": json.dumps(case_prefixes[case_id][-prefix_window:]),
                 "Duration_Seconds": duration,
                 "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
             }

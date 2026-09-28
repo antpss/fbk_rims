@@ -1,11 +1,13 @@
 import os
 import pm4py
 from pm4py.objects.log.obj import EventLog, Trace, Event
+from config_loader import load_config, PROJECT_ROOT
 
 def main():
-    input_log_path = "../data/processed/BPI_2012_W_only.xes"
-    input_pnml_path = "../models/discovered_model_split.pnml"
-    output_log_path = "../data/processed/aligned_BPI_2012.xes"
+    cfg = load_config()
+    input_log_path = cfg["paths"].get("raw_log", os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes"))
+    input_pnml_path = cfg["paths"].get("petri_net", os.path.join(PROJECT_ROOT, "models/petri_nets/discovered_model_split.pnml"))
+    output_log_path = cfg["paths"].get("aligned_log", os.path.join(PROJECT_ROOT, "data/processed/aligned_BPI_2012.xes"))
 
     os.makedirs(os.path.dirname(output_log_path), exist_ok=True)
 

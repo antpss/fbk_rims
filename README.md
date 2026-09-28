@@ -14,13 +14,18 @@ This repository contains the advanced **RIMS+** (Runtime Integration of Machine 
 │   │   ├── datasets/                  # Tabular datasets per activity (including 0-duration)
 │   │   └── datasets_no_zeros/         # Tabular datasets per activity (0-duration filtered)
 │   └── generated/                     # Output logs from simulation runs
-├── models/                            # Discovered Petri nets and baseline models
-│   ├── discovered_model_split.pnml    # Discovered Petri net (Split Miner)
-│   ├── discovered_model_inductive.pnml# Discovered Petri net (Inductive Miner)
-│   ├── tcns/                          # Trained PyTorch TCN models & scalers
-│   ├── xgboost/                       # Trained XGBoost models
-│   ├── lstms/                         # Trained PyTorch LSTM models & scalers
-│   └── xgboost_routing.json           # Trained XOR routing classifier
+├── models/                            # Process models and predictive ML models
+│   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
+│   │   ├── discovered_model_split.pnml
+│   │   ├── discovered_model_inductive.pnml
+│   │   ├── split_miner_visual.png
+│   │   └── inductive_miner_visual.png
+│   ├── global_xgboost/                # Pillar 1: Global XGBoost model
+│   ├── local_xgboost/                 # Pillar 2: Local XGBoost models per activity
+│   ├── global_tcn/                    # Pillar 3: Global TCN sequence model
+│   ├── local_tcn/                     # Pillar 4: Local TCN sequence models per activity
+│   ├── hybrid_champion/              # Pillar 5: Dynamic Champion Hybrid dispatch
+│   └── benchmark_report.md            # Offline model evaluation benchmark report
 ├── models_no_zeros/                   # Models trained on the zero-duration filtered datasets
 │   ├── tcns/                          # TCN models, scalers, and vocab.json
 │   ├── xgboost/                       # XGBoost models
@@ -69,7 +74,7 @@ python 01_process_discovery.py
 # Alternatively, run with Inductive Miner
 python 01_process_discovery.py --miner inductive
 ```
-* **Outputs**: `models/discovered_model_split.pnml`, `models/discovered_model_inductive.pnml`
+* **Outputs**: `models/petri_nets/discovered_model_split.pnml`, `models/petri_nets/discovered_model_inductive.pnml`
 
 ### Step 2: Conformance Checking
 Evaluates the discovered Petri net against the event log to measure Fitness, Precision, and F1-Score.
@@ -100,41 +105,57 @@ Processes the aligned log chronologically to engineer localized training dataset
 * **Instantaneous Event Filtering**: Filters out 0-duration human work items (`W_`) that represent automated pass-throughs or missing timestamps.
 
 ```bash
-# Generates zero-filtered datasets in data/processed/datasets_no_zeros/
-python 03b_dataset_creation_no_zeros.py
+# Build duration dataset (filters 0.0s events, computes smoothed sample weights)
+python src/03_dataset_builder.py --task duration
 
-# (Optional) Generates unfiltered datasets in data/processed/datasets/
-python 03_dataset_creation.py
-```
-* **Outputs**: `data/processed/datasets_no_zeros/dataset_duration_[activity_name].csv`
-
-### Step 5: Model Training
-
-#### A. Duration Prediction Models
-Activity-specific regression models predicting task duration in seconds. Use `--no_zeros` to train on the zero-filtered datasets:
-
-```bash
-# 1. Temporal Convolutional Networks (PyTorch TCN)
-python 04c_train_tcns.py --no_zeros
-
-# 2. Gradient Boosted Trees (XGBoost)
-python 04d_train_xgboost.py --no_zeros
-
-# 3. Long Short-Term Memory (PyTorch LSTM)
-python 04b_train_lstms.py --no_zeros
+# Build waiting time dataset (retains 0.0s events for immediate pickups)
+python src/03_dataset_builder.py --task waiting_time
 ```
 * **Outputs**:
-  * Model files: `tcn_[activity].pt`, `xgboost_[activity].json`, `lstm_[activity].pt`
-  * Scalers: `scaler_[activity].pkl` (StandardScaler fitted on the 19 feature columns)
-  * Token Vocabulary: `vocab.json` (activity string to integer embedding mapping)
+  * `data/processed/datasets_no_zeros/dataset_duration_global.csv` & `activity_weights.json`
+  * `data/processed/datasets_no_zeros/dataset_waiting_time_global.csv`
 
-#### B. Routing / Decision Point Models
-Resolves XOR branching in the Petri net using machine learning classifiers conditioned on case attributes and execution prefix:
+---
+
+### Step 4: Predictive Modeling Engine (`src/04_train.py`)
+
+Unified multi-architecture training engine supporting **Global**, **Local**, and **Heterogeneous Multi-Tier Hybrid** strategies across XGBoost, TCN, LSTM, and Transformer.
 
 ```bash
-cd ../RIMS_decision_points
-python decision_mining.py
+# Train duration prediction (defaults to Heterogeneous Hybrid strategy from config.yaml)
+python src/04_train.py --task duration
+
+# Train waiting time prediction
+python src/04_train.py --task waiting_time
+
+# CLI Overrides:
+python src/04_train.py --task duration --strategy global --model_type tcn
+python src/04_train.py --task duration --strategy local --model_type xgboost
 ```
-* **Output**: `models/xgboost_routing.json`
+* **Outputs**:
+  * Model files in `models_no_zeros/[strategy]/`
+  * Runtime dispatch table: `models_no_zeros/[strategy]/dispatch_config.json`
+
+---
+
+### Step 5: XOR Decision Mining & Routing Classifier (`src/05_train_routing.py`)
+
+Discovers all XOR branching places in the discovered Petri net, extracts decision contexts (sliding prefix window + case attributes), and trains classifiers with automatic empirical probability fallback.
+
+```bash
+# Standard run (reads config.yaml, trains XGBoost, evaluates Macro F1 against quality threshold)
+python src/05_train_routing.py
+
+# Optional CLI Overrides:
+# 1. Use an interpretable Decision Tree instead of XGBoost:
+python src/05_train_routing.py --classifier decision_tree
+
+# 2. Adjust minimum sample threshold required before training an ML model:
+python src/05_train_routing.py --min_samples 50
+```
+* **Outputs**:
+  * Modern dispatch manifest: `models_no_zeros/routing/routing_decisions.json`
+  * Legacy RIMS compatibility: `models_no_zeros/routing/[project]_decision_points.json` and `{place_id}.pkl`
+
 
 

@@ -1,14 +1,18 @@
+import os
+import warnings
 import pm4py
 import pandas as pd
-import warnings
+from config_loader import load_config, PROJECT_ROOT
 
 #suppress PM4Py warnings about r4pm backend
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # ==========================================
 # CONFIGURATION
-INPUT_LOG = "../data/raw/BPI_Challenge_2012.xes"
-OUTPUT_LOG = "../data/processed/BPI_2012_W_only.xes"
+cfg = load_config()
+INPUT_LOG = os.path.join(PROJECT_ROOT, "data/raw/BPI_Challenge_2012.xes")
+OUTPUT_LOG = cfg["paths"].get("raw_log", os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes"))
+os.makedirs(os.path.dirname(OUTPUT_LOG), exist_ok=True)
 
 # Choose prefixes to keep different event types
 # For example: ("W_", "A_", "O_",) or ("A_",)

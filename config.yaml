@@ -1,8 +1,5 @@
 # ===================================================================
 # RIMS+ Central Configuration File
-# 
-# Centralized pipeline configuration for process discovery, dataset
-# extraction, feature engineering, model training, and simulation.
 # ===================================================================
 
 project:
@@ -12,9 +9,10 @@ project:
 paths:
   raw_log: "data/processed/BPI_2012_W_only.xes"
   aligned_log: "data/processed/aligned_BPI_2012.xes"
-  petri_net: "models/discovered_model_split.pnml"
+  petri_net: "models/petri_nets/discovered_model_split.pnml"
+  petri_nets_dir: "models/petri_nets"
   output_base_dir: "data/processed"
-  models_dir: "models_no_zeros"
+  models_dir: "models"
 
 # Process Discovery Settings
 discovery:
@@ -23,7 +21,6 @@ discovery:
 
 # Feature Engineering Settings
 features:
-  #prefix_window_size: 5
   prefix_window_size: 10          # History window of past activities (trace prefix)
   
   # Tier 1: Universal Features (Calculated from standard XES schema)
@@ -62,18 +59,18 @@ tasks:
   duration:
     description: "Activity processing time duration prediction"
     target_column: "Duration_Seconds"
-    output_file: "datasets_no_zeros/dataset_duration_global.csv"
+    output_file: "datasets/dataset_duration_global.csv"
     filter_zero_duration: true    # Drop instant automated/pass-through events
     sample_weighting:
       enabled: true
       smoothing: "sqrt"           # Options: "sqrt", "linear", "none"
       max_weight_cap: 8.0         # Hard ceiling to prevent rare activity gradient explosion
-      output_weights_file: "datasets_no_zeros/activity_weights.json"
+      output_weights_file: "datasets/activity_weights.json"
 
   waiting_time:
     description: "Queue / waiting time before activity starts"
     target_column: "Wait_Time_Seconds"
-    output_file: "datasets_no_zeros/dataset_waiting_time_global.csv"
+    output_file: "datasets/dataset_waiting_time_global.csv"
     filter_zero_duration: false   # Zero waiting time is physically valid (immediate pickup)
     sample_weighting:
       enabled: false
@@ -81,8 +78,54 @@ tasks:
   routing:
     description: "Decision point / next activity prediction at XOR splits"
     target_column: "Next_Activity"
-    output_file: "datasets_no_zeros/dataset_routing_global.csv"
-    filter_zero_duration: false   # Never drop zero-duration events: control-flow truth must be kept
+    output_file: "datasets/dataset_routing_global.csv"
+    filter_zero_duration: false
     sample_weighting:
       enabled: false
+
+    # Step 05: Decision Mining & Routing Settings
+    # CLI Overrides: python src/05_train_routing.py --classifier decision_tree --min_samples 50
+    classifier_type: "xgboost"    # Classifier engine: "xgboost" (high accuracy) or "decision_tree" (interpretable)
+    min_samples: 30               # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
+    min_f1_threshold: 0.60        # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
+    output_dir: "models/routing"
+
+# ===================================================================
+# Model Strategy & Architecture (Step 04)
+# Controls Global, Local, and Heterogeneous Multi-Tier Hybrid dispatching
+# ===================================================================
+model_strategy:
+  strategy: "hybrid"              # Strategy: "global", "local", or "hybrid"
+  model_type: "xgboost"           # Default engine: "xgboost", "lstm", "tcn", or "transformer"
+
+  # Deep Learning Training Hyperparameters
+  dl:
+    epochs: 50 
+    patience: 10  
+    batch_size: 256 
+    learning_rate: 0.001
+
+  # Heterogeneous Multi-Tier Hybrid Configuration:
+  # Allocates architectures based on activity volume in dataset:
+  # - High Volume Tier: Local XGBoost (fastest training, superior tabular precision)
+  # - Medium Volume Tier: Local TCN (captures complex sequential patterns with adequate data)
+  # - Sparse Tier: Global DL (pooled cross-activity transfer learning for data-starved classes)
+  hybrid:
+    tier_thresholds:
+      high_min_samples: 15000     # >= 15,000 samples -> High Volume Tier (Local XGBoost)
+      medium_min_samples: 5000    # 5,000 to 14,999 samples -> Medium Volume Tier (Local TCN)
+                                  # < 5,000 samples -> Sparse Tier (Global DL)
+    tier_models:
+      high_volume: "xgboost"      # Trained as a Local model
+      medium_volume: "tcn"        # Trained as a Local model
+      sparse: "tcn"               # Trained as a Global pooled model
+
+    # Optional manual activity override (if uncommented, overrides thresholds):
+    # explicit_assignments:
+    #   "W_Complete application": "local_xgboost"
+    #   "W_Call after offers": "local_xgboost"
+    #   "W_Call after incomplete files": "local_tcn"
+    #   "W_Validate application": "global_tcn"
+    #   "W_Handle leads": "global_tcn"
+    #   "W_Assess fraud": "global_tcn"
 

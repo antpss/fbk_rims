@@ -1,15 +1,18 @@
+import os
 import argparse
 import pm4py
+from config_loader import load_config, PROJECT_ROOT
 
 def main():
+    cfg = load_config()
     # CLI setup to pick which model to evaluate
     parser = argparse.ArgumentParser()
     parser.add_argument("--miner", choices=["split", "inductive"], default="split")
     args = parser.parse_args()
 
-    #input_log_path = "../RIMS_tool/core/example/example_decision_mining/BPIChallenge2012A.xes"
-    input_log_path = "../data/processed/BPI_2012_W_only.xes"
-    input_pnml_path = f"../models/discovered_model_{args.miner}.pnml"
+    input_log_path = cfg["paths"].get("raw_log", os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes"))
+    petri_nets_dir = os.path.join(PROJECT_ROOT, cfg["paths"].get("petri_nets_dir", "models/petri_nets"))
+    input_pnml_path = os.path.join(petri_nets_dir, f"discovered_model_{args.miner}.pnml")
 
     # data loading
     print(f"Loading log: {input_log_path}")
