@@ -195,8 +195,9 @@ def main():
     task_cfg = cfg["tasks"][task_name]
     strat_cfg = cfg.get("model_strategy", {})
 
-    strategy = args.strategy or strat_cfg.get("strategy", "hybrid")
-    model_type = args.model_type or strat_cfg.get("model_type", "xgboost")
+    mode = strat_cfg.get("mode", "hybrid")
+    strategy = args.strategy or ("global" if mode in ["global_tournament", "single_global"] else "global")
+    model_type = args.model_type or strat_cfg.get("single_global_engine", "xgboost")
     
     # Read DL training parameters from config.yaml
     dl_cfg = strat_cfg.get("dl", {})

@@ -1,18 +1,23 @@
 # RIMS+ Pipeline: Runtime Integration of Machine Learning & Simulation
 
-This repository contains the advanced **RIMS+** (Runtime Integration of Machine Learning and Simulation) framework for Business Process Simulation, specifically tailored for scenarios with high resource contention. It combines white-box Petri net process models executed via **SimPy** with deep learning and gradient boosted models (**TCN**, **XGBoost**, and **LSTM**) predicting activity processing durations at runtime, alongside decision trees resolving XOR branching.
+This repository contains the advanced **RIMS+** (Runtime Integration of Machine Learning and Simulation) framework for Business Process Simulation. It combines white-box Petri net process models executed via **SimPy** with machine learning and deep learning models (**TCN**, **XGBoost**, **LSTM**, and **Transformer**) predicting activity durations and queue waiting times at runtime, alongside decision classifiers resolving XOR branching.
 
 ---
 
 ## Repository Structure
 
 ```
+fbk_rims/
+├── config.yaml                        # Central configuration (tasks, features, paths, models)
 ├── data/
 │   ├── raw/                           # Raw input event logs (BPI_Challenge_2012.xes)
-│   ├── processed/                     # Aligned event logs and feature-engineered datasets
-│   │   ├── aligned_BPI_2012.xes       # Repaired & aligned event log
-│   │   ├── datasets/                  # Tabular datasets per activity (including 0-duration)
-│   │   └── datasets_no_zeros/         # Tabular datasets per activity (0-duration filtered)
+│   ├── processed/                     # Processed logs and tabular datasets
+│   │   ├── BPI_2012_W_only.xes        # Filtered event log (work items only)
+│   │   ├── aligned_BPI_2012.xes       # Repaired & aligned event log against Petri net
+│   │   └── datasets/                  # Feature-engineered tabular datasets
+│   │       ├── dataset_duration_global.csv     # Duration dataset (0-duration filtered)
+│   │       ├── dataset_waiting_time_global.csv # Waiting time dataset (0-waiting preserved)
+│   │       └── activity_weights.json           # Smoothed importance sample weights
 │   └── generated/                     # Output logs from simulation runs
 ├── models/                            # Process models and predictive ML models
 │   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
@@ -20,20 +25,29 @@ This repository contains the advanced **RIMS+** (Runtime Integration of Machine 
 │   │   ├── discovered_model_inductive.pnml
 │   │   ├── split_miner_visual.png
 │   │   └── inductive_miner_visual.png
-│   ├── global_xgboost/                # Pillar 1: Global XGBoost model
-│   ├── local_xgboost/                 # Pillar 2: Local XGBoost models per activity
-│   ├── global_tcn/                    # Pillar 3: Global TCN sequence model
-│   ├── local_tcn/                     # Pillar 4: Local TCN sequence models per activity
-│   ├── hybrid_champion/              # Pillar 5: Dynamic Champion Hybrid dispatch
-│   └── benchmark_report.md            # Offline model evaluation benchmark report
-├── models_no_zeros/                   # Models trained on the zero-duration filtered datasets
-│   ├── tcns/                          # TCN models, scalers, and vocab.json
-│   ├── xgboost/                       # XGBoost models
-│   └── lstms/                         # LSTM models, scalers, and vocab.json
-├── src/                               # Core pipeline scripts (Discovery, Conformance, Datasets, Training)
-├── RIMS/                              # The SimPy-based RIMS / RIMS+ discrete-event simulation engine
-├── RIMS_decision_points/              # Decision mining and XOR branching scripts
-└── context.md                         # Detailed project context and technical roadmap
+│   ├── duration/                      # Activity processing duration models (5 Pillars)
+│   │   ├── global_xgboost/            # Pillar 1: Pooled global gradient boosted trees
+│   │   ├── local_xgboost/             # Pillar 2: Specialized local trees per activity
+│   │   ├── global_tcn/                # Pillar 3: Pooled global sequence TCN network
+│   │   ├── local_tcn/                 # Pillar 4: Specialized local sequence TCN networks
+│   │   ├── hybrid_champion/           # Pillar 5: Dynamic Champion Hybrid dispatch & scalers
+│   │   └── benchmark_report.md        # Duration benchmark leaderboard & activity breakdown
+│   ├── waiting_time/                  # Activity waiting time / queue models (5 Pillars)
+│   │   ├── hybrid_champion/           # Waiting time champion dispatch & scalers
+│   │   └── benchmark_report.md        # Waiting time benchmark leaderboard
+│   └── routing/                       # XOR split decision classifiers (.joblib, .json)
+├── src/                               # Core pipeline scripts (Steps 00 to 05 + Benchmarking)
+│   ├── 00_filter_log.py               # Step 0: Raw event log filtering
+│   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split / Inductive)
+│   ├── view_models.py                 # Step 1b: Petri net visualization (.png)
+│   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair
+│   ├── 02b_conformance_checking.py    # Step 2b: Conformance evaluation (Fitness, Precision)
+│   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
+│   ├── 04_train.py                    # Step 4: Multi-architecture training engine
+│   ├── benchmark_models.py            # Step 4b: Automated 5-pillar benchmarking & champion synthesis
+│   ├── 05_train_routing.py            # Step 5: XOR decision mining & routing classifiers
+│   └── config_loader.py               # Central config loader helper
+└── RIMS/                              # The SimPy-based discrete-event simulation engine
 ```
 
 ---
@@ -47,115 +61,180 @@ source venv/bin/activate
 ```
 
 Key dependencies:
-* `pm4py` — Process discovery, conformance checking, and log alignment
-* `simpy` — Discrete-event simulation engine
-* `torch` — Temporal Convolutional Networks (TCN) & LSTM models
-* `xgboost` — Gradient-boosted duration regressors and routing classifiers
-* `scikit-learn` — Preprocessing scalers, metrics, and decision trees
-* `pandas`, `numpy` — Tabular data manipulation
+* `pm4py` : Process discovery, conformance checking, and log alignment
+* `simpy` : Discrete-event simulation engine
+* `torch` : Temporal Convolutional Networks (TCN), LSTM, and Transformer models
+* `xgboost` : Gradient-boosted duration regressors and routing classifiers
+* `scikit-learn` : Preprocessing scalers, metrics, and decision trees
+* `pandas`, `numpy` : Tabular data manipulation and feature engineering
+* `pyyaml` : Centralized configuration parsing
 
 ---
 
 ## End-to-End Operational Pipeline
 
-All pipeline scripts in `src/` should be executed with `src/` as the working directory:
+All pipeline commands are executed from the project root directory.
+
+### Step 0: Log Preprocessing & Filtering (`src/00_filter_log.py`)
+Filters the raw BPI Challenge 2012 log to keep human work items (`W_` events) and standardizes lifecycle transitions.
 
 ```bash
-cd src
+python src/00_filter_log.py
 ```
+* **Input**: `data/raw/BPI_Challenge_2012.xes`
+* **Output**: `data/processed/BPI_2012_W_only.xes`
 
-### Step 1: Process Discovery
-Parses the filtered event log, extracts the process structure, and exports a structurally sound Petri net.
+---
+
+### Step 1: Process Discovery (`src/01_process_discovery.py`)
+Discovers a structurally sound workflow Petri net from the filtered log and verifies soundness via Woflan.
 
 ```bash
-# Split Miner (Recommended for precision)
-python 01_process_discovery.py
+# Split Miner (Recommended)
+python src/01_process_discovery.py --miner split
 
-# Alternatively, run with Inductive Miner
-python 01_process_discovery.py --miner inductive
+# Alternatively, Inductive Miner
+python src/01_process_discovery.py --miner inductive --noise_threshold 0.2
 ```
-* **Outputs**: `models/petri_nets/discovered_model_split.pnml`, `models/petri_nets/discovered_model_inductive.pnml`
+* **Outputs**: `models/petri_nets/discovered_model_split.pnml` (or `inductive.pnml`)
 
-### Step 2: Conformance Checking
-Evaluates the discovered Petri net against the event log to measure Fitness, Precision, and F1-Score.
-
+To generate visual diagram images of the discovered nets:
 ```bash
-python 02_conformance_checking.py
+python src/view_models.py
 ```
+* **Outputs**: `models/petri_nets/split_miner_visual.png`, `models/petri_nets/inductive_miner_visual.png`
 
-### Step 3: Log Alignment & Repair
-Replays the event log against the Petri net to produce a repaired log containing strictly synchronous moves, ensuring full compatibility between the log and the simulation model.
+---
+
+### Step 2: Log Alignment & Repair (`src/02_align_and_repair_log.py`)
+Replays the event log against the discovered Petri net using A* state-space alignment to produce a repaired log containing strictly synchronous moves, guaranteeing that every trace can be replayed inside the simulation model without deadlock.
 
 ```bash
-python 02b_repair_log.py
+python src/02_align_and_repair_log.py
 ```
 * **Output**: `data/processed/aligned_BPI_2012.xes`
 
-### Step 4: Dataset Creation
-Processes the aligned log chronologically to engineer localized training datasets for each unique activity.
-* **19 Dynamic Context Features**:
-  * `Prefix`: Sequence of preceding activities (history up to length 10).
-  * `RequestedAmount`: Monetary loan amount from case payload (`case:AMOUNT_REQ`).
-  * `Prev_Proc_Time`: Duration of the immediate previous step in the case.
-  * `WIP`: Total active cases in the system (global congestion).
-  * `AC_WIP`: Active cases performing this specific activity (local bottleneck).
+To evaluate conformance (Fitness, Precision, F1-Score):
+```bash
+python src/02b_conformance_checking.py --miner split
+```
+
+---
+
+### Step 3: Feature Engineering & Dataset Creation (`src/03_dataset_builder.py`)
+Sweeps the aligned log chronologically to build comprehensive state vectors without future data leakage:
+* **Universal Context Features (Tier 1)**:
+  * `Prefix`: Sequence of previous activities (history window up to 10 events).
+  * `Prev_Proc_Time`: Duration of the immediate previous activity in the case.
+  * `WIP`: Total active cases currently in the process (system-wide congestion).
+  * `AC_WIP`: Active cases performing this specific activity (activity bottleneck).
   * `Daytime`: Normalized time of day ($0.0 \dots 1.0$).
   * `Weekday_0` $\dots$ `Weekday_6`: One-hot binary indicators for day of the week.
-  * `Role_0_OC` $\dots$ `Role_6_OC`: Resource occupancy percentage per role pool.
-* **Instantaneous Event Filtering**: Filters out 0-duration human work items (`W_`) that represent automated pass-throughs or missing timestamps.
+  * `Role_0_OC` $\dots$ `Role_5_OC`: Resource occupancy percentage per role pool.
+* **Domain Case Attributes (Tier 2)**:
+  * `RequestedAmount`: Loan amount requested (`case:AMOUNT_REQ`).
+* **Task-Specific Filtering**:
+  * **Duration**: Filters out 0.0s instant events (automated pass-throughs/missing timestamps) and applies smoothed inverse sample weights (`activity_weights.json`).
+  * **Waiting Time**: Preserves 0.0s events (representing immediate resource pickups from queue).
 
 ```bash
-# Build duration dataset (filters 0.0s events, computes smoothed sample weights)
+# Generate duration dataset (0-duration filtered)
 python src/03_dataset_builder.py --task duration
 
-# Build waiting time dataset (retains 0.0s events for immediate pickups)
+# Generate waiting time dataset (0-waiting preserved)
 python src/03_dataset_builder.py --task waiting_time
 ```
 * **Outputs**:
-  * `data/processed/datasets_no_zeros/dataset_duration_global.csv` & `activity_weights.json`
-  * `data/processed/datasets_no_zeros/dataset_waiting_time_global.csv`
+  * `data/processed/datasets/dataset_duration_global.csv` & `activity_weights.json`
+  * `data/processed/datasets/dataset_waiting_time_global.csv`
 
 ---
 
-### Step 4: Predictive Modeling Engine (`src/04_train.py`)
+### Step 4: Predictive Modeling & 5-Pillar Benchmark Suite
 
-Unified multi-architecture training engine supporting **Global**, **Local**, and **Heterogeneous Multi-Tier Hybrid** strategies across XGBoost, TCN, LSTM, and Transformer.
+The predictive modeling architecture supports **3 Exploration Modes** configured in `config.yaml` or via CLI:
+1. **`hybrid`** *(Recommended)*: Trains the 4 foundation pillars and empirically synthesizes the **Best-of-All-Worlds Hybrid Champion** per activity.
+2. **`global_tournament`**: Trains only competing global engines (e.g. Global XGBoost vs. Global TCN) and crowns the best global model across the whole process.
+3. **`single_global`**: Fast single-model baseline (e.g. Global XGBoost in 3.4 seconds) with zero benchmark overhead.
+
+All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split** (partitioned by `Case_ID` to eliminate cross-event data leakage).
+
+#### Automated Benchmarking (`src/benchmark_models.py`)
+
+Run the full benchmark suite for duration or waiting time:
 
 ```bash
-# Train duration prediction (defaults to Heterogeneous Hybrid strategy from config.yaml)
-python src/04_train.py --task duration
+# 1. Full 5-Pillar Hybrid Benchmark (Duration)
+python src/benchmark_models.py --task duration --mode hybrid --run_all
 
-# Train waiting time prediction
-python src/04_train.py --task waiting_time
+# 2. Full 5-Pillar Hybrid Benchmark (Waiting Time)
+python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
 
-# CLI Overrides:
-python src/04_train.py --task duration --strategy global --model_type tcn
-python src/04_train.py --task duration --strategy local --model_type xgboost
+# 3. Fast Global-Only Tournament
+python src/benchmark_models.py --task duration --mode global_tournament --run_all
+
+# 4. Re-compare & synthesize champion from existing models
+python src/benchmark_models.py --task duration --compare
 ```
+
+#### Step-by-Step Training (`src/04_train.py`)
+
+You can also train any specific model architecture individually:
+
+```bash
+# 1. Global XGBoost
+python src/04_train.py --task duration --strategy global --model_type xgboost
+
+# 2. Local XGBoost (models per activity)
+python src/04_train.py --task duration --strategy local --model_type xgboost
+
+# 3. Global TCN (sequence neural net)
+python src/04_train.py --task duration --strategy global --model_type tcn
+
+# 4. Local TCN (sequence neural nets per activity)
+python src/04_train.py --task duration --strategy local --model_type tcn
+```
+
 * **Outputs**:
-  * Model files in `models_no_zeros/[strategy]/`
-  * Runtime dispatch table: `models_no_zeros/[strategy]/dispatch_config.json`
+  * Models saved in `models/{task}/{strategy}_{model_type}/`
+  * Standalone deployment dispatch: `models/{task}/hybrid_champion/dispatch_config.json`
+  * Benchmark leaderboard report: `models/{task}/benchmark_report.md`
 
 ---
 
-### Step 5: XOR Decision Mining & Routing Classifier (`src/05_train_routing.py`)
+### Step 5: XOR Decision Mining & Routing (`src/05_train_routing.py`)
+Discovers all decision point places (places with $\ge 2$ outgoing branches) in the Petri net, extracts decision contexts from the aligned log, and trains routing classifiers.
 
-Discovers all XOR branching places in the discovered Petri net, extracts decision contexts (sliding prefix window + case attributes), and trains classifiers with automatic empirical probability fallback.
+* If `Macro F1 >= min_f1_threshold` (default 0.60): Saves the machine learning classifier (`.joblib` / `.pkl`).
+* If `Macro F1 < min_f1_threshold`: Falls back automatically to empirical branching probabilities.
 
 ```bash
-# Standard run (reads config.yaml, trains XGBoost, evaluates Macro F1 against quality threshold)
+# Standard run (reads config.yaml, trains XGBoost)
 python src/05_train_routing.py
 
-# Optional CLI Overrides:
-# 1. Use an interpretable Decision Tree instead of XGBoost:
+# Optional: Use an interpretable Decision Tree
 python src/05_train_routing.py --classifier decision_tree
 
-# 2. Adjust minimum sample threshold required before training an ML model:
+# Optional: Adjust minimum sample threshold
 python src/05_train_routing.py --min_samples 50
 ```
 * **Outputs**:
-  * Modern dispatch manifest: `models_no_zeros/routing/routing_decisions.json`
-  * Legacy RIMS compatibility: `models_no_zeros/routing/[project]_decision_points.json` and `{place_id}.pkl`
+  * Modern dispatch manifest: `models/routing/routing_decisions.json`
+  * Legacy RIMS compatibility: `models/routing/{project}_decision_points.json` and `{place_id}.pkl`
 
+---
 
+## Current Benchmark Highlights (Duration Task)
+
+Evaluated on held-out test cases (11,609 events):
+
+| Configuration | Strategy | Engine | Test MAE (s) | Test SMAPE (%) | Training Time |
+| :--- | :--- | :--- | :---: | :---: | :---: |
+| **hybrid_champion**  | `hybrid` | `champion` | **647.25s** | **80.84%** | 1077.66s |
+| local_tcn | `local` | `tcn` | 647.97s | 81.16% | 496.47s |
+| local_xgboost | `local` | `xgboost` | 648.35s | 81.27% | 4.14s |
+| global_tcn | `global` | `tcn` | 649.14s | 81.49% | 573.65s |
+| global_xgboost | `global` | `xgboost` | 649.24s | 81.90% | 3.40s |
+
+In the champion configuration, **TCN wins 4 out of 6 activities** (`W_Assess fraud`, `W_Call after offers`, `W_Handle leads`, `W_Validate application`), while **XGBoost wins 2 activities** (`W_Complete application`, `W_Call after incomplete files`).
 

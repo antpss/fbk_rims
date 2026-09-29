@@ -35,7 +35,11 @@ def main():
     df = pm4py.convert_to_dataframe(log)
 
     activities = cfg.get("target_activities", [])
-    print(f"Target activities ({len(activities)}): {activities}")
+    if not activities:
+        activities = sorted(df['concept:name'].dropna().unique().tolist())
+        print(f"Target activities: [AUTO-DISCOVERED {len(activities)} activities from log]: {activities}")
+    else:
+        print(f"Target activities ({len(activities)} configured): {activities}")
 
     # Feature extraction settings
     feat_cfg = cfg.get("features", {})
@@ -50,9 +54,16 @@ def main():
     print(f"Domain Event Attributes (Tier 2): {event_attrs}")
 
     # Pre-calculate original complete distributions for sample weighting
-    completes_df = df[(df['concept:name'].isin(activities)) & (df['lifecycle:transition'].str.upper() == 'COMPLETE')]
+    if 'lifecycle:transition' in df.columns:
+        trans_col = df['lifecycle:transition'].astype(str).str.upper()
+        completes_df = df[(df['concept:name'].isin(activities)) & (trans_col == 'COMPLETE')]
+        if len(completes_df) == 0:
+            completes_df = df[df['concept:name'].isin(activities)]
+    else:
+        completes_df = df[df['concept:name'].isin(activities)]
+
     orig_activity_counts = completes_df['concept:name'].value_counts().to_dict()
-    total_orig_completes = len(completes_df)
+    total_orig_completes = max(1, len(completes_df))
 
     print("Sorting log chronologically...")
     df = df.sort_values(by="time:timestamp").reset_index(drop=True)

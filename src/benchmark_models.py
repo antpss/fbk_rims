@@ -40,8 +40,8 @@ def synthesize_champion_hybrid(models_dir, task="duration"):
     and synthesizes an optimal 'hybrid_champion' dispatch manifest and metrics summary.
     """
     candidates = discover_trained_metrics(models_dir, task=task)
-    # Exclude any existing hybrid_champion so we do not self-reference
-    candidates = [c for c in candidates if c.get("folder_name") != "hybrid_champion"]
+    # Exclude any existing champions so we do not self-reference
+    candidates = [c for c in candidates if c.get("folder_name") not in ["hybrid_champion", "global_champion"]]
     if len(candidates) < 2:
         return None
 
@@ -195,6 +195,107 @@ def synthesize_champion_hybrid(models_dir, task="duration"):
 
     return champion_metrics
 
+def synthesize_champion_global(models_dir, task="duration"):
+    """
+    Analyzes global candidate models, crowns the single best performing global engine,
+    and synthesizes a 'global_champion' dispatch manifest and metrics summary.
+    """
+    candidates = discover_trained_metrics(models_dir, task=task)
+    candidates = [c for c in candidates if c.get("folder_name") not in ["hybrid_champion", "global_champion"]]
+    global_cands = [c for c in candidates if c.get("strategy") == "global" or "global" in c.get("folder_name", "").lower()]
+    if not global_cands:
+        return None
+
+    best_cand = min(global_cands, key=lambda x: x.get("weighted_mae", float("inf")))
+    champion_dir = os.path.join(models_dir, "global_champion")
+    os.makedirs(champion_dir, exist_ok=True)
+
+    src_folder = best_cand["folder_name"]
+    cand_dispatch_file = os.path.join(models_dir, src_folder, "dispatch_config.json")
+    model_file = None
+    model_type = best_cand.get("model_type", "unknown")
+    if os.path.exists(cand_dispatch_file):
+        try:
+            with open(cand_dispatch_file) as f:
+                c_table = json.load(f)
+                entry = c_table.get("dispatch", {}).get("__default__")
+                if isinstance(entry, dict):
+                    model_file = entry.get("file")
+                    model_type = entry.get("model_type", model_type)
+                elif isinstance(entry, str):
+                    model_file = entry
+        except Exception:
+            pass
+
+    champion_dispatch = {
+        "strategy": "global_champion",
+        "task": task,
+        "description": "Winning Global Engine (selected across competing global architectures)",
+        "winning_engine": model_type,
+        "source_candidate": src_folder,
+        "dispatch": {
+            "__default__": {
+                "model_type": model_type,
+                "source_dir": src_folder,
+                "file": model_file,
+                "best_test_mae": best_cand.get("weighted_mae"),
+                "best_test_smape": best_cand.get("weighted_smape")
+            }
+        }
+    }
+    for act, act_m in best_cand.get("activity_metrics", {}).items():
+        champion_dispatch["dispatch"][act] = {
+            "model_type": model_type,
+            "source_dir": src_folder,
+            "file": model_file,
+            "best_test_mae": act_m.get("mae"),
+            "best_test_smape": act_m.get("smape")
+        }
+
+    # Copy auxiliary assets (vocab.json, scalers) into global_champion for standalone deployment
+    src_dir = os.path.join(models_dir, src_folder)
+    v_src = os.path.join(src_dir, "vocab.json")
+    if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
+        shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
+    for fname in os.listdir(src_dir):
+        if fname.startswith("scaler_") and fname.endswith(".pkl"):
+            dest = os.path.join(champion_dir, fname)
+            if not os.path.exists(dest):
+                shutil.copy(os.path.join(src_dir, fname), dest)
+
+    with open(os.path.join(champion_dir, "dispatch_config.json"), "w") as f:
+        json.dump(champion_dispatch, f, indent=2)
+
+    champion_metrics = {
+        "task": task,
+        "strategy": "global",
+        "model_type": "champion",
+        "folder_name": "global_champion",
+        "training_time_seconds": best_cand.get("training_time_seconds", 0.0),
+        "weighted_mae": best_cand.get("weighted_mae", 0.0),
+        "weighted_smape": best_cand.get("weighted_smape", 0.0),
+        "macro_mae": best_cand.get("macro_mae", 0.0),
+        "activity_metrics": best_cand.get("activity_metrics", {})
+    }
+    with open(os.path.join(champion_dir, "metrics.json"), "w") as f:
+        json.dump(champion_metrics, f, indent=2)
+
+    return champion_metrics
+
+def synthesize_champion(models_dir, task="duration", mode="hybrid"):
+    """
+    Synthesizes the champion deployment according to active mode:
+    - 'global_tournament': crowns the best global architecture
+    - 'hybrid': synthesizes the per-activity hybrid champion
+    - 'single_global': standalone single model, no tournament synthesis needed
+    """
+    if mode == "global_tournament":
+        return synthesize_champion_global(models_dir, task=task)
+    elif mode == "single_global":
+        return None
+    else:
+        return synthesize_champion_hybrid(models_dir, task=task)
+
 def print_comparison_table(metrics_list, models_dir, task="duration"):
     """
     Renders an ASCII and Markdown comparison table across all evaluated models.
@@ -209,14 +310,14 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
     metrics_list = sorted(metrics_list, key=lambda x: x.get("weighted_mae", float("inf")))
 
     print("\n" + "=" * 95)
-    print(f"                     RIMS+ OFFLINE {task_title.upper()} MODEL BENCHMARK RESULTS")
+    print(f"                     RIMS+ {task_title.upper()} MODEL BENCHMARK RESULTS")
     print("=" * 95)
     header = f"{'Configuration':<28} | {'Strategy':<8} | {'Engine':<14} | {'MAE (s)':>8} | {'SMAPE (%)':>9} | {'Train (s)':>9}"
     print(header)
     print("-" * 95)
 
     md_lines = [
-        f"# RIMS+ Offline {task_title} Model Benchmark Report\n",
+        f"# RIMS+ {task_title} Model Benchmark Report\n",
         "| Configuration | Strategy | Engine | Test MAE (s) | Test SMAPE (%) | Training Time (s) |",
         "| :--- | :--- | :--- | :---: | :---: | :---: |"
     ]
@@ -310,6 +411,23 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
         except Exception:
             pass
 
+    glob_champ_file = os.path.join(models_dir, "global_champion", "dispatch_config.json")
+    if os.path.exists(glob_champ_file):
+        try:
+            with open(glob_champ_file) as f:
+                g_data = json.load(f)
+            def_info = g_data.get("dispatch", {}).get("__default__", {})
+            md_lines.append("\n## 🏆 Global Champion Architecture Assignment\n")
+            md_lines.append("| Winning Global Model | Engine | Test MAE (s) | Best SMAPE (%) |")
+            md_lines.append("| :--- | :---: | :---: | :---: |")
+            s_dir = def_info.get("source_dir", "-")
+            m_type = def_info.get("model_type", "-").upper()
+            mae_val = def_info.get("best_test_mae", "-")
+            smape_val = def_info.get("best_test_smape", "-")
+            md_lines.append(f"| `{s_dir}` | **{m_type}** | **{mae_val}s** | {smape_val}% |")
+        except Exception:
+            pass
+
     # Save Markdown report
     report_path = os.path.join(models_dir, "benchmark_report.md")
     with open(report_path, "w") as f:
@@ -333,32 +451,53 @@ def run_training_experiment(strategy, model_type, task="duration"):
 def main():
     parser = argparse.ArgumentParser(description="RIMS+ Model Benchmarking & Comparison Suite")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Task to benchmark")
-    parser.add_argument("--compare", action="store_true", help="Compare already trained models in models/ and synthesize champion hybrid")
-    parser.add_argument("--run_all", action="store_true", help="Train all 4 pillar models (Global XGB, Local XGB, Global TCN, Local TCN) and synthesize champion hybrid")
+    parser.add_argument("--mode", type=str, default=None, choices=["hybrid", "global_tournament", "single_global"],
+                        help="Exploration mode (hybrid, global_tournament, single_global). Defaults to config.yaml")
+    parser.add_argument("--compare", action="store_true", help="Compare already trained models in models/ and synthesize champion")
+    parser.add_argument("--run_all", action="store_true", help="Train candidate models and synthesize champion")
     args = parser.parse_args()
 
     cfg = load_config()
+    strat_cfg = cfg.get("model_strategy", {})
+    mode = args.mode or strat_cfg.get("mode", "hybrid")
+
     models_dir = os.path.join(PROJECT_ROOT, cfg["paths"]["models_dir"], args.task)
     os.makedirs(models_dir, exist_ok=True)
 
     if args.run_all:
         print("\n" + "=" * 80)
-        print(f"      LAUNCHING FULL 4-PILLAR RIMS+ OFFLINE [{args.task.upper()}] BENCHMARK SUITE")
+        print(f"      LAUNCHING RIMS+ [{args.task.upper()}] BENCHMARK SUITE")
+        print(f"      Mode: [{mode.upper()}]")
         print("=" * 80)
-        # 1. Global XGBoost
-        run_training_experiment("global", "xgboost", task=args.task)
-        # 2. Local XGBoost
-        run_training_experiment("local", "xgboost", task=args.task)
-        # 3. Global TCN
-        run_training_experiment("global", "tcn", task=args.task)
-        # 4. Local TCN
-        run_training_experiment("local", "tcn", task=args.task)
 
-    # Synthesize the Champion Hybrid from all available candidate models
-    champion = synthesize_champion_hybrid(models_dir, task=args.task)
+        if mode == "single_global":
+            engine = strat_cfg.get("single_global_engine", "xgboost")
+            run_training_experiment("global", engine, task=args.task)
+        else:
+            candidates_list = strat_cfg.get("candidates", {}).get(mode, [])
+            if not candidates_list:
+                if mode == "global_tournament":
+                    candidates_list = [
+                        {"strategy": "global", "engine": "xgboost"},
+                        {"strategy": "global", "engine": "tcn"}
+                    ]
+                else:
+                    candidates_list = [
+                        {"strategy": "global", "engine": "xgboost"},
+                        {"strategy": "local", "engine": "xgboost"},
+                        {"strategy": "global", "engine": "tcn"},
+                        {"strategy": "local", "engine": "tcn"}
+                    ]
+            for cand in candidates_list:
+                run_training_experiment(cand["strategy"], cand["engine"], task=args.task)
+
+    # Synthesize the Champion from available candidate models
+    champion = synthesize_champion(models_dir, task=args.task, mode=mode)
     if champion:
-        print(f"[✓] Synthesized Best-of-All-Worlds Hybrid Champion: {champion['weighted_mae']}s MAE ({champion['weighted_smape']}% SMAPE)")
-        print(f"    Saved champion dispatch table to: {os.path.join(models_dir, 'hybrid_champion', 'dispatch_config.json')}")
+        label = "Hybrid" if mode == "hybrid" else "Global"
+        folder = "hybrid_champion" if mode == "hybrid" else "global_champion"
+        print(f"[✓] Synthesized Best-of-All-Worlds {label} Champion: {champion['weighted_mae']}s MAE ({champion['weighted_smape']}% SMAPE)")
+        print(f"    Saved champion dispatch table to: {os.path.join(models_dir, folder, 'dispatch_config.json')}")
 
     # Discover and display the full comparison leaderboard
     metrics_list = discover_trained_metrics(models_dir, task=args.task)

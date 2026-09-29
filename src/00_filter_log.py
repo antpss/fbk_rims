@@ -10,48 +10,53 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # ==========================================
 # CONFIGURATION
 cfg = load_config()
-INPUT_LOG = os.path.join(PROJECT_ROOT, "data/raw/BPI_Challenge_2012.xes")
-OUTPUT_LOG = cfg["paths"].get("raw_log", os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes"))
+prep_cfg = cfg.get("preprocessing", {})
+
+input_rel = prep_cfg.get("input_log", "data/raw/BPI_Challenge_2012.xes")
+INPUT_LOG = os.path.join(PROJECT_ROOT, input_rel)
+
+output_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_W_only.xes")
+OUTPUT_LOG = os.path.join(PROJECT_ROOT, output_rel)
 os.makedirs(os.path.dirname(OUTPUT_LOG), exist_ok=True)
 
-# Choose prefixes to keep different event types
-# For example: ("W_", "A_", "O_",) or ("A_",)
-PREFIXES_TO_KEEP = ("W_",) 
+# Prefixes to keep from config (empty list = keep all)
+PREFIXES_TO_KEEP = prep_cfg.get("prefixes_to_keep", [])
+# Translation / renaming map from config (empty dict = no translation)
+TRANSLATION_MAP = prep_cfg.get("activity_mapping", {})
 # ==========================================
 
 def filter_log():
     print(f"Loading log: {INPUT_LOG}")
-    #pm4py reads the XES and returns a Pandas DataFrame
+    if not os.path.exists(INPUT_LOG):
+        raise FileNotFoundError(f"Input event log not found at: {INPUT_LOG}")
+
+    # pm4py reads the XES and returns a Pandas DataFrame
     df = pm4py.read_xes(INPUT_LOG)
     print(f"Original events: {len(df)}")
 
-    #filtering using Pandas
-    print(f"Filtering to keep only activities starting with: {PREFIXES_TO_KEEP}")
-    df_filtered = df[df['concept:name'].str.startswith(PREFIXES_TO_KEEP)]
+    # Filtering by prefix if specified
+    if PREFIXES_TO_KEEP:
+        prefixes_tuple = tuple(PREFIXES_TO_KEEP)
+        print(f"Filtering to keep only activities starting with: {prefixes_tuple}")
+        df_filtered = df[df['concept:name'].str.startswith(prefixes_tuple)].copy()
+    else:
+        print("No prefix filtering specified; keeping all activities.")
+        df_filtered = df.copy()
     
-    #remove empty traces (cases that have 0 events after filtering)
-    #group by case ID, count events, and filter
+    # Remove empty traces (cases that have 0 events after filtering)
     case_counts = df_filtered.groupby('case:concept:name').size()
     valid_cases = case_counts[case_counts > 0].index
-    df_filtered = df_filtered[df_filtered['case:concept:name'].isin(valid_cases)]
+    df_filtered = df_filtered[df_filtered['case:concept:name'].isin(valid_cases)].copy()
 
-    # Translate Dutch activities to English
-    translation_map = {
-        "W_Afhandelen leads": "W_Handle leads",
-        "W_Completeren aanvraag": "W_Complete application",
-        "W_Valideren aanvraag": "W_Validate application",
-        "W_Nabellen offertes": "W_Call after offers",
-        "W_Beoordelen fraude": "W_Assess fraud",
-        "W_Wijzigen contractgegevens": "W_Change contract details",
-        "W_Nabellen incomplete dossiers": "W_Call after incomplete files"
-    }
-    print("Translating activities to English...")
-    df_filtered['concept:name'] = df_filtered['concept:name'].replace(translation_map)
+    # Apply activity renaming/translation if configured
+    if TRANSLATION_MAP:
+        print(f"Applying activity mapping ({len(TRANSLATION_MAP)} replacements)...")
+        df_filtered['concept:name'] = df_filtered['concept:name'].replace(TRANSLATION_MAP)
 
     print(f"Filtered events: {len(df_filtered)}")
 
     print(f"Exporting to {OUTPUT_LOG}")
-    #exporting the Pandas df back to XES format
+    # Exporting the Pandas df back to XES format
     pm4py.write_xes(df_filtered, OUTPUT_LOG)
     print("Done.")
 
