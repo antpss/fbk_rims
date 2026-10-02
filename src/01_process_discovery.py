@@ -25,7 +25,13 @@ def main():
     noise_threshold = args.noise_threshold if args.noise_threshold is not None else default_noise
 
     # Paths resolved from config
-    input_log_path = cfg["paths"].get("raw_log", os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes"))
+    raw_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_filtered.xes")
+    input_log_path = raw_rel if os.path.isabs(raw_rel) else os.path.join(PROJECT_ROOT, raw_rel)
+    if not os.path.exists(input_log_path):
+        fallback_path = os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes")
+        if os.path.exists(fallback_path):
+            print(f"[Notice] '{input_log_path}' not found, falling back to existing '{fallback_path}'.")
+            input_log_path = fallback_path
     petri_nets_dir = os.path.join(PROJECT_ROOT, cfg["paths"].get("petri_nets_dir", "models/petri_nets"))
     os.makedirs(petri_nets_dir, exist_ok=True)
     output_pnml_path = os.path.join(petri_nets_dir, f"discovered_model_{chosen_miner}.pnml")
@@ -34,17 +40,35 @@ def main():
     log = pm4py.read_xes(input_log_path)
     print(f"Log loaded successfully. Number of traces: {len(log)}")
 
+    #filter strictly to process activities and COMPLETE events
+    prep_cfg = cfg.get("preprocessing", {})
+    proc_prefixes = prep_cfg.get("process_activity_prefixes", [])
+    
+    import pandas as pd
+    df_disc = pm4py.convert_to_dataframe(log) if not isinstance(log, pd.DataFrame) else log.copy()
+    if proc_prefixes:
+        df_disc = df_disc[df_disc["concept:name"].str.startswith(tuple(proc_prefixes))].copy()
+    if "lifecycle:transition" in df_disc.columns:
+        df_disc = df_disc[df_disc["lifecycle:transition"].str.upper() == "COMPLETE"].copy()
+
+    case_counts = df_disc.groupby("case:concept:name").size()
+    valid_cases = case_counts[case_counts > 0].index
+    df_disc = df_disc[df_disc["case:concept:name"].isin(valid_cases)].copy()
+
+    print(f"Discovery log filtered to COMPLETE events: {len(df_disc)} events across {df_disc['concept:name'].nunique()} process activities.")
+    discovery_log = pm4py.convert_to_event_log(df_disc)
+
     if chosen_miner == "split":
         # Discover BPMN model using Split Miner and convert to Petri Net
         print("Discovering BPMN model using Split Miner...")
-        bpmn_model = pm4py.discover_bpmn_split_miner(log)
+        bpmn_model = pm4py.discover_bpmn_split_miner(discovery_log)
         print("Converting BPMN to Petri Net...")
         net, initial_marking, final_marking = pm4py.convert_to_petri_net(bpmn_model)
 
     elif chosen_miner == "inductive":
         # Discover Petri Net directly using Inductive Miner (with noise filtering)
         print(f"Discovering Petri Net using Inductive Miner (noise_threshold={noise_threshold})...")
-        net, initial_marking, final_marking = pm4py.discover_petri_net_inductive(log, noise_threshold=noise_threshold)
+        net, initial_marking, final_marking = pm4py.discover_petri_net_inductive(discovery_log, noise_threshold=noise_threshold)
 
     print(f"Petri Net created with {len(net.places)} places and {len(net.transitions)} transitions.")
 

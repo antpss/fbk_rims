@@ -34,12 +34,26 @@ def main():
     log = pm4py.read_xes(log_path)
     df = pm4py.convert_to_dataframe(log)
 
+    prep_cfg = cfg.get("preprocessing", {})
+    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", ["W_"]))
+    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", ["A_", "O_"]))
+
     activities = cfg.get("target_activities", [])
     if not activities:
-        activities = sorted(df['concept:name'].dropna().unique().tolist())
+        if proc_prefixes:
+            activities = sorted([a for a in df['concept:name'].dropna().unique() if a.startswith(proc_prefixes)])
+        else:
+            activities = sorted(df['concept:name'].dropna().unique().tolist())
         print(f"Target activities: [AUTO-DISCOVERED {len(activities)} activities from log]: {activities}")
     else:
         print(f"Target activities ({len(activities)} configured): {activities}")
+
+    # Discover milestone activities for dynamic business state context
+    if milestone_prefixes:
+        all_milestones = sorted([m for m in df['concept:name'].dropna().unique() if m.startswith(milestone_prefixes)])
+        print(f"Discovered {len(all_milestones)} business milestone activities for context: {all_milestones}")
+    else:
+        all_milestones = []
 
     # Feature extraction settings
     feat_cfg = cfg.get("features", {})
@@ -57,6 +71,8 @@ def main():
     if 'lifecycle:transition' in df.columns:
         trans_col = df['lifecycle:transition'].astype(str).str.upper()
         completes_df = df[(df['concept:name'].isin(activities)) & (trans_col == 'COMPLETE')]
+        if 'is_synthetic' in completes_df.columns:
+            completes_df = completes_df[completes_df['is_synthetic'].astype(str).str.lower() != 'true']
         if len(completes_df) == 0:
             completes_df = df[df['concept:name'].isin(activities)]
     else:
@@ -73,23 +89,37 @@ def main():
     if os.path.exists(role_file):
         with open(role_file, 'r') as f:
             role_data = json.load(f)
-            activity_capacity = {act: len(role_data.get(act, [1])) for act in activities}
     else:
-        activity_capacity = {}
-    activity_capacity = {k: max(1, v) for k, v in activity_capacity.items()}
+        print("models/role_mapping.json not found. Automatically discovering resource pools from log...")
+        role_data = {}
+        for act in activities:
+            act_df = df[(df["concept:name"] == act) & (df["org:resource"].notna()) & (df["org:resource"].astype(str).str.upper() != "SYNTHETIC")]
+            workers = sorted([str(r) for r in act_df["org:resource"].unique().tolist()])
+            role_data[act] = workers if workers else ["DEFAULT_WORKER"]
+        os.makedirs(os.path.dirname(role_file), exist_ok=True)
+        with open(role_file, 'w') as f:
+            json.dump(role_data, f, indent=2)
+        print(f"Generated {role_file} with resource pools for {len(role_data)} activities.")
+    activity_capacity = {act: max(1, len(role_data.get(act, [1]))) for act in activities}
+    print(f"Activity resource capacities (Role Pools): {activity_capacity}")
 
     ac_wip = defaultdict(int)
     case_event_counts = df['case:concept:name'].value_counts().to_dict()
     seen_events = {case_id: 0 for case_id in case_event_counts}
 
     case_prefixes = {}
-    case_start_times = {}
-    case_start_features = {}
+    case_start_times = defaultdict(dict)
+    case_schedule_times = defaultdict(dict)
+    case_start_features = defaultdict(dict)
+    case_milestones_seen = defaultdict(set)
+    case_offer_count = defaultdict(int)
     case_prev_time = {}
     case_last_complete = {}
     case_prev_end_time = {}
 
     all_rows = []
+    synthetic_skipped = 0
+    missing_start_skipped = 0
     print("Sweeping log chronologically to construct state vectors...")
 
     for _, row in df.iterrows():
@@ -97,15 +127,18 @@ def main():
         activity_name = row["concept:name"]
         transition = str(row.get("lifecycle:transition", "COMPLETE")).upper()
         timestamp = row["time:timestamp"]
+        is_synthetic = str(row.get("is_synthetic", "false")).lower() == "true"
 
         # Dynamic extraction of Tier 2 case attributes
         extracted_case_attrs = {}
         for attr in case_attrs:
             col = attr["column"]
             val = row.get(col, attr.get("fill_value", 0.0))
+            if pd.isna(val) and col.replace("case:", "") in row:
+                val = row.get(col.replace("case:", ""), attr.get("fill_value", 0.0))
             try:
                 val = float(val) if attr.get("type") == "continuous" else val
-            except:
+            except Exception:
                 val = attr.get("fill_value", 0.0)
             extracted_case_attrs[attr["feature_name"]] = val
 
@@ -128,101 +161,139 @@ def main():
 
         if case_id not in case_prefixes:
             case_prefixes[case_id] = []
-        if case_id not in case_start_times:
-            case_start_times[case_id] = {}
-        if case_id not in case_start_features:
-            case_start_features[case_id] = {}
 
-        if transition == "START":
-            ac_wip[activity_name] += 1
-            case_start_times[case_id][activity_name] = timestamp
+        # -------------------------------------------------------------
+        # A) Milestone Event: update dynamic case business state
+        # -------------------------------------------------------------
+        if milestone_prefixes and activity_name.startswith(milestone_prefixes):
+            case_milestones_seen[case_id].add(activity_name)
+            if activity_name.startswith("O_"):
+                case_offer_count[case_id] += 1
 
-            if case_id in case_prev_end_time:
-                current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
-            else:
-                current_wait = 0.0
+        # -------------------------------------------------------------
+        # B) Process Work Item Execution
+        # -------------------------------------------------------------
+        elif activity_name in activities or (proc_prefixes and activity_name.startswith(proc_prefixes)):
+            if is_synthetic:
+                synthetic_skipped += 1
+                case_prefixes[case_id].append(activity_name)
 
-            case_start_features[case_id][activity_name] = {
-                "Weekday": weekday,
-                "Daytime": daytime,
-                "WIP": wip,
-                "AC_WIP": ac_wip[activity_name],
-                "RP_OC_Array": rp_oc_array,
-                "Prev_Proc_Time": case_prev_time[case_id],
-                "Wait_Time_Seconds": max(0.0, current_wait),
-                **extracted_case_attrs,
-                **extracted_event_attrs
-            }
+            elif transition == "SCHEDULE":
+                case_schedule_times[case_id][activity_name] = timestamp
 
-        elif transition == "COMPLETE":
-            if ac_wip[activity_name] > 0:
-                ac_wip[activity_name] -= 1
+            elif transition == "START":
+                ac_wip[activity_name] += 1
+                case_start_times[case_id][activity_name] = timestamp
 
-            if activity_name in case_start_times[case_id]:
-                duration = (timestamp - case_start_times[case_id][activity_name]).total_seconds()
-                del case_start_times[case_id][activity_name]
-            else:
-                duration = 0.0
+                # True Queue Wait Calculation:
+                # 1. Scheduled task: START - SCHEDULE (worklist queue wait)
+                # 2. Unscheduled follow-up/loop: START - prev_end_time (inter-activity idle wait)
+                if activity_name in case_schedule_times[case_id]:
+                    current_wait = (timestamp - case_schedule_times[case_id][activity_name]).total_seconds()
+                    del case_schedule_times[case_id][activity_name]
+                elif case_id in case_prev_end_time:
+                    current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
+                else:
+                    current_wait = 0.0
 
-            case_prev_time[case_id] = duration
-            case_last_complete[case_id] = timestamp
-            case_prev_end_time[case_id] = timestamp
+                current_wait = max(0.0, current_wait)
 
-            if activity_name in case_start_features[case_id]:
-                feat = case_start_features[case_id].pop(activity_name)
-            else:
-                feat = {
+                feat_dict = {
                     "Weekday": weekday,
                     "Daytime": daytime,
                     "WIP": wip,
-                    "AC_WIP": 0,
+                    "AC_WIP": ac_wip[activity_name],
                     "RP_OC_Array": rp_oc_array,
-                    "Prev_Proc_Time": 0.0,
-                    "Wait_Time_Seconds": 0.0,
+                    "Prev_Proc_Time": case_prev_time[case_id],
+                    "Wait_Time_Seconds": current_wait,
+                    "Offer_Count": float(case_offer_count[case_id]),
+                    "Has_Offer": 1.0 if case_offer_count[case_id] > 0 else 0.0,
                     **extracted_case_attrs,
                     **extracted_event_attrs
                 }
+                for m in all_milestones:
+                    feat_dict[f"Milestone_{m}"] = 1.0 if m in case_milestones_seen[case_id] else 0.0
 
-            row_dict = {
-                "Case_ID": case_id,
-                "Target_Activity": activity_name,
-                "Prefix": json.dumps(case_prefixes[case_id][-prefix_window:]),
-                "Duration_Seconds": duration,
-                "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
-            }
+                case_start_features[case_id][activity_name] = feat_dict
 
-            if univ_cfg.get("use_prev_duration", True):
-                row_dict["Prev_Proc_Time"] = feat.get("Prev_Proc_Time", 0.0)
-            if univ_cfg.get("use_wip", True):
-                row_dict["WIP"] = feat.get("WIP", wip)
-            if univ_cfg.get("use_ac_wip", True):
-                row_dict["AC_WIP"] = feat.get("AC_WIP", 0)
-            if univ_cfg.get("use_calendar_time", True):
-                row_dict["Daytime"] = feat.get("Daytime", daytime)
-                for i in range(7):
-                    row_dict[f"Weekday_{i}"] = 1.0 if feat["Weekday"] == i else 0.0
-            if univ_cfg.get("use_role_occupancy", True):
-                for i, act in enumerate(activities):
-                    row_dict[f"Role_{i}_OC"] = float(feat["RP_OC_Array"][i])
+            elif transition == "COMPLETE":
+                if ac_wip[activity_name] > 0:
+                    ac_wip[activity_name] -= 1
 
-            # Append domain-specific Tier 2 features
-            for attr in case_attrs:
-                fname = attr["feature_name"]
-                row_dict[fname] = feat.get(fname, attr.get("fill_value", 0.0))
-            for col in event_attrs:
-                row_dict[col] = feat.get(col, "UNKNOWN")
+                if activity_name in case_start_times[case_id]:
+                    duration = (timestamp - case_start_times[case_id][activity_name]).total_seconds()
+                    has_valid_start = True
+                    del case_start_times[case_id][activity_name]
+                else:
+                    duration = 0.0
+                    has_valid_start = False
 
-            all_rows.append(row_dict)
-            case_prefixes[case_id].append(activity_name)
+                case_prev_time[case_id] = duration
+                case_last_complete[case_id] = timestamp
+                case_prev_end_time[case_id] = timestamp
+
+                # Only emit valid human training samples
+                if not has_valid_start:
+                    missing_start_skipped += 1
+                    case_start_features[case_id].pop(activity_name, None)
+                else:
+                    feat = case_start_features[case_id].pop(activity_name, None)
+                    if feat is not None:
+                        row_dict = {
+                            "Case_ID": case_id,
+                            "Target_Activity": activity_name,
+                            "Prefix": json.dumps(case_prefixes[case_id][-prefix_window:]),
+                            "Duration_Seconds": duration,
+                            "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
+                        }
+
+                        if univ_cfg.get("use_prev_duration", True):
+                            row_dict["Prev_Proc_Time"] = feat.get("Prev_Proc_Time", 0.0)
+                        if univ_cfg.get("use_wip", True):
+                            row_dict["WIP"] = feat.get("WIP", wip)
+                        if univ_cfg.get("use_ac_wip", True):
+                            row_dict["AC_WIP"] = feat.get("AC_WIP", 0)
+                        if univ_cfg.get("use_calendar_time", True):
+                            row_dict["Daytime"] = feat.get("Daytime", daytime)
+                            for i in range(7):
+                                row_dict[f"Weekday_{i}"] = 1.0 if feat["Weekday"] == i else 0.0
+                        if univ_cfg.get("use_role_occupancy", True):
+                            for i, act in enumerate(activities):
+                                row_dict[f"Role_{i}_OC"] = float(feat["RP_OC_Array"][i])
+
+                        # Append dynamic milestone context
+                        row_dict["Offer_Count"] = feat.get("Offer_Count", 0.0)
+                        row_dict["Has_Offer"] = feat.get("Has_Offer", 0.0)
+                        for m in all_milestones:
+                            row_dict[f"Milestone_{m}"] = feat.get(f"Milestone_{m}", 0.0)
+
+                        # Append domain-specific Tier 2 features
+                        for attr in case_attrs:
+                            fname = attr["feature_name"]
+                            row_dict[fname] = feat.get(fname, attr.get("fill_value", 0.0))
+                        for col in event_attrs:
+                            row_dict[col] = feat.get(col, "UNKNOWN")
+
+                        all_rows.append(row_dict)
+
+                case_prefixes[case_id].append(activity_name)
 
         if seen_events[case_id] == case_event_counts[case_id]:
             active_cases.discard(case_id)
-            del case_prefixes[case_id]
-            del case_start_times[case_id]
-            del case_prev_time[case_id]
+            if case_id in case_prefixes: del case_prefixes[case_id]
+            if case_id in case_start_times: del case_start_times[case_id]
+            if case_id in case_schedule_times: del case_schedule_times[case_id]
+            if case_id in case_start_features: del case_start_features[case_id]
+            if case_id in case_milestones_seen: del case_milestones_seen[case_id]
+            if case_id in case_offer_count: del case_offer_count[case_id]
+            if case_id in case_prev_time: del case_prev_time[case_id]
             if case_id in case_last_complete: del case_last_complete[case_id]
             if case_id in case_prev_end_time: del case_prev_end_time[case_id]
-            if case_id in case_start_features: del case_start_features[case_id]
+
+    print(f"\nExtraction Summary:")
+    print(f"  - Extracted valid rows: {len(all_rows)}")
+    print(f"  - Synthetic model moves skipped: {synthetic_skipped}")
+    print(f"  - Incomplete work items (missing START) skipped: {missing_start_skipped}")
 
     task_df = pd.DataFrame(all_rows)
     total_before = len(task_df)
@@ -300,4 +371,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

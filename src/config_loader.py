@@ -25,11 +25,15 @@ def load_config(config_path=None):
             return rel_or_abs
         return os.path.normpath(os.path.join(PROJECT_ROOT, rel_or_abs))
         
-    # Pre-resolve key paths for convenience
-    if "paths" in config:
-        for k in ["aligned_log", "petri_net", "output_base_dir", "models_dir"]:
-            if k in config["paths"]:
+    # Pre-resolve all path keys for convenience
+    if "paths" in config and isinstance(config["paths"], dict):
+        for k in list(config["paths"].keys()):
+            if isinstance(config["paths"][k], str):
                 config["paths"][k] = resolve_path(config["paths"][k])
+
+    if "preprocessing" in config and isinstance(config["preprocessing"], dict):
+        if "input_log" in config["preprocessing"] and isinstance(config["preprocessing"]["input_log"], str):
+            config["preprocessing"]["input_log"] = resolve_path(config["preprocessing"]["input_log"])
                 
     return config
 

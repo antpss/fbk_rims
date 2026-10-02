@@ -20,7 +20,10 @@ OUTPUT_LOG = os.path.join(PROJECT_ROOT, output_rel)
 os.makedirs(os.path.dirname(OUTPUT_LOG), exist_ok=True)
 
 # Prefixes to keep from config (empty list = keep all)
-PREFIXES_TO_KEEP = prep_cfg.get("prefixes_to_keep", [])
+process_prefixes = prep_cfg.get("process_activity_prefixes", prep_cfg.get("prefixes_to_keep", []))
+milestone_prefixes = prep_cfg.get("milestone_prefixes", [])
+PREFIXES_TO_KEEP = list(dict.fromkeys(process_prefixes + milestone_prefixes))
+
 # Translation / renaming map from config (empty dict = no translation)
 TRANSLATION_MAP = prep_cfg.get("activity_mapping", {})
 # ==========================================
@@ -37,7 +40,11 @@ def filter_log():
     # Filtering by prefix if specified
     if PREFIXES_TO_KEEP:
         prefixes_tuple = tuple(PREFIXES_TO_KEEP)
-        print(f"Filtering to keep only activities starting with: {prefixes_tuple}")
+        print(f"Filtering to keep activities starting with: {prefixes_tuple}")
+        if process_prefixes:
+            print(f"  - Active Process Prefixes:    {process_prefixes}")
+        if milestone_prefixes:
+            print(f"  - Milestone Routing Prefixes: {milestone_prefixes}")
         df_filtered = df[df['concept:name'].str.startswith(prefixes_tuple)].copy()
     else:
         print("No prefix filtering specified; keeping all activities.")

@@ -24,6 +24,7 @@ from lxml import etree
 from collections import defaultdict
 
 import pm4py
+from pm4py.objects.petri_net import semantics
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
@@ -38,7 +39,7 @@ from config_loader import load_config, PROJECT_ROOT
 def discover_xor_decision_points(pnml_path):
     """
     Parses a PNML Petri net file and identifies all places with >= 2 outgoing arcs (XOR splits).
-    Traces silent transitions to downstream observable activities where possible.
+    Traces silent transitions to downstream observable activities or <END>/<START> recursively.
     """
     if not os.path.exists(pnml_path):
         raise FileNotFoundError(f"Petri net not found at: {pnml_path}")
@@ -51,13 +52,13 @@ def discover_xor_decision_points(pnml_path):
     # 1. Map transitions (ID -> display name / label)
     trans_map = {}
     is_silent = {}
-    for trans in page.findall("transition"):
+    for trans in page.findall(".//transition"):
         t_id = trans.get("id")
+        ts = trans.find("toolspecific")
         name_elem = trans.find("name")
         t_text = name_elem.find("text").text if (name_elem is not None and name_elem.find("text") is not None) else t_id
 
-        ts = trans.find("toolspecific")
-        if (ts is not None and ts.get("activity") == "$invisible$") or t_text.startswith("sfl_") or t_text == "$invisible$":
+        if (ts is not None and ts.get("activity") == "$invisible$") or t_text.startswith("sfl_") or t_text == "$invisible$" or (len(t_text) == 36 and "-" in t_text):
             trans_map[t_id] = t_text
             is_silent[t_id] = True
         else:
@@ -67,7 +68,7 @@ def discover_xor_decision_points(pnml_path):
     # 2. Map arcs
     out_arcs = defaultdict(list)   # source_id -> list of target_ids
     in_arcs = defaultdict(list)    # target_id -> list of source_ids
-    for arc in page.findall("arc"):
+    for arc in page.findall(".//arc"):
         src = arc.get("source")
         tgt = arc.get("target")
         out_arcs[src].append(tgt)
@@ -78,27 +79,57 @@ def discover_xor_decision_points(pnml_path):
         if visited is None:
             visited = set()
         if t_id in visited:
-            return trans_map.get(t_id, t_id)
+            return None
         visited.add(t_id)
 
         if not is_silent.get(t_id, False):
             return trans_map.get(t_id, t_id)
 
         # Silent transition: check downstream places and their transitions
-        downstream_places = out_arcs.get(t_id, [])
-        for dp in downstream_places:
-            downstream_trans = out_arcs.get(dp, [])
-            for dt in downstream_trans:
+        for p in out_arcs.get(t_id, []):
+            if p == "sink":
+                return "<END>"
+            for dt in out_arcs.get(p, []):
                 if not is_silent.get(dt, False):
                     return trans_map.get(dt, dt)
+                res = resolve_target_label(dt, visited.copy())
+                if res:
+                    return res
         return trans_map.get(t_id, t_id)
 
-    # 4. Identify XOR places (out_degree >= 2)
+    # 4. Helper to trace upstream incoming activity for an XOR place
+    def resolve_incoming_label(t_id, visited=None):
+        if visited is None:
+            visited = set()
+        if t_id in visited:
+            return set()
+        visited.add(t_id)
+
+        if not is_silent.get(t_id, False):
+            return {trans_map.get(t_id, t_id)}
+
+        res = set()
+        for p in in_arcs.get(t_id, []):
+            if p == "source":
+                res.add("<START>")
+            for st in in_arcs.get(p, []):
+                if not is_silent.get(st, False):
+                    res.add(trans_map.get(st, st))
+                else:
+                    res.update(resolve_incoming_label(st, visited.copy()))
+        return res
+
+    # 5. Identify XOR places (out_degree >= 2)
     xor_decision_points = {}
-    for place in page.findall("place"):
+    for place in page.findall(".//place"):
         p_id = place.get("id")
         targets = out_arcs.get(p_id, [])
         if len(targets) >= 2:
+            in_trans = in_arcs.get(p_id, [])
+            all_incoming = set()
+            for s in in_trans:
+                all_incoming.update(resolve_incoming_label(s))
+
             branch_info = {}
             for t_id in targets:
                 resolved_label = resolve_target_label(t_id)
@@ -107,7 +138,10 @@ def discover_xor_decision_points(pnml_path):
                     "resolved_target": resolved_label,
                     "is_silent": is_silent.get(t_id, False)
                 }
-            xor_decision_points[p_id] = branch_info
+            xor_decision_points[p_id] = {
+                "incoming": list(all_incoming),
+                "branches": branch_info
+            }
 
     return xor_decision_points
 
@@ -115,25 +149,69 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # Decision Dataset Extraction from Pre-Aligned Log
 # =====================================================================
-def extract_decision_samples_from_log(log_path, xor_decision_points, window_size, case_attrs_cfg):
+def extract_decision_samples_from_log(log_path, xor_decision_points, window_size, case_attrs_cfg, prep_cfg=None, pnml_path=None):
     """
-    Scans the pre-aligned log, extracting decision context (prefix window + case attributes)
-    whenever an XOR decision point choice is encountered.
+    Scans the pre-aligned log, extracting decision context (prefix window + case attributes
+    + dynamic business milestone features) whenever an XOR decision point choice is encountered.
+    Integrates Petri net marking semantics to verify active tokens at decision places.
     """
     print(f"Loading event log for decision extraction: {log_path}...")
     log = pm4py.read_xes(log_path)
+    df = pm4py.convert_to_dataframe(log) if not isinstance(log, pd.DataFrame) else log
+
+    if prep_cfg is None:
+        prep_cfg = {}
+    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", []))
+    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", []))
+
+    all_milestones = []
+    if milestone_prefixes:
+        all_milestones = sorted([m for m in df["concept:name"].dropna().unique() if m.startswith(milestone_prefixes)])
+        print(f"Extracting context across {len(all_milestones)} business milestones.")
+
+    # Load Petri net for marking semantics verification if provided
+    net = None
+    im = None
+    place_map = {}
+    label_to_trans = defaultdict(list)
+    if pnml_path and os.path.exists(pnml_path):
+        try:
+            net, im, _ = pm4py.read_pnml(pnml_path)
+            place_map = {p.name: p for p in net.places}
+            for t in net.transitions:
+                if t.label is not None:
+                    label_to_trans[t.label].append(t)
+            print("Petri net marking semantics enabled for decision verification.")
+        except Exception as e:
+            print(f"[Warning] Could not initialize Petri net semantics: {e}")
 
     # Prepare storage per decision place
     decision_data = {p_id: [] for p_id in xor_decision_points}
 
-    # Reverse lookup: for a given place, map possible next activities/targets
-    place_to_choices = {}
-    for p_id, branches in xor_decision_points.items():
-        place_to_choices[p_id] = {b["resolved_target"]: b["raw_trans"] for b in branches.values()}
+    # Group by case
+    cases = df.groupby("case:concept:name", sort=False)
 
-    for trace in log:
-        trace_attrs = trace.attributes
-        events = [e["concept:name"] for e in trace]
+    def advance_silents(m):
+        if m is None or net is None:
+            return m
+        while True:
+            enabled = semantics.enabled_transitions(net, m)
+            fired = False
+            for t in enabled:
+                if t.label is None and any(arc.target.name in xor_decision_points for arc in t.out_arcs):
+                    m = semantics.execute(t, net, m)
+                    fired = True
+                    break
+            if not fired:
+                break
+        return m
+
+    for case_id, group in cases:
+        grp_sorted = group.sort_values(by="time:timestamp").reset_index(drop=True)
+        if len(grp_sorted) == 0:
+            continue
+
+        first_row = grp_sorted.iloc[0]
 
         # Extract case attributes dynamically from config
         case_features = {}
@@ -141,33 +219,101 @@ def extract_decision_samples_from_log(log_path, xor_decision_points, window_size
             col = attr["column"]
             feat_name = attr["feature_name"]
             fill_val = attr.get("fill_value", 0.0)
-            val = trace_attrs.get(col, fill_val)
+            val = first_row.get(col, fill_val)
+            if pd.isna(val) and col.replace("case:", "") in first_row:
+                val = first_row.get(col.replace("case:", ""), fill_val)
+            try:
+                val = float(val) if attr.get("type") == "continuous" else val
+            except Exception:
+                val = fill_val
             case_features[feat_name] = val
 
-        # Walk through trace history
-        prefix = []
-        for i, act in enumerate(events):
-            if i + 1 < len(events):
-                next_act = events[i + 1]
+        # Separate milestones vs process activities
+        milestones_seen = set()
+        offer_count = 0
+        proc_events = []
+        milestone_state_at_proc = []
 
-                for p_id, choice_map in place_to_choices.items():
-                    if next_act in choice_map:
-                        recent_prefix = prefix[-window_size:] if len(prefix) >= window_size else ["<START>"] * (window_size - len(prefix)) + prefix
-                        
-                        sample = {
-                            "case_id": trace_attrs.get("concept:name", "unknown"),
-                            "current_activity": act,
-                            "chosen_target": next_act,
-                            **{f"prefix_{k+1}": p_act for k, p_act in enumerate(recent_prefix)},
-                            **case_features
-                        }
-                        decision_data[p_id].append(sample)
+        for _, row in grp_sorted.iterrows():
+            act = row["concept:name"]
+            trans = str(row.get("lifecycle:transition", "COMPLETE")).upper()
+
+            if milestone_prefixes and act.startswith(milestone_prefixes):
+                milestones_seen.add(act)
+                if act.startswith("O_"):
+                    offer_count += 1
+            elif (not proc_prefixes or act.startswith(proc_prefixes)) and trans == "COMPLETE":
+                proc_events.append(act)
+                m_state = {
+                    "Offer_Count": float(offer_count),
+                    "Has_Offer": 1.0 if offer_count > 0 else 0.0,
+                    **{f"Milestone_{m}": (1.0 if m in milestones_seen else 0.0) for m in all_milestones}
+                }
+                milestone_state_at_proc.append(m_state)
+
+        if not proc_events:
+            continue
+
+        curr_marking = im.copy() if im is not None else None
+        curr_marking = advance_silents(curr_marking)
+
+        # 1. Process Start Decision Point (<START>)
+        first_act = proc_events[0]
+        for p_id, p_info in xor_decision_points.items():
+            if "<START>" in p_info["incoming"]:
+                branch_targets = [b["resolved_target"] for b in p_info["branches"].values()]
+                p_obj = place_map.get(p_id)
+                marking_match = (curr_marking is not None and p_obj is not None and curr_marking.get(p_obj, 0) > 0)
+                structural_match = True
+
+                if (marking_match or structural_match) and first_act in branch_targets:
+                    recent_prefix = ["<START>"] * window_size
+                    sample = {
+                        "case_id": case_id,
+                        "current_activity": "<START>",
+                        "chosen_target": first_act,
+                        **{f"prefix_{k+1}": p_act for k, p_act in enumerate(recent_prefix)},
+                        **case_features,
+                        **milestone_state_at_proc[0]
+                    }
+                    decision_data[p_id].append(sample)
+
+        # 2. Intermediate Decision Points
+        prefix = []
+        for i, act in enumerate(proc_events):
+            next_act = proc_events[i + 1] if i + 1 < len(proc_events) else "<END>"
+            m_state = milestone_state_at_proc[i]
+            curr_marking = advance_silents(curr_marking)
+
+            for p_id, p_info in xor_decision_points.items():
+                branch_targets = [b["resolved_target"] for b in p_info["branches"].values()]
+                p_obj = place_map.get(p_id)
+                marking_match = (curr_marking is not None and p_obj is not None and curr_marking.get(p_obj, 0) > 0)
+                structural_match = act in p_info["incoming"]
+
+                if (marking_match or structural_match) and (next_act in branch_targets):
+                    recent_prefix = prefix[-window_size:] if len(prefix) >= window_size else ["<START>"] * (window_size - len(prefix)) + prefix
+                    sample = {
+                        "case_id": case_id,
+                        "current_activity": act,
+                        "chosen_target": next_act,
+                        **{f"prefix_{k+1}": p_act for k, p_act in enumerate(recent_prefix)},
+                        **case_features,
+                        **m_state
+                    }
+                    decision_data[p_id].append(sample)
+
+            if curr_marking is not None and act in label_to_trans:
+                enabled = semantics.enabled_transitions(net, curr_marking)
+                for t in label_to_trans[act]:
+                    if t in enabled:
+                        curr_marking = semantics.execute(t, net, curr_marking)
+                        break
 
             prefix.append(act)
 
     decision_dfs = {}
     for p_id, samples in decision_data.items():
-        if len(samples) > 0:
             decision_dfs[p_id] = pd.DataFrame(samples)
 
     return decision_dfs
@@ -193,11 +339,12 @@ def main():
     min_f1 = routing_cfg.get("min_f1_threshold", 0.60)
     clf_type = args.classifier or routing_cfg.get("classifier_type", "xgboost")
     min_samples = args.min_samples if args.min_samples is not None else routing_cfg.get("min_samples", 30)
-    output_dir = os.path.join(PROJECT_ROOT, routing_cfg.get("output_dir", "models_no_zeros/routing"))
+    output_dir = os.path.join(PROJECT_ROOT, routing_cfg.get("output_dir", "models/routing"))
     os.makedirs(output_dir, exist_ok=True)
 
     window_size = cfg.get("features", {}).get("prefix_window_size", 10)
     case_attrs_cfg = cfg.get("features", {}).get("case_attributes", [])
+    prep_cfg = cfg.get("preprocessing", {})
 
     print("=" * 85)
     print("  RIMS+ MODERNIZED XOR DECISION MINING & ROUTING CLASSIFIER")
@@ -209,15 +356,16 @@ def main():
     print(f"  Output Dir:    {output_dir}")
     print("=" * 85)
 
-    # Step 1: Discover XOR Decision Places
+    #Discover XOR Decision Places
     xor_points = discover_xor_decision_points(pnml_path)
     print(f"\nDiscovered {len(xor_points)} XOR decision point places in Petri net:")
-    for p_id, branches in xor_points.items():
+    for p_id, p_info in xor_points.items():
+        branches = p_info["branches"]
         targets = [b["resolved_target"] for b in branches.values()]
-        print(f"  - Place [{p_id}]: {len(branches)} outgoing branches -> {targets}")
+        print(f"  - Place [{p_id}] (After {p_info['incoming']}): {len(branches)} outgoing branches -> {targets}")
 
-    # Step 2: Extract Decision Instances from Log
-    decision_dfs = extract_decision_samples_from_log(log_path, xor_points, window_size, case_attrs_cfg)
+    #Extract Decision Instances from Log
+    decision_dfs = extract_decision_samples_from_log(log_path, xor_points, window_size, case_attrs_cfg, prep_cfg, pnml_path=pnml_path)
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
     dispatch_manifest = {
@@ -232,10 +380,10 @@ def main():
 
     results_table = []
 
-    # Step 3: Train Classifier or Compute Empirical Probabilities per Decision Point
+    #Train Classifier or Compute Empirical Probabilities per Decision Point
     for p_id, df in decision_dfs.items():
         safe_name = p_id.replace(" ", "_").replace(":", "_").replace("/", "_")
-        targets_available = [b["resolved_target"] for b in xor_points[p_id].values()]
+        targets_available = list(set([b["resolved_target"] for b in xor_points[p_id]["branches"].values()]))
         n_samples = len(df)
         counts = df["chosen_target"].value_counts().to_dict()
         n_classes = len(counts)
@@ -287,19 +435,32 @@ def main():
 
         cat_mappings = {}
         for c in X.columns:
-            if X[c].dtype == "object":
+            if pd.api.types.is_string_dtype(X[c]) or X[c].dtype.name in ("object", "str", "string"):
                 X[c] = X[c].astype("category")
                 cat_mappings[c] = list(X[c].cat.categories)
 
-        # Train/Test Split
+        # Case-Level 80/20 Train/Test Split (prevents intra-case cross-event data leakage)
+        unique_cases = np.array(list(set(df["case_id"])))
         try:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=seed, stratify=y
-            )
-        except ValueError:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=seed
-            )
+            tr_cases, te_cases = train_test_split(unique_cases, test_size=0.2, random_state=seed)
+            tr_mask = df["case_id"].isin(set(tr_cases)).values
+            te_mask = df["case_id"].isin(set(te_cases)).values
+
+            X_train, y_train = X[tr_mask], y[tr_mask]
+            X_test, y_test = X[te_mask], y[te_mask]
+
+            if len(np.unique(y_train)) < n_classes or len(np.unique(y_test)) < 2:
+                raise ValueError("Sparse class distribution across case split")
+        except Exception:
+            # Fallback to stratified row split if case split misses minority classes
+            try:
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=seed, stratify=y
+                )
+            except ValueError:
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=seed
+                )
 
         if clf_type == "xgboost":
             clf = xgb.XGBClassifier(
@@ -385,7 +546,7 @@ def main():
             "Status": status_str
         })
 
-    # Save Manifests (both modern RIMS+ and legacy RIMS format)
+    # Save Manifests
     manifest_path = os.path.join(output_dir, "routing_decisions.json")
     with open(manifest_path, "w") as f:
         json.dump(dispatch_manifest, f, indent=2)

@@ -42,6 +42,24 @@ def calculate_smape(actual, predicted):
     denominator = (np.abs(actual) + np.abs(predicted)) / 2.0
     return np.mean(numerator / (denominator + 1e-8)) * 100.0
 
+def format_time_duration(seconds: float) -> str:
+    
+    #e.g. 81,252s (22.6h), 440s (7.3m), or 25.65s.
+    if seconds is None or np.isnan(seconds) or np.isinf(seconds):
+        return "N/A"
+    sec_int = int(round(seconds))
+    if seconds >= 86400:
+        days = seconds / 86400.0
+        return f"{sec_int:,}s ({days:.1f}d)"
+    elif seconds >= 3600:
+        hours = seconds / 3600.0
+        return f"{sec_int:,}s ({hours:.1f}h)"
+    elif seconds >= 60:
+        mins = seconds / 60.0
+        return f"{sec_int:,}s ({mins:.1f}m)"
+    else:
+        return f"{seconds:.2f}s"
+
 # =====================================================================
 # PyTorch Deep Learning Architectures
 # =====================================================================
@@ -102,23 +120,37 @@ class DurationLSTM(nn.Module):
         x = torch.cat(tensors, dim=1)
         return F.softplus(self.fc(x).squeeze(-1))
 
+class Chomp1d(nn.Module):
+    def __init__(self, chomp_size):
+        super().__init__()
+        self.chomp_size = chomp_size
+
+    def forward(self, x):
+        if self.chomp_size == 0:
+            return x
+        return x[:, :, :-self.chomp_size].contiguous()
+
 class TemporalBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, dilation, padding, dropout=0.2):
         super().__init__()
         self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation)
+        self.chomp1 = Chomp1d(padding)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(dropout)
+        
         self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation)
+        self.chomp2 = Chomp1d(padding)
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
+        
         self.downsample = nn.Conv1d(in_channels, out_channels, 1) if in_channels != out_channels else None
         self.relu = nn.ReLU()
 
     def forward(self, x):
         res = x if self.downsample is None else self.downsample(x)
-        out = self.dropout1(self.relu1(self.conv1(x)))
-        out = self.dropout2(self.relu2(self.conv2(out)))
-        return self.relu(out[:, :, :x.shape[2]] + res[:, :, :x.shape[2]])
+        out = self.dropout1(self.relu1(self.chomp1(self.conv1(x))))
+        out = self.dropout2(self.relu2(self.chomp2(self.conv2(out))))
+        return self.relu(out + res)
 
 class DurationTCN(nn.Module):
     def __init__(self, vocab_size, embed_dim, num_acts, num_features, hidden_dim, num_layers=3, dropout=0.2):
@@ -202,9 +234,11 @@ def main():
     # Read DL training parameters from config.yaml
     dl_cfg = strat_cfg.get("dl", {})
     epochs = dl_cfg.get("epochs", 50)
-    patience = dl_cfg.get("patience", 10)
+    patience = dl_cfg.get("patience", 5)
     batch_size = dl_cfg.get("batch_size", 256)
     learning_rate = dl_cfg.get("learning_rate", 0.001)
+    min_delta = dl_cfg.get("min_delta", 0.01)
+    min_samples_local_dl = dl_cfg.get("min_samples_for_local_dl", 3000)
 
     data_path = os.path.join(cfg["paths"]["output_base_dir"], task_cfg["output_file"])
     target_col = task_cfg["target_column"]
@@ -240,16 +274,20 @@ def main():
     # STRATEGY DEFINITION: Determine Local vs Global Allocation
     # -----------------------------------------------------------------
     counts = df['Target_Activity'].value_counts().to_dict()
-    threshold = strat_cfg.get("hybrid", {}).get("local_threshold_count", 3000)
 
     local_targets = []
     global_targets = []
 
     if strategy == "global":
         global_targets = sorted(counts.keys())
+        print(f"\n--- Strategy Allocation: GLOBAL (All {len(global_targets)} activities pooled) ---")
+        print(f"  Target Activities: {global_targets}")
     elif strategy == "local":
         local_targets = sorted(counts.keys())
+        print(f"\n--- Strategy Allocation: LOCAL ({len(local_targets)} individual activity models) ---")
+        print(f"  Target Activities: {local_targets}")
     elif strategy == "hybrid":
+        threshold = strat_cfg.get("hybrid", {}).get("local_threshold_count", 3000)
         for act, cnt in counts.items():
             if cnt >= threshold:
                 local_targets.append(act)
@@ -257,10 +295,9 @@ def main():
                 global_targets.append(act)
         local_targets = sorted(local_targets)
         global_targets = sorted(global_targets)
-
-    print(f"\n--- Strategy Allocation (Threshold = {threshold} samples) ---")
-    print(f"  Local Models  ({len(local_targets)}): {local_targets}")
-    print(f"  Global Models ({len(global_targets)}): {global_targets}")
+        print(f"\n--- Strategy Allocation: HEURISTIC HYBRID (Threshold = {threshold} samples) ---")
+        print(f"  Local Models  ({len(local_targets)}): {local_targets}")
+        print(f"  Global Models ({len(global_targets)}): {global_targets}")
 
     # Case-level 70/10/20 train/val/test split to prevent cross-event data leakage
     seed = cfg["project"]["random_seed"]
@@ -359,7 +396,7 @@ def main():
             
             global_model_path = os.path.join(models_base_dir, f"xgboost_global.json")
             global_xgb.save_model(global_model_path)
-            dispatch_table["dispatch"]["__default__"] = {"model_type": "xgboost", "file": os.path.basename(global_model_path)}
+            dispatch_table["dispatch"]["__default__"] = {"model_type": "xgboost", "file": os.path.basename(global_model_path), "log1p_target": True}
 
             for act in global_targets:
                 act_mask = (test_df['Target_Activity'] == act)
@@ -368,7 +405,7 @@ def main():
                     preds = np.expm1(global_xgb.predict(X_act))
                     test_predictions.loc[act_mask, 'Predicted'] = preds
                     test_predictions.loc[act_mask, 'Source_Model'] = 'Global XGBoost'
-                dispatch_table["dispatch"][act] = {"model_type": "xgboost", "file": os.path.basename(global_model_path)}
+                dispatch_table["dispatch"][act] = {"model_type": "xgboost", "file": os.path.basename(global_model_path), "log1p_target": True}
 
         # 2. Train Local Models
         for act in local_targets:
@@ -402,7 +439,7 @@ def main():
 
             loc_model_path = os.path.join(models_base_dir, f"xgboost_local_{safe_name}.json")
             loc_xgb.save_model(loc_model_path)
-            dispatch_table["dispatch"][act] = {"model_type": "xgboost", "file": os.path.basename(loc_model_path)}
+            dispatch_table["dispatch"][act] = {"model_type": "xgboost", "file": os.path.basename(loc_model_path), "log1p_target": True}
 
             preds = np.expm1(loc_xgb.predict(X_te))
             test_predictions.loc[test_df['Target_Activity'] == act, 'Predicted'] = preds
@@ -442,7 +479,7 @@ def main():
             elif model_type == "transformer":
                 return DurationTransformer(len(vocab), 32, num_acts, len(feature_cols), 128, max_seq_len, 2, 4, 0.2)
 
-        def train_nn(model, tr_data, va_data, epochs=50, patience=10):
+        def train_nn(model, tr_data, va_data, epochs=50, patience=5, min_delta=0.01):
             model.to(device)
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
             criterion = nn.L1Loss(reduction='none')
@@ -459,7 +496,8 @@ def main():
                     seq, act, feat, dur, w = seq.to(device), act.to(device), feat.to(device), dur.to(device), w.to(device)
                     optimizer.zero_grad()
                     out = model(seq, act, feat)
-                    loss = (criterion(out, dur) * w).mean()
+                    dur_log = torch.log1p(torch.clamp(dur, min=0.0))
+                    loss = (criterion(out, dur_log) * w).mean()
                     loss.backward()
                     optimizer.step()
 
@@ -468,15 +506,26 @@ def main():
                 with torch.no_grad():
                     for seq, act, feat, dur, _ in va_loader:
                         seq, act, feat, dur = seq.to(device), act.to(device), feat.to(device), dur.to(device)
-                        val_losses.append(torch.abs(model(seq, act, feat) - dur).cpu().numpy())
+                        out = model(seq, act, feat)
+                        pred_s = torch.expm1(torch.clamp(out, min=0.0, max=25.0))
+                        val_losses.append(torch.abs(pred_s - dur).cpu().numpy())
                 mean_val = np.mean(np.concatenate(val_losses)) if len(val_losses) > 0 else 0.0
 
-                print(f"  Epoch {epoch+1:3d}/{epochs:3d} - Val MAE: {mean_val:.2f}s", end="")
-                if mean_val < best_val:
+                print(f"  Epoch {epoch+1:3d}/{epochs:3d} - Val MAE: {format_time_duration(mean_val)}", end="")
+                
+                # Check relative improvement
+                if best_val == float('inf'):
+                    rel_improvement = 1.0
+                elif best_val > 0:
+                    rel_improvement = (best_val - mean_val) / best_val
+                else:
+                    rel_improvement = 0.0
+
+                if rel_improvement >= min_delta:
                     best_val = mean_val
                     best_weights = {k: v.cpu().clone() for k, v in model.state_dict().items()}
                     patience_counter = 0
-                    print(" [Best]")
+                    print(f" [Best - improved by {rel_improvement*100:.1f}%]")
                 else:
                     patience_counter += 1
                     print(f" [Patience: {patience_counter}/{patience}]")
@@ -495,46 +544,55 @@ def main():
             va_ds = EventLogDataset(val_df_scaled, vocab, act_to_idx, max_seq_len, feature_cols, val_df['Sample_Weight'].values if not args.unweighted else np.ones(len(val_df)))
             te_ds = EventLogDataset(test_df_scaled, vocab, act_to_idx, max_seq_len, feature_cols, test_df['Sample_Weight'].values)
             nn_global = get_model(len(act_to_idx))
-            nn_global = train_nn(nn_global, tr_ds, va_ds, epochs=epochs, patience=patience)
+            nn_global = train_nn(nn_global, tr_ds, va_ds, epochs=epochs, patience=patience, min_delta=min_delta)
             
             glob_path = os.path.join(models_base_dir, f"{model_type}_global.pth")
             torch.save(nn_global.state_dict(), glob_path)
-            dispatch_table["dispatch"]["__default__"] = {"model_type": model_type, "file": os.path.basename(glob_path)}
+            dispatch_table["dispatch"]["__default__"] = {"model_type": model_type, "file": os.path.basename(glob_path), "log1p_target": True}
 
             nn_global.eval()
             with torch.no_grad():
                 loader = DataLoader(te_ds, batch_size=batch_size, shuffle=False)
-                all_preds = np.concatenate([nn_global(s.to(device), a.to(device), f.to(device)).cpu().numpy() for s, a, f, _, _ in loader])
+                all_preds = np.concatenate([np.expm1(np.clip(nn_global(s.to(device), a.to(device), f.to(device)).cpu().numpy(), 0.0, 25.0)) for s, a, f, _, _ in loader])
             for act in global_targets:
                 act_mask = (test_df['Target_Activity'] == act)
                 if act_mask.sum() > 0:
                     test_predictions.loc[act_mask, 'Predicted'] = all_preds[act_mask]
                     test_predictions.loc[act_mask, 'Source_Model'] = f'Global {model_type.upper()}'
-                dispatch_table["dispatch"][act] = {"model_type": model_type, "file": os.path.basename(glob_path)}
+                dispatch_table["dispatch"][act] = {"model_type": model_type, "file": os.path.basename(glob_path), "log1p_target": True}
 
         # 2. Train Local DL Models
         for act in local_targets:
             safe_name = act.replace(" ", "_")
-            print(f"\nTraining Local {model_type.upper()} model for: {act}...")
             tr_sub = train_df_scaled[train_df_scaled['Target_Activity'] == act]
             va_sub = val_df_scaled[val_df_scaled['Target_Activity'] == act]
             te_sub = test_df_scaled[test_df_scaled['Target_Activity'] == act]
 
+            if len(tr_sub) < min_samples_local_dl:
+                print(f"\n[Skip Local {model_type.upper()} for {act}]: {len(tr_sub)} training samples < {min_samples_local_dl} threshold.")
+                print(f"  --> Fallback to Global {model_type.upper()} and Local XGBoost.")
+                act_mask = (test_df['Target_Activity'] == act)
+                if 'all_preds' in locals() and act_mask.sum() > 0:
+                    test_predictions.loc[act_mask, 'Predicted'] = all_preds[act_mask]
+                    test_predictions.loc[act_mask, 'Source_Model'] = f'Global {model_type.upper()} (Fallback)'
+                continue
+
+            print(f"\nTraining Local {model_type.upper()} model for: {act}...")
             tr_ds = EventLogDataset(tr_sub, vocab, None, max_seq_len, feature_cols, np.ones(len(tr_sub)))
             va_ds = EventLogDataset(va_sub, vocab, None, max_seq_len, feature_cols, np.ones(len(va_sub))) if len(va_sub) > 0 else tr_ds
             te_ds = EventLogDataset(te_sub, vocab, None, max_seq_len, feature_cols, np.ones(len(te_sub)))
 
             nn_loc = get_model(1)
-            nn_loc = train_nn(nn_loc, tr_ds, va_ds, epochs=epochs, patience=patience)
+            nn_loc = train_nn(nn_loc, tr_ds, va_ds, epochs=epochs, patience=patience, min_delta=min_delta)
             
             loc_path = os.path.join(models_base_dir, f"{model_type}_local_{safe_name}.pth")
             torch.save(nn_loc.state_dict(), loc_path)
-            dispatch_table["dispatch"][act] = {"model_type": model_type, "file": os.path.basename(loc_path)}
+            dispatch_table["dispatch"][act] = {"model_type": model_type, "file": os.path.basename(loc_path), "log1p_target": True}
 
             nn_loc.eval()
             with torch.no_grad():
                 loader = DataLoader(te_ds, batch_size=batch_size, shuffle=False)
-                act_preds = np.concatenate([nn_loc(s.to(device), a.to(device), f.to(device)).cpu().numpy() for s, a, f, _, _ in loader])
+                act_preds = np.concatenate([np.expm1(np.clip(nn_loc(s.to(device), a.to(device), f.to(device)).cpu().numpy(), 0.0, 25.0)) for s, a, f, _, _ in loader])
             test_predictions.loc[test_df['Target_Activity'] == act, 'Predicted'] = act_preds
             test_predictions.loc[test_df['Target_Activity'] == act, 'Source_Model'] = f'Local {model_type.upper()}'
 
@@ -548,12 +606,12 @@ def main():
     # =================================================================
     # EVALUATION RESULTS & BENCHMARK TABLE
     # =================================================================
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 88)
     print(f"  RIMS+ [{strategy.upper()}] STRATEGY EVALUATION ({model_type.upper()})")
     print(f"  Total Training Time: {total_training_time:.2f} seconds")
-    print("=" * 80)
-    print(f"{'Activity':<32} | {'Count':>5} | {'Model Source':<15} | {'MAE (s)':>8} | {'SMAPE (%)':>9}")
-    print("-" * 80)
+    print("=" * 88)
+    print(f"{'Activity':<32} | {'Count':>5} | {'Model Source':<15} | {'MAE':>18} | {'SMAPE (%)':>9}")
+    print("-" * 88)
 
     act_maes = []
     act_metrics_summary = {}
@@ -568,16 +626,16 @@ def main():
             "mae": round(mae, 2),
             "smape": round(smape, 2)
         }
-        print(f"{act:<32} | {len(sub):>5} | {src:<15} | {mae:>8.2f} | {smape:>8.2f}%")
+        print(f"{act:<32} | {len(sub):>5} | {src:<15} | {format_time_duration(mae):>18} | {smape:>8.2f}%")
 
     weighted_mae = float(mean_absolute_error(test_predictions['Actual'], test_predictions['Predicted']))
     weighted_smape = float(calculate_smape(test_predictions['Actual'], test_predictions['Predicted']))
     macro_mae = float(np.mean(act_maes)) if len(act_maes) > 0 else 0.0
 
-    print("-" * 80)
-    print(f"{'WEIGHTED AVERAGE':<32} | {len(test_predictions):>5} | {'---':<15} | {weighted_mae:>8.2f} | {weighted_smape:>8.2f}%")
-    print(f"{'MACRO AVERAGE':<32} | {len(test_predictions):>5} | {'---':<15} | {macro_mae:>8.2f} | {'---':>9}")
-    print("=" * 80)
+    print("-" * 88)
+    print(f"{'WEIGHTED AVERAGE':<32} | {len(test_predictions):>5} | {'---':<15} | {format_time_duration(weighted_mae):>18} | {weighted_smape:>8.2f}%")
+    print(f"{'MACRO AVERAGE':<32} | {len(test_predictions):>5} | {'---':<15} | {format_time_duration(macro_mae):>18} | {'---':>9}")
+    print("=" * 88)
 
     # Save metrics.json for benchmarking
     metrics_summary = {

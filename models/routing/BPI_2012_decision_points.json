@@ -1,0 +1,195 @@
+{
+  "exi_W_Complete application__loop_split": {
+    "transitions": [
+      "W_Call after offers",
+      "W_Complete application"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 0.9771679932970255,
+    "f1_score_macro": 0.9721587242597838,
+    "f1_score_weighted": 0.9769082534210205,
+    "confusion_matrix": [
+      [
+        1320,
+        107
+      ],
+      [
+        2,
+        3345
+      ]
+    ],
+    "encoding2target": {
+      "0": "W_Call after offers",
+      "1": "W_Complete application"
+    }
+  },
+  "exi_W_Handle leads__loop_split": {
+    "transitions": [
+      "W_Handle leads",
+      "W_Complete application"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 1.0,
+    "f1_score_macro": 1.0,
+    "f1_score_weighted": 1.0,
+    "confusion_matrix": [
+      [
+        520,
+        0
+      ],
+      [
+        0,
+        176
+      ]
+    ],
+    "encoding2target": {
+      "0": "W_Complete application",
+      "1": "W_Handle leads"
+    }
+  },
+  "exi_W_Call after offers__loop_split": {
+    "transitions": [
+      "W_Call after offers",
+      "W_Validate application"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 0.9698635715740175,
+    "f1_score_macro": 0.9624425498562661,
+    "f1_score_weighted": 0.9694352395829793,
+    "confusion_matrix": [
+      [
+        3473,
+        11
+      ],
+      [
+        137,
+        1290
+      ]
+    ],
+    "encoding2target": {
+      "0": "W_Call after offers",
+      "1": "W_Validate application"
+    }
+  },
+  "exi_W_Assess fraud__loop_split": {
+    "transitions": [
+      "<END>",
+      "W_Assess fraud"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 0.998109640831758,
+    "f1_score_macro": 0.9888671422859188,
+    "f1_score_weighted": 0.9981288161399444,
+    "confusion_matrix": [
+      [
+        505,
+        1
+      ],
+      [
+        0,
+        23
+      ]
+    ],
+    "encoding2target": {
+      "0": "<END>",
+      "1": "W_Assess fraud"
+    }
+  },
+  "exi_xor_1": {
+    "transitions": [
+      "W_Handle leads",
+      "W_Complete application",
+      "W_Assess fraud"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 0.921864050455501,
+    "f1_score_macro": 0.8186197255462538,
+    "f1_score_weighted": 0.906646017653787,
+    "confusion_matrix": [
+      [
+        524,
+        0,
+        22
+      ],
+      [
+        0,
+        4495,
+        0
+      ],
+      [
+        0,
+        424,
+        243
+      ]
+    ],
+    "encoding2target": {
+      "0": "W_Assess fraud",
+      "1": "W_Complete application",
+      "2": "W_Handle leads"
+    }
+  },
+  "exi_W_Validate application__loop_split": {
+    "transitions": [
+      "W_Call after incomplete files",
+      "<END>",
+      "W_Validate application"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 0.8178438661710037,
+    "f1_score_macro": 0.6529412756646208,
+    "f1_score_weighted": 0.7944366393209866,
+    "confusion_matrix": [
+      [
+        1083,
+        2,
+        9
+      ],
+      [
+        0,
+        60,
+        272
+      ],
+      [
+        0,
+        60,
+        397
+      ]
+    ],
+    "encoding2target": {
+      "0": "<END>",
+      "1": "W_Call after incomplete files",
+      "2": "W_Validate application"
+    }
+  },
+  "exi_W_Call after incomplete files__loop_split": {
+    "transitions": [
+      "W_Call after incomplete files",
+      "<END>"
+    ],
+    "padding": 10,
+    "prediction": true,
+    "Accuracy": 0.8933582787652011,
+    "f1_score_macro": 0.6897544583190133,
+    "f1_score_weighted": 0.8667910366053636,
+    "confusion_matrix": [
+      [
+        89,
+        227
+      ],
+      [
+        1,
+        1821
+      ]
+    ],
+    "encoding2target": {
+      "0": "<END>",
+      "1": "W_Call after incomplete files"
+    }
+  }
+}

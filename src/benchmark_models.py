@@ -9,6 +9,24 @@ import numpy as np
 
 from config_loader import load_config, PROJECT_ROOT
 
+def format_time_duration(seconds: float) -> str:
+    
+    #e.g. 81,252s (22.6h), 440s (7.3m), or 25.65s.
+    if seconds is None or np.isnan(seconds) or np.isinf(seconds):
+        return "N/A"
+    sec_int = int(round(seconds))
+    if seconds >= 86400:
+        days = seconds / 86400.0
+        return f"{sec_int:,}s ({days:.1f}d)"
+    elif seconds >= 3600:
+        hours = seconds / 3600.0
+        return f"{sec_int:,}s ({hours:.1f}h)"
+    elif seconds >= 60:
+        mins = seconds / 60.0
+        return f"{sec_int:,}s ({mins:.1f}m)"
+    else:
+        return f"{seconds:.2f}s"
+
 def discover_trained_metrics(models_dir, task="duration"):
     """
     Scans the models directory for any subdirectories containing metrics.json.
@@ -157,7 +175,7 @@ def synthesize_champion_hybrid(models_dir, task="duration"):
     weighted_smape = (sum_smape_weighted / total_samples) if total_samples > 0 else 0.0
     macro_mae = np.mean([v["mae"] for v in champion_activity_metrics.values()]) if champion_activity_metrics else 0.0
 
-    # Copy auxiliary assets (vocab.json, scalers) into champion_dir for standalone deployment
+    # Copy auxiliary assets (vocab.json, scalers, and model weight binaries) into champion_dir for standalone deployment
     for act, info in champion_dispatch["dispatch"].items():
         s_folder = info.get("source_dir")
         if not s_folder:
@@ -168,11 +186,16 @@ def synthesize_champion_hybrid(models_dir, task="duration"):
         v_src = os.path.join(src_dir, "vocab.json")
         if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
             shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
+        # Copy model binary file
+        m_file = info.get("file")
+        if m_file:
+            m_src = os.path.join(src_dir, m_file)
+            if os.path.exists(m_src):
+                shutil.copy(m_src, os.path.join(champion_dir, m_file))
         for fname in os.listdir(src_dir):
             if fname.startswith("scaler_") and fname.endswith(".pkl"):
                 dest = os.path.join(champion_dir, fname)
-                if not os.path.exists(dest):
-                    shutil.copy(os.path.join(src_dir, fname), dest)
+                shutil.copy(os.path.join(src_dir, fname), dest)
 
     # Save champion dispatch_config.json
     with open(os.path.join(champion_dir, "dispatch_config.json"), "w") as f:
@@ -252,11 +275,15 @@ def synthesize_champion_global(models_dir, task="duration"):
             "best_test_smape": act_m.get("smape")
         }
 
-    # Copy auxiliary assets (vocab.json, scalers) into global_champion for standalone deployment
+    # Copy auxiliary assets (vocab.json, scalers, and model binary) into global_champion for standalone deployment
     src_dir = os.path.join(models_dir, src_folder)
     v_src = os.path.join(src_dir, "vocab.json")
     if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
         shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
+    if model_file:
+        m_src = os.path.join(src_dir, model_file)
+        if os.path.exists(m_src):
+            shutil.copy(m_src, os.path.join(champion_dir, model_file))
     for fname in os.listdir(src_dir):
         if fname.startswith("scaler_") and fname.endswith(".pkl"):
             dest = os.path.join(champion_dir, fname)
@@ -309,16 +336,16 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
     # Sort by Weighted MAE (ascending, best first)
     metrics_list = sorted(metrics_list, key=lambda x: x.get("weighted_mae", float("inf")))
 
-    print("\n" + "=" * 95)
+    print("\n" + "=" * 105)
     print(f"                     RIMS+ {task_title.upper()} MODEL BENCHMARK RESULTS")
-    print("=" * 95)
-    header = f"{'Configuration':<28} | {'Strategy':<8} | {'Engine':<14} | {'MAE (s)':>8} | {'SMAPE (%)':>9} | {'Train (s)':>9}"
+    print("=" * 105)
+    header = f"{'Configuration':<26} | {'Strategy':<8} | {'Engine':<12} | {'MAE':>18} | {'SMAPE (%)':>9} | {'Train (s)':>9}"
     print(header)
-    print("-" * 95)
+    print("-" * 105)
 
     md_lines = [
         f"# RIMS+ {task_title} Model Benchmark Report\n",
-        "| Configuration | Strategy | Engine | Test MAE (s) | Test SMAPE (%) | Training Time (s) |",
+        "| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time (s) |",
         "| :--- | :--- | :--- | :---: | :---: | :---: |"
     ]
 
@@ -329,15 +356,16 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
         mae = m.get("weighted_mae", 0.0)
         smape = m.get("weighted_smape", 0.0)
         ttime = m.get("training_time_seconds", 0.0)
+        mae_str = format_time_duration(mae)
 
         is_champion = (i == 0)
         star = " ★ (Champion)" if is_champion else ""
-        print(f"{cfg_name:<28} | {strat:<8} | {mtype:<14} | {mae:>8.2f} | {smape:>8.2f}% | {ttime:>8.2f}s{star}")
+        print(f"{cfg_name:<26} | {strat:<8} | {mtype:<12} | {mae_str:>18} | {smape:>8.2f}% | {ttime:>8.2f}s{star}")
 
         cfg_label = f"**{cfg_name}**" if is_champion else cfg_name
-        md_lines.append(f"| {cfg_label} | `{strat}` | `{mtype}` | **{mae:.2f}** | {smape:.2f}% | {ttime:.2f}s |")
+        md_lines.append(f"| {cfg_label} | `{strat}` | `{mtype}` | **{mae_str}** | {smape:.2f}% | {ttime:.2f}s |")
 
-    print("=" * 95)
+    print("=" * 105)
 
     # Activity-level breakdown
     all_acts = set()
@@ -346,14 +374,15 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
     all_acts = sorted(list(all_acts))
 
     if all_acts:
-        print("\n" + "=" * 115)
-        print("                        ACTIVITY-LEVEL MAE COMPARISON (seconds)")
-        print("=" * 115)
-        act_header = f"{'Activity':<32} | " + " | ".join([f"{m.get('folder_name')[:14]:>14}" for m in metrics_list])
+        col_w = 18
+        print("\n" + "=" * (35 + len(metrics_list) * (col_w + 3)))
+        print(f"                        ACTIVITY-LEVEL MAE COMPARISON")
+        print("=" * (35 + len(metrics_list) * (col_w + 3)))
+        act_header = f"{'Activity':<32} | " + " | ".join([f"{m.get('folder_name')[:col_w]:>{col_w}}" for m in metrics_list])
         print(act_header)
-        print("-" * 115)
+        print("-" * (35 + len(metrics_list) * (col_w + 3)))
 
-        md_lines.append("\n## Activity-Level MAE Breakdown (seconds)\n")
+        md_lines.append("\n## Activity-Level MAE Breakdown\n")
         md_act_header = "| Activity | " + " | ".join([f"`{m.get('folder_name')}`" for m in metrics_list]) + " |"
         md_act_sep = "| :--- | " + " | ".join([":---:" for _ in metrics_list]) + " |"
         md_lines.append(md_act_header)
@@ -374,18 +403,19 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
             md_row_strs = []
             for val in row_raw_maes:
                 if val != float("inf"):
+                    val_fmt = format_time_duration(val)
                     best_mark = "*" if val == min_act_mae else " "
-                    row_strs.append(f"{val:>13.2f}{best_mark}")
-                    md_val = f"**{val:.2f}**" if val == min_act_mae else f"{val:.2f}"
+                    row_strs.append(f"{val_fmt:>{col_w-1}}{best_mark}")
+                    md_val = f"**{val_fmt}**" if val == min_act_mae else val_fmt
                     md_row_strs.append(md_val)
                 else:
-                    row_strs.append(f"{'N/A':>14}")
+                    row_strs.append(f"{'N/A':>{col_w}}")
                     md_row_strs.append("N/A")
 
             print(f"{act:<32} | " + " | ".join(row_strs))
             md_lines.append(f"| {act} | " + " | ".join(md_row_strs) + " |")
 
-        print("=" * 115)
+        print("=" * (35 + len(metrics_list) * (col_w + 3)))
         print("(* indicates best performer for that specific activity)\n")
 
     # Add Champion Hybrid Assignment table to Markdown
@@ -394,8 +424,8 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
         try:
             with open(champ_dispatch_file) as f:
                 c_data = json.load(f)
-            md_lines.append("\n## 🏆 Hybrid Champion Architecture Assignment\n")
-            md_lines.append("| Activity | Winning Model | Model Engine | Test MAE (s) | Best SMAPE (%) |")
+            md_lines.append("\n## Hybrid Champion Architecture Assignment\n")
+            md_lines.append("| Activity | Winning Model | Model Engine | Test MAE | Best SMAPE (%) |")
             md_lines.append("| :--- | :--- | :---: | :---: | :---: |")
             for act, info in sorted(c_data.get("dispatch", {}).items()):
                 if act == "__default__":
@@ -404,7 +434,8 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
                 m_type = info.get("model_type", "-").upper()
                 mae_val = info.get("best_test_mae", "-")
                 smape_val = info.get("best_test_smape", "-")
-                md_lines.append(f"| **{act}** | `{s_dir}` | **{m_type}** | **{mae_val}s** | {smape_val}% |")
+                mae_fmt = format_time_duration(float(mae_val)) if mae_val != "-" else "-"
+                md_lines.append(f"| **{act}** | `{s_dir}` | **{m_type}** | **{mae_fmt}** | {smape_val}% |")
             def_info = c_data.get("dispatch", {}).get("__default__", {})
             if def_info:
                 md_lines.append(f"| *Fallback (`__default__`)* | `{def_info.get('source_dir')}` | `{def_info.get('model_type', '').upper()}` | — | — |")
@@ -417,14 +448,15 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
             with open(glob_champ_file) as f:
                 g_data = json.load(f)
             def_info = g_data.get("dispatch", {}).get("__default__", {})
-            md_lines.append("\n## 🏆 Global Champion Architecture Assignment\n")
-            md_lines.append("| Winning Global Model | Engine | Test MAE (s) | Best SMAPE (%) |")
+            md_lines.append("\n##  Global Champion Architecture Assignment\n")
+            md_lines.append("| Winning Global Model | Engine | Test MAE | Best SMAPE (%) |")
             md_lines.append("| :--- | :---: | :---: | :---: |")
             s_dir = def_info.get("source_dir", "-")
             m_type = def_info.get("model_type", "-").upper()
             mae_val = def_info.get("best_test_mae", "-")
             smape_val = def_info.get("best_test_smape", "-")
-            md_lines.append(f"| `{s_dir}` | **{m_type}** | **{mae_val}s** | {smape_val}% |")
+            mae_fmt = format_time_duration(float(mae_val)) if mae_val != "-" else "-"
+            md_lines.append(f"| `{s_dir}` | **{m_type}** | **{mae_fmt}** | {smape_val}% |")
         except Exception:
             pass
 
@@ -453,8 +485,8 @@ def main():
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Task to benchmark")
     parser.add_argument("--mode", type=str, default=None, choices=["hybrid", "global_tournament", "single_global"],
                         help="Exploration mode (hybrid, global_tournament, single_global). Defaults to config.yaml")
-    parser.add_argument("--compare", action="store_true", help="Compare already trained models in models/ and synthesize champion")
-    parser.add_argument("--run_all", action="store_true", help="Train candidate models and synthesize champion")
+    parser.add_argument("--compare", "--report", dest="compare", action="store_true", help="Compare already trained models in models/ and synthesize champion")
+    parser.add_argument("--run_all", "--tournament", dest="run_all", action="store_true", help="Train candidate models, run tournament, and synthesize champion")
     args = parser.parse_args()
 
     cfg = load_config()

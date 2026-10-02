@@ -1,0 +1,1157 @@
+{
+  "source_log": "/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes",
+  "discovery_timestamp": "2026-10-02 15:44:22",
+  "engine_version": "RIMS+ Tier 4 Causal Delay Engine",
+  "external_uncoupled_delays": [
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "W_Validate application",
+      "sample_count": 190,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0334,
+        "mean_off_calendar_ratio": 0.7044,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 193.99,
+      "median_days": 8.08,
+      "mean_days": 10.37,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.7510113693926669,
+        "loc": 0.0,
+        "scale": 1192712.4235614438
+      }
+    },
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "O_SENT_BACK",
+      "sample_count": 561,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0271,
+        "mean_off_calendar_ratio": 0.6462,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 142.25,
+      "median_days": 5.93,
+      "mean_days": 5.37,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 464170.25595187163
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "A_REGISTERED",
+      "sample_count": 92,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0086,
+        "mean_off_calendar_ratio": 0.6011,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 74.92,
+      "median_days": 3.12,
+      "mean_days": 3.06,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 1.0946865492382483,
+        "loc": 0.0,
+        "scale": 241141.56896744517
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "A_ACTIVATED",
+      "sample_count": 81,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.1251,
+        "mean_off_calendar_ratio": 0.5455,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 73.17,
+      "median_days": 3.05,
+      "mean_days": 2.81,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 243045.51314814817
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "A_APPROVED",
+      "sample_count": 167,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0963,
+        "mean_off_calendar_ratio": 0.5771,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 73.18,
+      "median_days": 3.05,
+      "mean_days": 3.04,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 262706.8897904191
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "O_SENT_BACK",
+      "sample_count": 2693,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0166,
+        "mean_off_calendar_ratio": 0.697,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 71.21,
+      "median_days": 2.97,
+      "mean_days": 3.6,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 1.0571934400360752,
+        "loc": 0.0,
+        "scale": 293891.3223395488
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "O_ACCEPTED",
+      "sample_count": 304,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0577,
+        "mean_off_calendar_ratio": 0.5733,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 71.11,
+      "median_days": 2.96,
+      "mean_days": 2.76,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 238307.0914506579
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "A_DECLINED",
+      "sample_count": 213,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0854,
+        "mean_off_calendar_ratio": 0.6156,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 69.18,
+      "median_days": 2.88,
+      "mean_days": 2.77,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 239558.97138967138
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "O_DECLINED",
+      "sample_count": 183,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.1013,
+        "mean_off_calendar_ratio": 0.5878,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 54.68,
+      "median_days": 2.28,
+      "mean_days": 2.66,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 229874.88409289616
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "W_Validate application",
+      "sample_count": 2474,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0268,
+        "mean_off_calendar_ratio": 0.5735,
+        "unassigned_target_rate": 0.0065
+      },
+      "median_hours": 53.1,
+      "median_days": 2.21,
+      "mean_days": 3.04,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 262917.813890865
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "W_Call after offers",
+      "sample_count": 13162,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0336,
+        "mean_off_calendar_ratio": 0.6301,
+        "unassigned_target_rate": 0.1407
+      },
+      "median_hours": 44.23,
+      "median_days": 1.84,
+      "mean_days": 3.03,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.37907494118062135,
+        "loc": 0.0,
+        "scale": 689851.087981326
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "O_CANCELLED",
+      "sample_count": 1046,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.037,
+        "mean_off_calendar_ratio": 0.5658,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 25.11,
+      "median_days": 1.05,
+      "mean_days": 2.51,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.19009820297083307,
+        "loc": 0.0,
+        "scale": 1141980.4270171465
+      }
+    },
+    {
+      "trigger_activity": "W_Call after incomplete files",
+      "resume_activity": "O_SENT_BACK",
+      "sample_count": 190,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0487,
+        "mean_off_calendar_ratio": 0.5598,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 23.95,
+      "median_days": 1.0,
+      "mean_days": 1.83,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.5345950914807476,
+        "loc": 0.0,
+        "scale": 296383.0699133726
+      }
+    },
+    {
+      "trigger_activity": "A_PARTLYSUBMITTED",
+      "resume_activity": "W_Assess fraud",
+      "sample_count": 66,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.1103,
+        "mean_off_calendar_ratio": 0.6312,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 21.39,
+      "median_days": 0.89,
+      "mean_days": 1.51,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.8144724501926016,
+        "loc": 0.0,
+        "scale": 160105.81902590394
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "A_CANCELLED",
+      "sample_count": 689,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0559,
+        "mean_off_calendar_ratio": 0.5477,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 19.75,
+      "median_days": 0.82,
+      "mean_days": 2.57,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.11939658856873632,
+        "loc": 0.0,
+        "scale": 1861524.8906098055
+      }
+    },
+    {
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "O_SELECTED",
+      "sample_count": 438,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0316,
+        "mean_off_calendar_ratio": 0.5532,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 18.6,
+      "median_days": 0.78,
+      "mean_days": 2.11,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.24986153179229184,
+        "loc": 0.0,
+        "scale": 730365.805593639
+      }
+    },
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "W_Complete application",
+      "sample_count": 12323,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0442,
+        "mean_off_calendar_ratio": 0.4926,
+        "unassigned_target_rate": 0.113
+      },
+      "median_hours": 5.49,
+      "median_days": 0.23,
+      "mean_days": 1.22,
+      "best_distribution": "lognormal",
+      "distribution_params": {
+        "shape": 2.439435989249026,
+        "loc": 0.0,
+        "scale": 14866.70062833447
+      }
+    },
+    {
+      "trigger_activity": "A_PREACCEPTED",
+      "resume_activity": "W_Complete application",
+      "sample_count": 2791,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.1216,
+        "mean_off_calendar_ratio": 0.5263,
+        "unassigned_target_rate": 0.1716
+      },
+      "median_hours": 3.54,
+      "median_days": 0.15,
+      "mean_days": 0.36,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.5612429539257344,
+        "loc": 0.0,
+        "scale": 54663.04634494847
+      }
+    },
+    {
+      "trigger_activity": "W_Call after incomplete files",
+      "resume_activity": "W_Call after incomplete files",
+      "sample_count": 8921,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.0519,
+        "mean_off_calendar_ratio": 0.4006,
+        "unassigned_target_rate": 0.0835
+      },
+      "median_hours": 3.32,
+      "median_days": 0.14,
+      "mean_days": 0.7,
+      "best_distribution": "lognormal",
+      "distribution_params": {
+        "shape": 2.4112974467627826,
+        "loc": 0.0,
+        "scale": 9603.519892748027
+      }
+    },
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "A_CANCELLED",
+      "sample_count": 723,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": -0.0602,
+        "mean_off_calendar_ratio": 0.5102,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 2.11,
+      "median_days": 0.09,
+      "mean_days": 1.82,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.14664126325405388,
+        "loc": 0.0,
+        "scale": 1071554.7768021468
+      }
+    },
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "A_DECLINED",
+      "sample_count": 685,
+      "classification": "External Uncoupled Delay (EUD)",
+      "is_external": true,
+      "causal_evidence": {
+        "wip_correlation": 0.033,
+        "mean_off_calendar_ratio": 0.4434,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 2.06,
+      "median_days": 0.09,
+      "mean_days": 0.51,
+      "best_distribution": "lognormal",
+      "distribution_params": {
+        "shape": 2.137820906257084,
+        "loc": 0.0,
+        "scale": 6564.756074774579
+      }
+    }
+  ],
+  "internal_queue_delays": [
+    {
+      "trigger_activity": "W_Call after incomplete files",
+      "resume_activity": "A_CANCELLED",
+      "sample_count": 65,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "causal_evidence": {
+        "wip_correlation": 0.1022,
+        "mean_off_calendar_ratio": 0.3859,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 3.62,
+      "median_days": 0.15,
+      "mean_days": 1.02,
+      "best_distribution": "lognormal",
+      "distribution_params": {
+        "shape": 3.549723375259121,
+        "loc": 0.0,
+        "scale": 6556.362928477772
+      }
+    },
+    {
+      "trigger_activity": "W_Handle leads",
+      "resume_activity": "W_Complete application",
+      "sample_count": 1596,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "causal_evidence": {
+        "wip_correlation": 0.1499,
+        "mean_off_calendar_ratio": 0.331,
+        "unassigned_target_rate": 0.1404
+      },
+      "median_hours": 2.34,
+      "median_days": 0.1,
+      "mean_days": 0.19,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.6294479804166689,
+        "loc": 0.0,
+        "scale": 26492.67437563351
+      }
+    },
+    {
+      "trigger_activity": "W_Handle leads",
+      "resume_activity": "A_CANCELLED",
+      "sample_count": 60,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "causal_evidence": {
+        "wip_correlation": 0.0714,
+        "mean_off_calendar_ratio": 0.3289,
+        "unassigned_target_rate": 0.0
+      },
+      "median_hours": 2.12,
+      "median_days": 0.09,
+      "mean_days": 0.21,
+      "best_distribution": "lognormal",
+      "distribution_params": {
+        "shape": 1.6680311939838346,
+        "loc": 0.0,
+        "scale": 6039.156885425923
+      }
+    }
+  ],
+  "human_inter_ticket_latency": {
+    "enabled": true,
+    "global_median_seconds": 34.1,
+    "global_mean_seconds": 325.4,
+    "global_distribution": "lognormal",
+    "global_params": {
+      "shape": 1.798354116866385,
+      "loc": 0.0,
+      "scale": 54.84301049130266
+    },
+    "worker_count": 49,
+    "per_worker_profiles": {
+      "10912": {
+        "sample_count": 609,
+        "median_seconds": 180.239,
+        "mean_seconds": 718.8262167487684,
+        "distribution": "lognormal",
+        "p75_seconds": 744.3,
+        "p90_seconds": 2173.8824,
+        "params": {
+          "shape": 1.9656255564031841,
+          "loc": 0.0,
+          "scale": 158.02915031780148
+        }
+      },
+      "10939": {
+        "sample_count": 727,
+        "median_seconds": 71.728,
+        "mean_seconds": 478.663984869326,
+        "distribution": "lognormal",
+        "p75_seconds": 420.0155,
+        "p90_seconds": 1389.5023999999994,
+        "params": {
+          "shape": 1.8630250515852742,
+          "loc": 0.0,
+          "scale": 95.4744342472982
+        }
+      },
+      "11019": {
+        "sample_count": 674,
+        "median_seconds": 17.539,
+        "mean_seconds": 230.1358308605341,
+        "distribution": "lognormal",
+        "p75_seconds": 126.9765,
+        "p90_seconds": 533.6400000000007,
+        "params": {
+          "shape": 1.7252947032258017,
+          "loc": 0.0,
+          "scale": 35.390991274002936
+        }
+      },
+      "11000": {
+        "sample_count": 1238,
+        "median_seconds": 23.2115,
+        "mean_seconds": 200.74227382875605,
+        "distribution": "lognormal",
+        "p75_seconds": 107.3175,
+        "p90_seconds": 430.3210999999998,
+        "params": {
+          "shape": 1.6056316951431049,
+          "loc": 0.0,
+          "scale": 37.97144419020445
+        }
+      },
+      "11203": {
+        "sample_count": 2125,
+        "median_seconds": 24.87,
+        "mean_seconds": 206.9425374117647,
+        "distribution": "lognormal",
+        "p75_seconds": 96.5,
+        "p90_seconds": 427.4878000000003,
+        "params": {
+          "shape": 1.5500596895469643,
+          "loc": 0.0,
+          "scale": 40.06289928783554
+        }
+      },
+      "11119": {
+        "sample_count": 1998,
+        "median_seconds": 17.9595,
+        "mean_seconds": 129.0299144144144,
+        "distribution": "lognormal",
+        "p75_seconds": 58.516,
+        "p90_seconds": 310.8569,
+        "params": {
+          "shape": 1.4762691507500674,
+          "loc": 0.0,
+          "scale": 28.687994938121605
+        }
+      },
+      "10889": {
+        "sample_count": 852,
+        "median_seconds": 35.769000000000005,
+        "mean_seconds": 420.4618063380281,
+        "distribution": "lognormal",
+        "p75_seconds": 227.67125000000001,
+        "p90_seconds": 1195.6299999999997,
+        "params": {
+          "shape": 1.8846187193784987,
+          "loc": 0.0,
+          "scale": 62.019731494650486
+        }
+      },
+      "11180": {
+        "sample_count": 2070,
+        "median_seconds": 14.284500000000001,
+        "mean_seconds": 153.26788260869566,
+        "distribution": "lognormal",
+        "p75_seconds": 47.18775,
+        "p90_seconds": 310.05400000000003,
+        "params": {
+          "shape": 1.5649556112625214,
+          "loc": 0.0,
+          "scale": 25.084423376437318
+        }
+      },
+      "11001": {
+        "sample_count": 55,
+        "median_seconds": 33.711,
+        "mean_seconds": 600.1299090909091,
+        "distribution": "lognormal",
+        "p75_seconds": 447.6815,
+        "p90_seconds": 2371.1688000000004,
+        "params": {
+          "shape": 2.1380994157392346,
+          "loc": 0.0,
+          "scale": 74.07578116096927
+        }
+      },
+      "10913": {
+        "sample_count": 2140,
+        "median_seconds": 72.3885,
+        "mean_seconds": 366.1098098130841,
+        "distribution": "lognormal",
+        "p75_seconds": 333.10900000000004,
+        "p90_seconds": 1003.7434000000006,
+        "params": {
+          "shape": 1.7740080053001617,
+          "loc": 0.0,
+          "scale": 83.30012729644922
+        }
+      },
+      "10188": {
+        "sample_count": 94,
+        "median_seconds": 172.0465,
+        "mean_seconds": 1415.2207021276595,
+        "distribution": "lognormal",
+        "p75_seconds": 1568.81725,
+        "p90_seconds": 5305.9863000000005,
+        "params": {
+          "shape": 2.030908912269896,
+          "loc": 0.0,
+          "scale": 276.5915658118088
+        }
+      },
+      "10809": {
+        "sample_count": 909,
+        "median_seconds": 104.417,
+        "mean_seconds": 627.8324840484049,
+        "distribution": "lognormal",
+        "p75_seconds": 537.307,
+        "p90_seconds": 1927.8710000000003,
+        "params": {
+          "shape": 2.0432557435590044,
+          "loc": 0.0,
+          "scale": 109.05213521292599
+        }
+      },
+      "11201": {
+        "sample_count": 1961,
+        "median_seconds": 25.384,
+        "mean_seconds": 191.48667210606834,
+        "distribution": "lognormal",
+        "p75_seconds": 88.169,
+        "p90_seconds": 425.376,
+        "params": {
+          "shape": 1.5484079905323773,
+          "loc": 0.0,
+          "scale": 38.49114194822549
+        }
+      },
+      "10863": {
+        "sample_count": 922,
+        "median_seconds": 32.016000000000005,
+        "mean_seconds": 240.71528958785245,
+        "distribution": "lognormal",
+        "p75_seconds": 136.058,
+        "p90_seconds": 678.7356999999998,
+        "params": {
+          "shape": 1.6173050145193262,
+          "loc": 0.0,
+          "scale": 49.90247290588115
+        }
+      },
+      "10629": {
+        "sample_count": 834,
+        "median_seconds": 92.152,
+        "mean_seconds": 614.9930023980816,
+        "distribution": "lognormal",
+        "p75_seconds": 657.0655,
+        "p90_seconds": 2069.961100000001,
+        "params": {
+          "shape": 1.9449183803614314,
+          "loc": 0.0,
+          "scale": 122.36246369829999
+        }
+      },
+      "10982": {
+        "sample_count": 1547,
+        "median_seconds": 43.463,
+        "mean_seconds": 465.3162967032967,
+        "distribution": "lognormal",
+        "p75_seconds": 451.521,
+        "p90_seconds": 1566.5966000000003,
+        "params": {
+          "shape": 2.066734851822357,
+          "loc": 0.0,
+          "scale": 69.84904778614143
+        }
+      },
+      "11049": {
+        "sample_count": 1460,
+        "median_seconds": 79.545,
+        "mean_seconds": 385.56374794520553,
+        "distribution": "lognormal",
+        "p75_seconds": 267.02975000000004,
+        "p90_seconds": 885.2893000000003,
+        "params": {
+          "shape": 1.7365528269626438,
+          "loc": 0.0,
+          "scale": 79.96667116434973
+        }
+      },
+      "11169": {
+        "sample_count": 1815,
+        "median_seconds": 30.122,
+        "mean_seconds": 400.1132407713498,
+        "distribution": "lognormal",
+        "p75_seconds": 230.252,
+        "p90_seconds": 1169.3678000000034,
+        "params": {
+          "shape": 1.918689506844781,
+          "loc": 0.0,
+          "scale": 56.55021024816043
+        }
+      },
+      "11179": {
+        "sample_count": 1256,
+        "median_seconds": 15.707,
+        "mean_seconds": 136.06848407643312,
+        "distribution": "lognormal",
+        "p75_seconds": 54.853500000000004,
+        "p90_seconds": 266.3965,
+        "params": {
+          "shape": 1.466693184825901,
+          "loc": 0.0,
+          "scale": 26.661394623273782
+        }
+      },
+      "10899": {
+        "sample_count": 1050,
+        "median_seconds": 117.09649999999999,
+        "mean_seconds": 472.85863142857147,
+        "distribution": "lognormal",
+        "p75_seconds": 308.68525,
+        "p90_seconds": 1262.4524000000004,
+        "params": {
+          "shape": 1.5614755438455135,
+          "loc": 0.0,
+          "scale": 129.91081766747536
+        }
+      },
+      "11122": {
+        "sample_count": 1449,
+        "median_seconds": 38.195,
+        "mean_seconds": 413.0225983436853,
+        "distribution": "lognormal",
+        "p75_seconds": 287.659,
+        "p90_seconds": 1239.7398000000007,
+        "params": {
+          "shape": 1.9069930372728987,
+          "loc": 0.0,
+          "scale": 64.43060098089504
+        }
+      },
+      "11121": {
+        "sample_count": 1261,
+        "median_seconds": 18.044,
+        "mean_seconds": 219.6888231562252,
+        "distribution": "lognormal",
+        "p75_seconds": 81.73,
+        "p90_seconds": 591.755,
+        "params": {
+          "shape": 1.698401102237133,
+          "loc": 0.0,
+          "scale": 34.36844765621986
+        }
+      },
+      "10909": {
+        "sample_count": 2046,
+        "median_seconds": 17.631500000000003,
+        "mean_seconds": 251.34570381231674,
+        "distribution": "lognormal",
+        "p75_seconds": 112.75275,
+        "p90_seconds": 645.3665000000001,
+        "params": {
+          "shape": 1.7931189410645183,
+          "loc": 0.0,
+          "scale": 35.64016006715044
+        }
+      },
+      "10228": {
+        "sample_count": 89,
+        "median_seconds": 24.4,
+        "mean_seconds": 518.0192471910112,
+        "distribution": "lognormal",
+        "p75_seconds": 201.201,
+        "p90_seconds": 1434.3254000000006,
+        "params": {
+          "shape": 1.9993889123100717,
+          "loc": 0.0,
+          "scale": 52.56872887578084
+        }
+      },
+      "11009": {
+        "sample_count": 910,
+        "median_seconds": 31.7445,
+        "mean_seconds": 419.84977142857144,
+        "distribution": "lognormal",
+        "p75_seconds": 292.85450000000003,
+        "p90_seconds": 1228.9103,
+        "params": {
+          "shape": 1.9375315086969895,
+          "loc": 0.0,
+          "scale": 60.461021406638665
+        }
+      },
+      "11189": {
+        "sample_count": 1980,
+        "median_seconds": 29.316499999999998,
+        "mean_seconds": 157.43170353535353,
+        "distribution": "lognormal",
+        "p75_seconds": 94.982,
+        "p90_seconds": 338.3681000000001,
+        "params": {
+          "shape": 1.3732451718855636,
+          "loc": 0.0,
+          "scale": 43.81763967515272
+        }
+      },
+      "10609": {
+        "sample_count": 1413,
+        "median_seconds": 79.261,
+        "mean_seconds": 508.8477310686483,
+        "distribution": "lognormal",
+        "p75_seconds": 425.53,
+        "p90_seconds": 1511.623199999999,
+        "params": {
+          "shape": 1.8172721354613242,
+          "loc": 0.0,
+          "scale": 103.61250488524975
+        }
+      },
+      "10881": {
+        "sample_count": 1130,
+        "median_seconds": 32.7475,
+        "mean_seconds": 254.4514132743363,
+        "distribution": "lognormal",
+        "p75_seconds": 166.75650000000002,
+        "p90_seconds": 634.1452000000002,
+        "params": {
+          "shape": 1.7118908090596159,
+          "loc": 0.0,
+          "scale": 48.25894189423547
+        }
+      },
+      "11181": {
+        "sample_count": 2523,
+        "median_seconds": 14.279,
+        "mean_seconds": 128.8574217201744,
+        "distribution": "lognormal",
+        "p75_seconds": 63.185500000000005,
+        "p90_seconds": 347.4920000000011,
+        "params": {
+          "shape": 1.546363365067492,
+          "loc": 0.0,
+          "scale": 26.749809666125877
+        }
+      },
+      "10789": {
+        "sample_count": 349,
+        "median_seconds": 27.801,
+        "mean_seconds": 345.1293696275072,
+        "distribution": "lognormal",
+        "p75_seconds": 104.633,
+        "p90_seconds": 457.7689999999995,
+        "params": {
+          "shape": 1.611521312673054,
+          "loc": 0.0,
+          "scale": 51.27468792144183
+        }
+      },
+      "10972": {
+        "sample_count": 1074,
+        "median_seconds": 214.0285,
+        "mean_seconds": 751.9979599627561,
+        "distribution": "lognormal",
+        "p75_seconds": 824.3605,
+        "p90_seconds": 2284.7789000000007,
+        "params": {
+          "shape": 1.717868201335687,
+          "loc": 0.0,
+          "scale": 217.71139112007558
+        }
+      },
+      "11002": {
+        "sample_count": 603,
+        "median_seconds": 23.725,
+        "mean_seconds": 268.8134411276949,
+        "distribution": "lognormal",
+        "p75_seconds": 138.5385,
+        "p90_seconds": 814.7802000000005,
+        "params": {
+          "shape": 1.769205225716611,
+          "loc": 0.0,
+          "scale": 43.46855272482573
+        }
+      },
+      "10138": {
+        "sample_count": 1384,
+        "median_seconds": 106.513,
+        "mean_seconds": 560.6505708092486,
+        "distribution": "lognormal",
+        "p75_seconds": 506.51175,
+        "p90_seconds": 1657.0492000000004,
+        "params": {
+          "shape": 1.7403548210811366,
+          "loc": 0.0,
+          "scale": 136.06522279221954
+        }
+      },
+      "10933": {
+        "sample_count": 547,
+        "median_seconds": 20.547,
+        "mean_seconds": 157.9558756855576,
+        "distribution": "lognormal",
+        "p75_seconds": 68.0075,
+        "p90_seconds": 360.1114000000001,
+        "params": {
+          "shape": 1.4901209865246543,
+          "loc": 0.0,
+          "scale": 32.263466958748296
+        }
+      },
+      "10861": {
+        "sample_count": 2310,
+        "median_seconds": 17.382,
+        "mean_seconds": 151.50976969696967,
+        "distribution": "lognormal",
+        "p75_seconds": 61.449,
+        "p90_seconds": 355.1956999999996,
+        "params": {
+          "shape": 1.5176492394056074,
+          "loc": 0.0,
+          "scale": 30.166463173334826
+        }
+      },
+      "10914": {
+        "sample_count": 137,
+        "median_seconds": 41.481,
+        "mean_seconds": 214.0912481751825,
+        "distribution": "lognormal",
+        "p75_seconds": 224.223,
+        "p90_seconds": 574.5026000000003,
+        "params": {
+          "shape": 1.589022193041936,
+          "loc": 0.0,
+          "scale": 57.55014685876751
+        }
+      },
+      "11259": {
+        "sample_count": 1166,
+        "median_seconds": 131.58499999999998,
+        "mean_seconds": 381.0138610634648,
+        "distribution": "lognormal",
+        "p75_seconds": 259.35249999999996,
+        "p90_seconds": 705.5675,
+        "params": {
+          "shape": 1.5337254496628225,
+          "loc": 0.0,
+          "scale": 108.15714725314484
+        }
+      },
+      "10910": {
+        "sample_count": 1094,
+        "median_seconds": 38.5635,
+        "mean_seconds": 313.3662413162706,
+        "distribution": "lognormal",
+        "p75_seconds": 279.13849999999996,
+        "p90_seconds": 824.9685000000001,
+        "params": {
+          "shape": 1.8362133186862464,
+          "loc": 0.0,
+          "scale": 58.722479298883044
+        }
+      },
+      "10931": {
+        "sample_count": 397,
+        "median_seconds": 72.436,
+        "mean_seconds": 593.9189697732998,
+        "distribution": "lognormal",
+        "p75_seconds": 598.083,
+        "p90_seconds": 1844.328600000001,
+        "params": {
+          "shape": 2.0223676634051597,
+          "loc": 0.0,
+          "scale": 98.72984131238523
+        }
+      },
+      "10932": {
+        "sample_count": 1026,
+        "median_seconds": 215.1445,
+        "mean_seconds": 740.5073937621833,
+        "distribution": "lognormal",
+        "p75_seconds": 850.0475,
+        "p90_seconds": 2195.758,
+        "params": {
+          "shape": 1.911906975013053,
+          "loc": 0.0,
+          "scale": 177.9260451019128
+        }
+      },
+      "10929": {
+        "sample_count": 990,
+        "median_seconds": 31.548000000000002,
+        "mean_seconds": 283.42694040404035,
+        "distribution": "lognormal",
+        "p75_seconds": 159.66125,
+        "p90_seconds": 690.0880000000001,
+        "params": {
+          "shape": 1.7433899737117524,
+          "loc": 0.0,
+          "scale": 49.36917176417494
+        }
+      },
+      "11003": {
+        "sample_count": 1122,
+        "median_seconds": 41.838,
+        "mean_seconds": 289.77786631016045,
+        "distribution": "lognormal",
+        "p75_seconds": 179.24275,
+        "p90_seconds": 683.1885999999998,
+        "params": {
+          "shape": 1.6495658621161227,
+          "loc": 0.0,
+          "scale": 59.48622945289206
+        }
+      },
+      "10935": {
+        "sample_count": 273,
+        "median_seconds": 35.658,
+        "mean_seconds": 434.6306153846154,
+        "distribution": "lognormal",
+        "p75_seconds": 253.093,
+        "p90_seconds": 1180.452400000002,
+        "params": {
+          "shape": 1.931295391119163,
+          "loc": 0.0,
+          "scale": 59.17644526116506
+        }
+      },
+      "11289": {
+        "sample_count": 520,
+        "median_seconds": 124.5375,
+        "mean_seconds": 487.2409692307692,
+        "distribution": "lognormal",
+        "p75_seconds": 477.6385,
+        "p90_seconds": 1290.7238000000007,
+        "params": {
+          "shape": 1.6929447696152826,
+          "loc": 0.0,
+          "scale": 132.08505118900695
+        }
+      },
+      "11319": {
+        "sample_count": 267,
+        "median_seconds": 34.607,
+        "mean_seconds": 308.8995842696629,
+        "distribution": "lognormal",
+        "p75_seconds": 102.5035,
+        "p90_seconds": 673.9792000000001,
+        "params": {
+          "shape": 1.5708609198424723,
+          "loc": 0.0,
+          "scale": 52.980494697302156
+        }
+      },
+      "11309": {
+        "sample_count": 295,
+        "median_seconds": 24.71,
+        "mean_seconds": 194.5528576271186,
+        "distribution": "lognormal",
+        "p75_seconds": 68.35499999999999,
+        "p90_seconds": 309.37780000000026,
+        "params": {
+          "shape": 1.4253976303974265,
+          "loc": 0.0,
+          "scale": 38.6219237442148
+        }
+      },
+      "11299": {
+        "sample_count": 320,
+        "median_seconds": 20.272,
+        "mean_seconds": 229.016228125,
+        "distribution": "lognormal",
+        "p75_seconds": 108.76475,
+        "p90_seconds": 691.3405000000014,
+        "params": {
+          "shape": 1.7318486025174136,
+          "loc": 0.0,
+          "scale": 39.30365456718519
+        }
+      },
+      "11300": {
+        "sample_count": 311,
+        "median_seconds": 24.027,
+        "mean_seconds": 253.05477170418007,
+        "distribution": "lognormal",
+        "p75_seconds": 117.2525,
+        "p90_seconds": 360.341,
+        "params": {
+          "shape": 1.607584472616402,
+          "loc": 0.0,
+          "scale": 42.04046334336098
+        }
+      },
+      "11302": {
+        "sample_count": 369,
+        "median_seconds": 23.271,
+        "mean_seconds": 224.26374254742547,
+        "distribution": "lognormal",
+        "p75_seconds": 74.916,
+        "p90_seconds": 466.3379999999999,
+        "params": {
+          "shape": 1.6108176286063707,
+          "loc": 0.0,
+          "scale": 36.40415706362911
+        }
+      }
+    }
+  }
+}

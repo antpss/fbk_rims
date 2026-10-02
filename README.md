@@ -1,6 +1,6 @@
 # RIMS+ Pipeline: Runtime Integration of Machine Learning & Simulation
 
-This repository contains the advanced **RIMS+** (Runtime Integration of Machine Learning and Simulation) framework for Business Process Simulation. It combines white-box Petri net process models executed via **SimPy** with machine learning and deep learning models (**TCN**, **XGBoost**, **LSTM**, and **Transformer**) predicting activity durations and queue waiting times at runtime, alongside decision classifiers resolving XOR branching.
+This repository contains the advanced **RIMS+** (Runtime Integration of Machine Learning and Simulation) framework for Business Process Simulation, specifically tailored for scenarios with high resource contention. It combines white-box Petri net process models executed via **SimPy** with machine learning and deep learning models (**TCN**, **XGBoost**, **LSTM**, and **Transformer**) predicting activity execution durations and queue waiting times at runtime, alongside decision classifiers resolving XOR branching.
 
 ---
 
@@ -71,9 +71,27 @@ Key dependencies:
 
 ---
 
+## Central Configuration (`config.yaml`)
+
+The entire pipeline is driven by [`config.yaml`](config.yaml):
+
+* **`paths`**: File locations for raw logs, aligned logs, Petri nets, datasets, and models.
+* **`discovery`**: Miner algorithm (`split` or `inductive`) and noise threshold.
+* **`features`**: Context features to extract (WIP, activity WIP, role occupancy, calendar, prefix window length, domain attributes like `RequestedAmount`).
+* **`tasks`**: Task-specific data settings:
+  * `duration`: Filters 0.0s events (automated pass-throughs) and calculates smoothed sample weights.
+  * `waiting_time`: Preserves 0.0s events (immediate resource pickups).
+  * `routing`: Classification engine, minimum samples per XOR place, and quality threshold (Macro F1 $\ge 0.60$).
+* **`model_strategy`**:
+  * `mode`: Exploration mode (`hybrid`, `global_tournament`, or `single_global`).
+  * `dl`: Neural network hyperparameters (`epochs: 50`, `patience: 10`, `batch_size: 256`, `learning_rate: 0.001`).
+  * `candidates`: List of architectures evaluated for each mode.
+
+---
+
 ## End-to-End Operational Pipeline
 
-All pipeline commands are executed from the project root directory.
+All commands should be executed from the project root directory.
 
 ### Step 0: Log Preprocessing & Filtering (`src/00_filter_log.py`)
 Filters the raw BPI Challenge 2012 log to keep human work items (`W_` events) and standardizes lifecycle transitions.
@@ -152,14 +170,20 @@ python src/03_dataset_builder.py --task waiting_time
 
 ### Step 4: Predictive Modeling & 5-Pillar Benchmark Suite
 
-The predictive modeling architecture supports **3 Exploration Modes** configured in `config.yaml` or via CLI:
-1. **`hybrid`** *(Recommended)*: Trains the 4 foundation pillars and empirically synthesizes the **Best-of-All-Worlds Hybrid Champion** per activity.
-2. **`global_tournament`**: Trains only competing global engines (e.g. Global XGBoost vs. Global TCN) and crowns the best global model across the whole process.
-3. **`single_global`**: Fast single-model baseline (e.g. Global XGBoost in 3.4 seconds) with zero benchmark overhead.
+The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/benchmark_models.py`) support **3 Exploration Modes**:
+
+1. **`hybrid`** *(Recommended)*: 
+   Trains the 4 foundational pillars (`global_xgboost`, `local_xgboost`, `global_tcn`, `local_tcn`) and empirically synthesizes the **Best-of-All-Worlds Hybrid Champion** per activity.
+2. **`global_tournament`**: 
+   Trains only competing global engines (e.g. Global XGBoost vs. Global TCN) and crowns the single best global model across the whole process.
+3. **`single_global`**: 
+   Fast single-model baseline (e.g. Global XGBoost in 3.4 seconds) with zero benchmark overhead.
 
 All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split** (partitioned by `Case_ID` to eliminate cross-event data leakage).
 
 #### Automated Benchmarking (`src/benchmark_models.py`)
+
+> **Note**: `src/benchmark_models.py --run_all` is the automated orchestrator. It calls `src/04_train.py` under the hood for each candidate architecture in sequence, evaluates them on held-out test cases, and synthesizes the champion.
 
 Run the full benchmark suite for duration or waiting time:
 
@@ -173,7 +197,7 @@ python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
 # 3. Fast Global-Only Tournament
 python src/benchmark_models.py --task duration --mode global_tournament --run_all
 
-# 4. Re-compare & synthesize champion from existing models
+# 4. Re-compare & synthesize champion from existing trained models
 python src/benchmark_models.py --task duration --compare
 ```
 
@@ -196,20 +220,20 @@ python src/04_train.py --task duration --strategy local --model_type tcn
 ```
 
 * **Outputs**:
-  * Models saved in `models/{task}/{strategy}_{model_type}/`
-  * Standalone deployment dispatch: `models/{task}/hybrid_champion/dispatch_config.json`
-  * Benchmark leaderboard report: `models/{task}/benchmark_report.md`
+  * Models saved in task-isolated directories: `models/{task}/{strategy}_{model_type}/`
+  * Standalone deployment dispatch manifest: `models/{task}/hybrid_champion/dispatch_config.json`
+  * Markdown benchmark report: `models/{task}/benchmark_report.md`
 
 ---
 
 ### Step 5: XOR Decision Mining & Routing (`src/05_train_routing.py`)
-Discovers all decision point places (places with $\ge 2$ outgoing branches) in the Petri net, extracts decision contexts from the aligned log, and trains routing classifiers.
+Discovers all decision point places (places with $\ge 2$ outgoing branches) in the Petri net, extracts decision contexts from the aligned log, and trains routing classifiers:
 
 * If `Macro F1 >= min_f1_threshold` (default 0.60): Saves the machine learning classifier (`.joblib` / `.pkl`).
 * If `Macro F1 < min_f1_threshold`: Falls back automatically to empirical branching probabilities.
 
 ```bash
-# Standard run (reads config.yaml, trains XGBoost)
+# Standard run (reads config.yaml, trains XGBoost routing classifier)
 python src/05_train_routing.py
 
 # Optional: Use an interpretable Decision Tree
@@ -224,17 +248,85 @@ python src/05_train_routing.py --min_samples 50
 
 ---
 
-## Current Benchmark Highlights (Duration Task)
+## Offline Benchmark Results (Duration Task)
 
-Evaluated on held-out test cases (11,609 events):
+Evaluated on held-out test cases (1,932 unseen cases, 11,609 events):
+
+### 1. Leaderboard
 
 | Configuration | Strategy | Engine | Test MAE (s) | Test SMAPE (%) | Training Time |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **hybrid_champion**  | `hybrid` | `champion` | **647.25s** | **80.84%** | 1077.66s |
+| **hybrid_champion** | `hybrid` | `champion` | **647.25s** | **80.84%** | 1077.66s |
 | local_tcn | `local` | `tcn` | 647.97s | 81.16% | 496.47s |
 | local_xgboost | `local` | `xgboost` | 648.35s | 81.27% | 4.14s |
 | global_tcn | `global` | `tcn` | 649.14s | 81.49% | 573.65s |
 | global_xgboost | `global` | `xgboost` | 649.24s | 81.90% | 3.40s |
 
-In the champion configuration, **TCN wins 4 out of 6 activities** (`W_Assess fraud`, `W_Call after offers`, `W_Handle leads`, `W_Validate application`), while **XGBoost wins 2 activities** (`W_Complete application`, `W_Call after incomplete files`).
+### 2. Hybrid Champion Architecture Assignment
 
+The dynamic champion selects the winning foundation model per activity:
+
+| Activity | Winning Pillar | Engine | Test MAE (s) | Best SMAPE (%) |
+| :--- | :--- | :---: | :---: | :---: |
+| **W_Assess fraud** | `local_tcn` | **TCN** | **1316.23s** | 58.91% |
+| **W_Call after incomplete files** | `global_xgboost` | **XGBOOST** | **901.53s** | 98.20% |
+| **W_Call after offers** | `local_tcn` | **TCN** | **533.38s** | 69.39% |
+| **W_Complete application** | `local_xgboost` | **XGBOOST** | **458.96s** | 81.87% |
+| **W_Handle leads** | `local_tcn` | **TCN** | **1132.69s** | 76.64% |
+| **W_Validate application** | `local_tcn` | **TCN** | **866.76s** | 89.64% |
+| *Fallback (`__default__`)* | `global_tcn` | **TCN** | — | — |
+
+* **Deep Learning (TCN) dominates complex sequence activities**: Wins 4 out of 6 activities.
+* **XGBoost dominates high-volume tabular patterns**: Wins 2 activities (`W_Complete application`, `W_Call after incomplete files`).
+
+---
+
+## Waiting Time Task (Ready for Execution)
+
+The waiting time pipeline operates symmetrically to duration, but with domain-specific physics:
+* **Preserves 0.0s waiting times**: An activity that starts immediately upon enablement experiences 0 waiting time. Dropping 0s would introduce severe upward bias.
+* **Run Waiting Time 5-Pillar Benchmark**:
+  ```bash
+  python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
+  ```
+* **Output**:
+  * Standalone models in `models/waiting_time/`
+  * Champion dispatch table in `models/waiting_time/hybrid_champion/dispatch_config.json`
+  * Leaderboard in `models/waiting_time/benchmark_report.md`
+
+---
+
+## Step 6: Modern Discrete-Event Simulation (`src/06_simulate.py`)
+
+The modernized discrete-event simulation engine in `src/06_simulate.py` replaces the legacy RIMS simulation (`predict_simulator.py` / `token_LSTM.py`) with a full config-driven architecture:
+
+1. **Multi-Skilled Shared Worker Pool**: Accurately tracks all 59 distinct human employees with their dynamic role proficiencies (fixing the legacy 266-worker phantom staff bug).
+2. **Dynamic Champion Inference**: Loads the best-performing models directly from `models/duration/hybrid_champion/dispatch_config.json` and `models/waiting_time/hybrid_champion/dispatch_config.json`.
+3. **Agnostic Hybrid Residual Waiting Time Strategy**: Computes extra waiting delay using the formula $\text{Extra Wait} = \max(0, W_{\text{ML}} - W_{\text{queue}})$, seamlessly reconciling physical resource contention with machine-learned business delays.
+4. **Advanced Business Hours & Weekend Calendar Engine**: Operates between 08:00 – 17:00 (Mon–Fri), automatically pausing and shifting activity executions across nights and weekends.
+5. **XOR Decision Routing**: Uses trained XGBoost classifiers (`models/routing/routing_decisions.json`) to route tokens across Petri net branch choices based on case history and milestone progress.
+6. **Automatic Real vs. Simulated Benchmark Evaluation**: Computes Cycle Time MAE, Wasserstein distance, and activity execution breakdown, writing reports to `data/processed/simulation_report.md`.
+
+```bash
+# 1. 3-Way Ablation Study (compares Pure Physics vs. Pure ML vs. Hybrid Residual)
+python src/06_simulate.py --compare_modes --cases 2500
+
+# 2. Simulate ALL cases available in the event log (Hybrid Residual mode)
+python src/06_simulate.py --all
+
+# 3. Simulate specific number of cases (e.g. 1,000 cases)
+python src/06_simulate.py --cases 1000
+
+# 4. Pure Physics mode (SimPy queue contention only)
+python src/06_simulate.py --cases 1000 --mode pure_physics
+
+# 5. Pure ML mode (ML predicted wait only)
+python src/06_simulate.py --cases 1000 --mode pure_ml
+```
+
+* **Outputs**:
+  * Simulated event log: `data/processed/simulated_log.csv`
+  * Markdown benchmark report: `data/processed/simulation_report.md`
+  * Ablation study leaderboard: `data/processed/ablation_report.md`
+
+---

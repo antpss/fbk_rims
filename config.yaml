@@ -7,7 +7,7 @@ project:
   random_seed: 42
 
 paths:
-  raw_log: "data/processed/BPI_2012_W_only.xes"
+  raw_log: "data/processed/BPI_2012_filtered.xes"
   aligned_log: "data/processed/aligned_BPI_2012.xes"
   petri_net: "models/petri_nets/discovered_model_split.pnml"
   petri_nets_dir: "models/petri_nets"
@@ -47,9 +47,17 @@ features:
 # ===================================================================
 preprocessing:
   input_log: "data/raw/BPI_Challenge_2012.xes"
-  # Prefixes to keep. Empty list [] keeps all activities (no prefix filtering).
-  prefixes_to_keep:
+  # Activities discovered in Petri Net & modeled for duration/waiting simulation
+  # DEFAULT: Set to [] or omit to model ALL activities in the log.
+  # For BPI 2012: ["W_"] isolates human work items.
+  process_activity_prefixes:
     - "W_"
+  # Milestone activities preserved as business state context for routing classifiers
+  # DEFAULT: Set to [] or omit if the log has no separate milestone events.
+  # For BPI 2012: ["A_", "O_"] captures application & offer business status.
+  milestone_prefixes:
+    - "A_"
+    - "O_"
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping:
     "W_Afhandelen leads": "W_Handle leads"
@@ -126,9 +134,11 @@ model_strategy:
   # Deep Learning Training Hyperparameters (TCN / LSTM / Transformer)
   dl:
     epochs: 50 
-    patience: 10  
+    patience: 5  
     batch_size: 256 
     learning_rate: 0.001
+    min_delta: 0.01                 # Minimum relative improvement (1.0%) to reset early stopping patience
+    min_samples_for_local_dl: 3000  # Minimum samples to train local DL (based on NeurIPS 2022 tabular benchmark)
 
   # Candidate architectures per mode
   candidates:
@@ -146,4 +156,21 @@ model_strategy:
         engine: "xgboost"
       - strategy: "global"
         engine: "tcn"
+
+# ===================================================================
+# Discrete-Event Simulation Settings (Step 06)
+# ===================================================================
+simulation:
+  mode: "hybrid_residual"         # Options: "hybrid_residual", "pure_physics", "pure_ml"
+  num_cases: 1000                 # Number of cases to simulate (null for all cases)
+  max_events_per_case: 80         # Safety ceiling to prevent non-terminating loops
+  output_simulated_log: "data/processed/simulated_log.csv"
+  
+  # Business Hours & Calendar Settings (Legacy RIMS Calendar Upgrade)
+  calendar:
+    enabled: true                 # If true, shifts work to business hours & pauses weekends
+    work_days: [0, 1, 2, 3, 4]    # Monday (0) to Friday (4)
+    hour_start: 8                 # 08:00
+    hour_end: 17                  # 17:00
+
 
