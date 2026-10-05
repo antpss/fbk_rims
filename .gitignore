@@ -19,6 +19,9 @@ RIMS/
 RIMS_tool/
 RIMS_decision_points/
 context.md
+original_rims_source
+scraped_rims_docs
+scraped_doc.html
 
 # Intermediate ML artifacts
 **/catboost_info/

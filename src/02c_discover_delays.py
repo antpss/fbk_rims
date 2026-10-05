@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ================================================================================
-RIMS+ AGNOSTIC CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE (TIER 4)
+RIMS+ AGNOSTIC CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE
 File: src/02c_discover_delays.py
 
 Discovers external uncoupled delays (EUD) and human inter-ticket latency across
@@ -133,7 +133,7 @@ class AgnosticDelayDiscoveryEngine:
     def run(self):
         print("\n" + "=" * 80)
         print("     RIMS+ AGNOSTIC CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE")
-        print("     Tier 4: Triple-Test Discovery (Resource, WIP Correlation, Calendar Invariance)")
+        print("     Triple-Test Discovery (Resource, WIP Correlation, Calendar Invariance)")
         print("=" * 80)
 
         start_time = time.time()
@@ -320,7 +320,7 @@ class AgnosticDelayDiscoveryEngine:
         manifest = {
             "source_log": self.log_path,
             "discovery_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "engine_version": "RIMS+ Tier 4 Causal Delay Engine",
+            "engine_version": "RIMS+ Causal Delay Engine",
             "external_uncoupled_delays": [d for d in discovered_delays if d["is_external"]],
             "internal_queue_delays": [d for d in discovered_delays if not d["is_external"]],
             "human_inter_ticket_latency": {
@@ -353,7 +353,7 @@ class AgnosticDelayDiscoveryEngine:
         with open(path, "w") as f:
             f.write("# RIMS+ Agnostic Causal Delay & Human Latency Discovery Report\n\n")
             f.write(f"- **Source Log:** `{manifest['source_log']}`\n")
-            f.write(f"- **Engine:** RIMS+ Tier 4 Causal Discovery Engine\n")
+            f.write(f"- **Engine:** RIMS+ Causal Discovery Engine\n")
             f.write(f"- **Generated:** {manifest['discovery_timestamp']}\n\n")
 
             f.write("## 1. Discovered External Uncoupled Delays (EUD)\n\n")

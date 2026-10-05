@@ -1,7 +1,7 @@
 {
   "source_log": "/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes",
   "discovery_timestamp": "2026-10-02 15:44:22",
-  "engine_version": "RIMS+ Tier 4 Causal Delay Engine",
+  "engine_version": "RIMS+ Causal Delay Engine",
   "external_uncoupled_delays": [
     {
       "trigger_activity": "W_Complete application",
