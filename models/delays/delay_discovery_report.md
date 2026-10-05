@@ -1,7 +1,7 @@
 # RIMS+ Agnostic Causal Delay & Human Latency Discovery Report
 
 - **Source Log:** `/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes`
-- **Engine:** RIMS+ Tier 4 Causal Discovery Engine
+- **Engine:** RIMS+ Causal Discovery Engine
 - **Generated:** 2026-10-02 15:44:22
 
 ## 1. Discovered External Uncoupled Delays (EUD)
