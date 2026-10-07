@@ -5,24 +5,26 @@ from pm4py.algo.analysis.woflan import algorithm as woflan
 from config_loader import load_config, PROJECT_ROOT
 
 def main():
-    cfg = load_config()
-    default_miner = cfg.get("discovery", {}).get("miner", "split")
-    default_noise = cfg.get("discovery", {}).get("inductive_noise_threshold", 0.2)
-
     parser = argparse.ArgumentParser(description="Petri net discovery using Split Miner or Inductive Miner.")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
-    parser.add_argument("--miner", choices=["split", "inductive"], default="split",
-                        help=f"Miner choice (default: 'split')")
+    parser.add_argument("--miner", choices=["split", "inductive"], default=None,
+                        help="Miner choice (defaults to config.yaml discovery.miner)")
     parser.add_argument("--noise_threshold", type=float, default=None,
-                        help=f"Noise threshold for inductive miner (default from config: {default_noise})")
+                        help="Optional override for inductive noise threshold (defaults to config.yaml)")
     args = parser.parse_args()
 
-    if args.config:
-        cfg = load_config(args.config)
-        default_noise = cfg.get("discovery", {}).get("inductive_noise_threshold", 0.2)
+    cfg = load_config(args.config) if args.config else load_config()
+    disc_cfg = cfg.get("discovery", {})
 
-    chosen_miner = args.miner
-    noise_threshold = args.noise_threshold if args.noise_threshold is not None else default_noise
+    chosen_miner = args.miner if args.miner is not None else disc_cfg.get("miner", "split")
+    noise_threshold = args.noise_threshold if args.noise_threshold is not None else disc_cfg.get("inductive_noise_threshold", 0.2)
+
+    # Split Miner hyperparameters configured purely via config.yaml
+    split_cfg = disc_cfg.get("split_miner", {})
+    epsilon = split_cfg.get("epsilon", 0.1)
+    eta = split_cfg.get("eta", 0.4)
+    minimize_or_joins = split_cfg.get("minimize_or_joins", True)
+    variant = split_cfg.get("variant", "classic")
 
     # Paths resolved from config
     raw_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_filtered.xes")
@@ -60,8 +62,14 @@ def main():
 
     if chosen_miner == "split":
         # Discover BPMN model using Split Miner and convert to Petri Net
-        print("Discovering BPMN model using Split Miner...")
-        bpmn_model = pm4py.discover_bpmn_split_miner(discovery_log)
+        print(f"Discovering BPMN model using Split Miner (epsilon={epsilon}, eta={eta}, variant='{variant}', minimize_or_joins={minimize_or_joins})...")
+        bpmn_model = pm4py.discover_bpmn_split_miner(
+            discovery_log,
+            epsilon=epsilon,
+            eta=eta,
+            variant=variant,
+            minimize_or_joins=minimize_or_joins
+        )
         print("Converting BPMN to Petri Net...")
         net, initial_marking, final_marking = pm4py.convert_to_petri_net(bpmn_model)
 
@@ -84,7 +92,7 @@ def main():
     # Export the final model
     print(f"Exporting Petri net to {output_pnml_path}...")
     pm4py.write_pnml(net, initial_marking, final_marking, output_pnml_path)
-    print("Done!")
+    print("Done.")
 
 if __name__ == "__main__":
     main()

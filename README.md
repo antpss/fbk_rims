@@ -298,35 +298,45 @@ The waiting time pipeline operates symmetrically to duration, but with domain-sp
 
 ## Step 6: Modern Discrete-Event Simulation (`src/06_simulate.py`)
 
-The modernized discrete-event simulation engine in `src/06_simulate.py` replaces the legacy RIMS simulation (`predict_simulator.py` / `token_LSTM.py`) with a full config-driven architecture:
+The modernized discrete-event simulation engine in `src/06_simulate.py` combines the theoretical rigor of Petri net token marking semantics with modern machine learning:
 
-1. **Multi-Skilled Shared Worker Pool**: Accurately tracks all 59 distinct human employees with their dynamic role proficiencies (fixing the legacy 266-worker phantom staff bug).
-2. **Dynamic Champion Inference**: Loads the best-performing models directly from `models/duration/hybrid_champion/dispatch_config.json` and `models/waiting_time/hybrid_champion/dispatch_config.json`.
-3. **Agnostic Hybrid Residual Waiting Time Strategy**: Computes extra waiting delay using the formula $\text{Extra Wait} = \max(0, W_{\text{ML}} - W_{\text{queue}})$, seamlessly reconciling physical resource contention with machine-learned business delays.
-4. **Advanced Business Hours & Weekend Calendar Engine**: Operates between 08:00 – 17:00 (Mon–Fri), automatically pausing and shifting activity executions across nights and weekends.
-5. **XOR Decision Routing**: Uses trained XGBoost classifiers (`models/routing/routing_decisions.json`) to route tokens across Petri net branch choices based on case history and milestone progress.
-6. **Automatic Real vs. Simulated Benchmark Evaluation**: Computes Cycle Time MAE, Wasserstein distance, and activity execution breakdown, writing reports to `data/processed/simulation_report.md`.
+1. **True Petri Net Token Marking Semantics**: Loads any discovered Petri Net (`.pnml`), starts at initial marking $M_0$, resolves enabled transitions dynamically using `pm4py.objects.petri_net.semantics`, and fires transitions until the sink marking is reached.
+2. **Dual Arrival Modes (Replay & Generative)**:
+   - **Replay Mode**: Replays historical case arrival timestamps and loan payloads directly from the aligned event log.
+   - **Generative Mode**: Generates purely synthetic cases from scratch using statistical inter-arrival distributions (exponential, uniform, constant) bounded by office hour arrival calendars (matching original RIMS `InterTriggerTimer`).
+3. **Multi-Skilled Shared Worker Pool**: Accurately tracks all 59 distinct human employees with dynamic role proficiencies, eliminating the phantom worker bug.
+4. **Per-Role & Global Calendar Shift Engine**: Supports global office hours (08:00 – 17:00 Mon–Fri) as well as custom per-role work shift overrides, dynamically pausing and rolling active work over nights and weekends.
+5. **Dynamic Champion Inference**: Dispatches winning models per activity from `models/duration/hybrid_champion/dispatch_config.json` and `models/waiting_time/hybrid_champion/dispatch_config.json`.
+6. **Agnostic Hybrid Residual Waiting Time**: Reconciles physical queue contention with ML predictions: $\text{Extra Wait} = \max(0, W_{\text{ML}} - W_{\text{queue}})$.
+7. **XOR Decision Routing**: Uses trained XGBoost/Decision Tree classifiers (`models/routing/routing_decisions.json`) to route tokens across branch choices.
+8. **Standard IEEE XES Export**: Exports both flat CSV and standard IEEE XES event logs (`simulated_log.xes`), allowing direct import into ProM, Disco, Celonis, and PM4Py.
+9. **Automatic Real vs. Simulated Benchmark Evaluation**: Computes Cycle Time MAE, Wasserstein distance, and activity execution breakdown, writing reports to `data/processed/simulation_report.md`.
 
 ```bash
 # 1. 3-Way Ablation Study (compares Pure Physics vs. Pure ML vs. Hybrid Residual)
 python src/06_simulate.py --compare_modes --cases 2500
 
-# 2. Simulate ALL cases available in the event log (Hybrid Residual mode)
+# 2. Replay historical arrivals (Hybrid Residual mode, 1,000 cases)
+python src/06_simulate.py --cases 1000 --arrival_mode replay
+
+# 3. Purely Generative arrivals from scratch (e.g. 1,000 synthetic cases)
+python src/06_simulate.py --cases 1000 --arrival_mode generative
+
+# 4. Simulate ALL cases available in historical log
 python src/06_simulate.py --all
 
-# 3. Simulate specific number of cases (e.g. 1,000 cases)
-python src/06_simulate.py --cases 1000
-
-# 4. Pure Physics mode (SimPy queue contention only)
+# 5. Pure Physics mode (SimPy queue contention only)
 python src/06_simulate.py --cases 1000 --mode pure_physics
 
-# 5. Pure ML mode (ML predicted wait only)
+# 6. Pure ML mode (ML predicted wait only)
 python src/06_simulate.py --cases 1000 --mode pure_ml
 ```
 
 * **Outputs**:
-  * Simulated event log: `data/processed/simulated_log.csv`
+  * Simulated event log (CSV): `data/processed/simulated_log.csv`
+  * Simulated event log (IEEE XES): `data/processed/simulated_log.xes`
   * Markdown benchmark report: `data/processed/simulation_report.md`
   * Ablation study leaderboard: `data/processed/ablation_report.md`
 
 ---
+
