@@ -60,11 +60,22 @@ def filter_log():
         print(f"Applying activity mapping ({len(TRANSLATION_MAP)} replacements)...")
         df_filtered['concept:name'] = df_filtered['concept:name'].replace(TRANSLATION_MAP)
 
-    print(f"Filtered events: {len(df_filtered)}")
-
-    print(f"Exporting to {OUTPUT_LOG}")
-    # Exporting the Pandas df back to XES format
+    print(f"Filtered process events: {len(df_filtered)}")
+    print(f"Exporting process log to: {OUTPUT_LOG}")
     pm4py.write_xes(df_filtered, OUTPUT_LOG)
+
+    # Optional: If separate routing lifecycle log is configured (e.g. for dual-stream logs like BPI 2012)
+    routing_raw_rel = cfg.get("paths", {}).get("routing_raw_log")
+    if routing_raw_rel and milestone_prefixes:
+        routing_out_log = os.path.join(PROJECT_ROOT, routing_raw_rel)
+        if routing_out_log != OUTPUT_LOG:
+            os.makedirs(os.path.dirname(routing_out_log), exist_ok=True)
+            df_routing = df[df['concept:name'].str.startswith(tuple(milestone_prefixes))].copy()
+            r_counts = df_routing.groupby('case:concept:name').size()
+            df_routing = df_routing[df_routing['case:concept:name'].isin(r_counts[r_counts > 0].index)].copy()
+            print(f"Exporting routing lifecycle log ({len(df_routing)} events) to: {routing_out_log}")
+            pm4py.write_xes(df_routing, routing_out_log)
+
     print("Done.")
 
 if __name__ == "__main__":
