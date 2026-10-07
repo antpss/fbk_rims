@@ -436,7 +436,7 @@ class ChampionPredictor:
 
         return default_fallback
 
-    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer):
+    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer, curr_dt=None):
         """Predicts outgoing transition branch at an XOR split place."""
         p_info = self.routing_manifest.get(place_id)
         if not p_info:
@@ -452,20 +452,26 @@ class ChampionPredictor:
             for k, p_act in enumerate(recent_p):
                 row[f"prefix_{k+1}"] = p_act
             row["RequestedAmount"] = float(requested_amount)
+            row["amount"] = float(requested_amount)
             row["Offer_Count"] = float(offer_count)
             row["Has_Offer"] = float(has_offer)
+            row["prev_activity"] = prefix[-1] if prefix else "<START>"
+            row["hour"] = curr_dt.hour if curr_dt is not None else 12
+            row["weekday"] = curr_dt.weekday() if curr_dt is not None else 0
 
             for col in feat_cols:
                 if col.startswith("Milestone_"):
                     m_name = col.replace("Milestone_", "")
                     row[col] = 1.0 if m_name in milestones_seen else 0.0
+                elif col.startswith("has_"):
+                    act_name = col.replace("has_", "")
+                    row[col] = 1.0 if (act_name in prefix or act_name in milestones_seen) else 0.0
                 elif col not in row:
                     row[col] = 0.0
 
-
             row_df = pd.DataFrame([row])[feat_cols]
             for c in row_df.columns:
-                if c.startswith("prefix_"):
+                if c.startswith("prefix_") or c == "prev_activity":
                     row_df[c] = row_df[c].astype("category")
 
             label_enc = p_info["label_encoding"]
@@ -871,7 +877,8 @@ class DiscreteEventSimulation:
                 if decision_places:
                     dp = decision_places[0].name
                     predicted_target = self.predictor.predict_routing(
-                        dp, prefix, requested_amount, milestones_seen, offer_count, has_offer
+                        dp, prefix, requested_amount, milestones_seen, offer_count, has_offer,
+                        curr_dt=self.calendar.to_datetime(self.env.now)
                     )
                     # Match predicted target to an enabled transition
                     matched_t = None

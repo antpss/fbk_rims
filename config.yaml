@@ -7,12 +7,18 @@ project:
   random_seed: 42
 
 paths:
+  # General Process & Duration / Waiting Time paths
   raw_log: "data/processed/BPI_2012_filtered.xes"
   aligned_log: "data/processed/aligned_BPI_2012.xes"
   petri_net: "models/petri_nets/discovered_model_split.pnml"
   petri_nets_dir: "models/petri_nets"
   output_base_dir: "data/processed"
   models_dir: "models"
+
+  # Routing Decision Point paths (Step 05 Decision Mining)
+  routing_raw_log: "data/processed/BPI_2012_A_only.xes"
+  routing_petri_net: "models/petri_nets/bpi2012_A_net.pnml"
+  routing_models_dir: "models/routing"
 
 # Process Discovery Settings
 discovery:
@@ -69,26 +75,6 @@ preprocessing:
     - "A_SUBMITTED"
     - "A_PARTLYSUBMITTED"
 
-  # Optional dynamic milestone progression triggered when an activity completes (for generative mode)
-  # Supports either a list of milestones or a dictionary of empirical trigger probabilities per activity execution.
-  # DEFAULT: Set to {} or omit if not applicable.
-  milestone_progression:
-    "W_Handle leads":
-      "A_PREACCEPTED": 0.80
-    "W_Complete application":
-      "A_ACCEPTED": 0.50
-      "O_SELECTED": 0.50
-      "A_FINALIZED": 0.14       # ~7 executions before finalizing application
-      "O_CREATED": 0.14
-      "O_SENT": 0.14
-    "W_Call after offers":
-      "O_SENT_BACK": 0.14       # ~7 calls before customer returns signed offer
-    "W_Validate application":
-      "A_APPROVED": 0.35
-      "A_REGISTERED": 0.35
-      "A_ACTIVATED": 0.35
-      "O_ACCEPTED": 0.35
-
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping:
     "W_Afhandelen leads": "W_Handle leads"
@@ -134,18 +120,12 @@ tasks:
       enabled: false
 
   routing:
-    description: "Decision point / next activity prediction at XOR splits"
-    target_column: "Next_Activity"
-    output_file: "datasets/dataset_routing_global.csv"
-    filter_zero_duration: false
-    sample_weighting:
-      enabled: false
-
-    # Step 05: Decision Mining & Routing Settings
-    # CLI Overrides: python src/05_train_routing.py --classifier decision_tree --min_samples 50
-    classifier_type: "xgboost"    # Classifier engine: "xgboost" (high accuracy) or "decision_tree" (interpretable)
-    min_samples: 30               # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
-    min_f1_threshold: 0.60        # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
+    description: "White-Box XOR decision point routing classifiers"
+    classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
+    max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
+    rf_trees: 5                      # Number of trees for random_forest
+    min_samples: 30                  # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
+    min_f1_threshold: 0.60           # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
     output_dir: "models/routing"
 
 # ===================================================================

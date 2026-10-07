@@ -1,475 +1,310 @@
 {
-  "classifier_type": "xgboost",
+  "classifier_type": "decision_tree",
   "min_f1_threshold": 0.6,
+  "max_depth": 21,
   "window_size": 10,
   "decision_points": {
-    "exi_W_Complete application__loop_split": {
-      "place_id": "exi_W_Complete application__loop_split",
-      "sample_count": 23728,
+    "p_5": {
+      "place_id": "p_5",
+      "sample_count": 13087,
       "classes_observed": {
-        "W_Complete application": 16596,
-        "W_Call after offers": 7132
+        "A_DECLINED": 8034,
+        "A_CANCELLED": 2807,
+        "tauSplit_5": 2246
       },
       "branches_defined": [
-        "W_Call after offers",
-        "W_Complete application"
+        "tauSplit_5",
+        "A_CANCELLED",
+        "A_DECLINED"
       ],
-      "accuracy": 0.9772,
-      "macro_f1": 0.9722,
-      "weighted_f1": 0.9769,
+      "best_parameters": {
+        "max_depth": 10,
+        "min_samples_split": 16,
+        "min_samples_leaf": 5,
+        "criterion": "entropy",
+        "class_weight": "balanced"
+      },
+      "accuracy": 0.712,
+      "macro_f1": 0.6478,
+      "weighted_f1": 0.7296,
       "confusion_matrix": [
         [
-          1320,
-          107
+          266,
+          21,
+          263
         ],
         [
-          2,
-          3345
-        ]
-      ],
-      "label_encoding": {
-        "W_Call after offers": 0,
-        "W_Complete application": 1
-      },
-      "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
-        "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
-      ],
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_W_Complete_application__loop_split.joblib",
-      "legacy_pkl_file": "exi_W_Complete_application__loop_split.pkl"
-    },
-    "exi_W_Handle leads__loop_split": {
-      "place_id": "exi_W_Handle leads__loop_split",
-      "sample_count": 3450,
-      "classes_observed": {
-        "W_Complete application": 2597,
-        "W_Handle leads": 853
-      },
-      "branches_defined": [
-        "W_Handle leads",
-        "W_Complete application"
-      ],
-      "accuracy": 1.0,
-      "macro_f1": 1.0,
-      "weighted_f1": 1.0,
-      "confusion_matrix": [
-        [
-          520,
-          0
+          234,
+          1201,
+          192
         ],
         [
+          44,
           0,
-          176
-        ]
-      ],
-      "label_encoding": {
-        "W_Complete application": 0,
-        "W_Handle leads": 1
-      },
-      "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
-        "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
-      ],
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_W_Handle_leads__loop_split.joblib",
-      "legacy_pkl_file": "exi_W_Handle_leads__loop_split.pkl"
-    },
-    "exi_W_Call after offers__loop_split": {
-      "place_id": "exi_W_Call after offers__loop_split",
-      "sample_count": 25091,
-      "classes_observed": {
-        "W_Call after offers": 17959,
-        "W_Validate application": 7132
-      },
-      "branches_defined": [
-        "W_Call after offers",
-        "W_Validate application"
-      ],
-      "accuracy": 0.9699,
-      "macro_f1": 0.9624,
-      "weighted_f1": 0.9694,
-      "confusion_matrix": [
-        [
-          3473,
-          11
-        ],
-        [
-          137,
-          1290
-        ]
-      ],
-      "label_encoding": {
-        "W_Call after offers": 0,
-        "W_Validate application": 1
-      },
-      "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
-        "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
-      ],
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_W_Call_after_offers__loop_split.joblib",
-      "legacy_pkl_file": "exi_W_Call_after_offers__loop_split.pkl"
-    },
-    "exi_W_Assess fraud__loop_split": {
-      "place_id": "exi_W_Assess fraud__loop_split",
-      "sample_count": 2655,
-      "classes_observed": {
-        "<END>": 2526,
-        "W_Assess fraud": 129
-      },
-      "branches_defined": [
-        "<END>",
-        "W_Assess fraud"
-      ],
-      "accuracy": 0.9981,
-      "macro_f1": 0.9889,
-      "weighted_f1": 0.9981,
-      "confusion_matrix": [
-        [
-          505,
-          1
-        ],
-        [
-          0,
-          23
-        ]
-      ],
-      "label_encoding": {
-        "<END>": 0,
-        "W_Assess fraud": 1
-      },
-      "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
-        "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
-      ],
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_W_Assess_fraud__loop_split.joblib",
-      "legacy_pkl_file": "exi_W_Assess_fraud__loop_split.pkl"
-    },
-    "exi_xor_1": {
-      "place_id": "exi_xor_1",
-      "sample_count": 29833,
-      "classes_observed": {
-        "W_Complete application": 23728,
-        "W_Handle leads": 3450,
-        "W_Assess fraud": 2655
-      },
-      "branches_defined": [
-        "W_Handle leads",
-        "W_Complete application",
-        "W_Assess fraud"
-      ],
-      "accuracy": 0.9219,
-      "macro_f1": 0.8186,
-      "weighted_f1": 0.9066,
-      "confusion_matrix": [
-        [
-          524,
-          0,
-          22
-        ],
-        [
-          0,
-          4495,
-          0
-        ],
-        [
-          0,
-          424,
-          243
-        ]
-      ],
-      "label_encoding": {
-        "W_Assess fraud": 0,
-        "W_Complete application": 1,
-        "W_Handle leads": 2
-      },
-      "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
-        "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
-      ],
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_xor_1.joblib",
-      "legacy_pkl_file": "exi_xor_1.pkl"
-    },
-    "exi_W_Validate application__loop_split": {
-      "place_id": "exi_W_Validate application__loop_split",
-      "sample_count": 9488,
-      "classes_observed": {
-        "<END>": 5552,
-        "W_Validate application": 2358,
-        "W_Call after incomplete files": 1578
-      },
-      "branches_defined": [
-        "W_Call after incomplete files",
-        "<END>",
-        "W_Validate application"
-      ],
-      "accuracy": 0.8178,
-      "macro_f1": 0.6529,
-      "weighted_f1": 0.7944,
-      "confusion_matrix": [
-        [
-          1083,
-          2,
-          9
-        ],
-        [
-          0,
-          60,
-          272
-        ],
-        [
-          0,
-          60,
           397
         ]
       ],
       "label_encoding": {
-        "<END>": 0,
-        "W_Call after incomplete files": 1,
-        "W_Validate application": 2
+        "A_CANCELLED": 0,
+        "A_DECLINED": 1,
+        "tauSplit_5": 2
       },
       "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
+        "hour",
+        "weekday",
+        "prev_activity",
         "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
+        "has_A_ACCEPTED",
+        "has_A_ACTIVATED",
+        "has_A_APPROVED",
+        "has_A_CANCELLED",
+        "has_A_DECLINED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_REGISTERED",
+        "has_A_SUBMITTED"
       ],
+      "feature_importances": {
+        "hour": 0.027,
+        "weekday": 0.0126,
+        "prev_activity": 0.0009,
+        "RequestedAmount": 0.03,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_ACTIVATED": 0.0,
+        "has_A_APPROVED": 0.0,
+        "has_A_CANCELLED": 0.0,
+        "has_A_DECLINED": 0.0,
+        "has_A_FINALIZED": 0.2575,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.672,
+        "has_A_REGISTERED": 0.0,
+        "has_A_SUBMITTED": 0.0
+      },
       "strategy": "machine_learning",
-      "model_file": "routing_exi_W_Validate_application__loop_split.joblib",
-      "legacy_pkl_file": "exi_W_Validate_application__loop_split.pkl"
+      "model_file": "routing_p_5.joblib"
     },
-    "exi_W_Call after incomplete files__loop_split": {
-      "place_id": "exi_W_Call after incomplete files__loop_split",
-      "sample_count": 11182,
+    "p_7": {
+      "place_id": "p_7",
+      "sample_count": 5113,
       "classes_observed": {
-        "W_Call after incomplete files": 9604,
-        "<END>": 1578
+        "A_FINALIZED": 5015,
+        "skip_3": 98
       },
       "branches_defined": [
-        "W_Call after incomplete files",
-        "<END>"
+        "skip_3",
+        "A_FINALIZED"
       ],
-      "accuracy": 0.8934,
-      "macro_f1": 0.6898,
-      "weighted_f1": 0.8668,
+      "best_parameters": {
+        "max_depth": 18,
+        "min_samples_split": 7,
+        "min_samples_leaf": 16,
+        "criterion": "log_loss",
+        "class_weight": null
+      },
+      "accuracy": 0.9765,
+      "macro_f1": 0.4941,
+      "weighted_f1": 0.9649,
       "confusion_matrix": [
         [
-          89,
-          227
+          999,
+          0
         ],
         [
-          1,
-          1821
+          24,
+          0
         ]
       ],
       "label_encoding": {
-        "<END>": 0,
-        "W_Call after incomplete files": 1
+        "A_FINALIZED": 0,
+        "skip_3": 1
       },
       "features": [
-        "prefix_1",
-        "prefix_2",
-        "prefix_3",
-        "prefix_4",
-        "prefix_5",
-        "prefix_6",
-        "prefix_7",
-        "prefix_8",
-        "prefix_9",
-        "prefix_10",
+        "hour",
+        "weekday",
+        "prev_activity",
         "RequestedAmount",
-        "Offer_Count",
-        "Has_Offer",
-        "Milestone_A_ACCEPTED",
-        "Milestone_A_ACTIVATED",
-        "Milestone_A_APPROVED",
-        "Milestone_A_CANCELLED",
-        "Milestone_A_DECLINED",
-        "Milestone_A_FINALIZED",
-        "Milestone_A_PARTLYSUBMITTED",
-        "Milestone_A_PREACCEPTED",
-        "Milestone_A_REGISTERED",
-        "Milestone_A_SUBMITTED",
-        "Milestone_O_ACCEPTED",
-        "Milestone_O_CANCELLED",
-        "Milestone_O_CREATED",
-        "Milestone_O_DECLINED",
-        "Milestone_O_SELECTED",
-        "Milestone_O_SENT",
-        "Milestone_O_SENT_BACK"
+        "has_A_ACCEPTED",
+        "has_A_ACTIVATED",
+        "has_A_APPROVED",
+        "has_A_CANCELLED",
+        "has_A_DECLINED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_REGISTERED",
+        "has_A_SUBMITTED"
       ],
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_W_Call_after_incomplete_files__loop_split.joblib",
-      "legacy_pkl_file": "exi_W_Call_after_incomplete_files__loop_split.pkl"
+      "feature_importances": {
+        "hour": 0.3611,
+        "weekday": 0.1221,
+        "prev_activity": 0.0,
+        "RequestedAmount": 0.5168,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_ACTIVATED": 0.0,
+        "has_A_APPROVED": 0.0,
+        "has_A_CANCELLED": 0.0,
+        "has_A_DECLINED": 0.0,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0,
+        "has_A_REGISTERED": 0.0,
+        "has_A_SUBMITTED": 0.0
+      },
+      "strategy": "empirical_probability",
+      "probabilities": {
+        "A_FINALIZED": 0.980833170350088,
+        "skip_3": 0.01916682964991199
+      },
+      "model_file": null
+    },
+    "p_4": {
+      "place_id": "p_4",
+      "sample_count": 13087,
+      "classes_observed": {
+        "A_PREACCEPTED": 7367,
+        "skip_1": 5720
+      },
+      "branches_defined": [
+        "A_PREACCEPTED",
+        "skip_1"
+      ],
+      "best_parameters": {
+        "max_depth": 3,
+        "min_samples_split": 15,
+        "min_samples_leaf": 25,
+        "criterion": "gini",
+        "class_weight": "balanced"
+      },
+      "accuracy": 0.6207,
+      "macro_f1": 0.5954,
+      "weighted_f1": 0.6043,
+      "confusion_matrix": [
+        [
+          1140,
+          285
+        ],
+        [
+          708,
+          485
+        ]
+      ],
+      "label_encoding": {
+        "A_PREACCEPTED": 0,
+        "skip_1": 1
+      },
+      "features": [
+        "hour",
+        "weekday",
+        "prev_activity",
+        "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_ACTIVATED",
+        "has_A_APPROVED",
+        "has_A_CANCELLED",
+        "has_A_DECLINED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_REGISTERED",
+        "has_A_SUBMITTED"
+      ],
+      "feature_importances": {
+        "hour": 0.0143,
+        "weekday": 0.0119,
+        "prev_activity": 0.0,
+        "RequestedAmount": 0.9738,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_ACTIVATED": 0.0,
+        "has_A_APPROVED": 0.0,
+        "has_A_CANCELLED": 0.0,
+        "has_A_DECLINED": 0.0,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0,
+        "has_A_REGISTERED": 0.0,
+        "has_A_SUBMITTED": 0.0
+      },
+      "strategy": "empirical_probability",
+      "probabilities": {
+        "A_PREACCEPTED": 0.5629250401161457,
+        "skip_1": 0.4370749598838542
+      },
+      "model_file": null
+    },
+    "p_6": {
+      "place_id": "p_6",
+      "sample_count": 7367,
+      "classes_observed": {
+        "A_ACCEPTED": 5113,
+        "skip_2": 2254
+      },
+      "branches_defined": [
+        "skip_2",
+        "A_ACCEPTED"
+      ],
+      "best_parameters": {
+        "max_depth": 18,
+        "min_samples_split": 7,
+        "min_samples_leaf": 16,
+        "criterion": "log_loss",
+        "class_weight": null
+      },
+      "accuracy": 0.6472,
+      "macro_f1": 0.4834,
+      "weighted_f1": 0.5805,
+      "confusion_matrix": [
+        [
+          892,
+          91
+        ],
+        [
+          429,
+          62
+        ]
+      ],
+      "label_encoding": {
+        "A_ACCEPTED": 0,
+        "skip_2": 1
+      },
+      "features": [
+        "hour",
+        "weekday",
+        "prev_activity",
+        "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_ACTIVATED",
+        "has_A_APPROVED",
+        "has_A_CANCELLED",
+        "has_A_DECLINED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_REGISTERED",
+        "has_A_SUBMITTED"
+      ],
+      "feature_importances": {
+        "hour": 0.2715,
+        "weekday": 0.1621,
+        "prev_activity": 0.0,
+        "RequestedAmount": 0.5664,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_ACTIVATED": 0.0,
+        "has_A_APPROVED": 0.0,
+        "has_A_CANCELLED": 0.0,
+        "has_A_DECLINED": 0.0,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0,
+        "has_A_REGISTERED": 0.0,
+        "has_A_SUBMITTED": 0.0
+      },
+      "strategy": "empirical_probability",
+      "probabilities": {
+        "A_ACCEPTED": 0.6940409936201982,
+        "skip_2": 0.30595900637980183
+      },
+      "model_file": null
     }
   }
 }
