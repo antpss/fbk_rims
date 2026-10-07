@@ -162,11 +162,17 @@ model_strategy:
         engine: "tcn"
       - strategy: "local"
         engine: "tcn"
+      - strategy: "global"
+        engine: "lstm"
+      - strategy: "local"
+        engine: "lstm"
     global_tournament:
       - strategy: "global"
         engine: "xgboost"
       - strategy: "global"
         engine: "tcn"
+      - strategy: "global"
+        engine: "lstm"
 
 # ===================================================================
 # Discrete-Event Simulation Settings (Step 06)

@@ -38,6 +38,7 @@ from config_loader import load_config, PROJECT_ROOT
 # Dynamic import of 04_train for DurationTCN
 train_module = importlib.import_module("04_train")
 DurationTCN = train_module.DurationTCN
+DurationLSTM = train_module.DurationLSTM
 parse_prefix = train_module.parse_prefix
 
 
@@ -341,6 +342,21 @@ class ChampionPredictor:
                 tcn.load_state_dict(sd)
                 tcn.eval()
                 suite["models"][act] = {"type": "tcn", "model": tcn}
+            elif m_type == "lstm":
+                sd = torch.load(m_path, map_location="cpu")
+                vocab_size = sd["embedding.weight"].shape[0]
+                embed_dim = sd["embedding.weight"].shape[1]
+                fc_in = sd["fc.0.weight"].shape[1]
+                hidden = sd["fc.0.weight"].shape[0]
+                num_acts = sd["act_embedding.weight"].shape[0] if "act_embedding.weight" in sd else 1
+                has_act_emb = ("act_embedding.weight" in sd) and (num_acts > 1)
+                num_feats = fc_in - hidden - (embed_dim if has_act_emb else 0)
+
+                lstm = DurationLSTM(vocab_size=vocab_size, embed_dim=embed_dim, num_acts=num_acts,
+                                    num_features=num_feats, hidden_dim=hidden, num_layers=2)
+                lstm.load_state_dict(sd)
+                lstm.eval()
+                suite["models"][act] = {"type": "lstm", "model": lstm}
         return suite
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
@@ -410,7 +426,7 @@ class ChampionPredictor:
             val = float(np.expm1(np.clip(pred_log1p, 0.0, 25.0)))
             return max(1.0, val)
 
-        elif m_type == "tcn":
+        elif m_type in ["tcn", "lstm"]:
             vocab = suite["vocab"]
             seq = [vocab.get(a, 1) for a in prefix[-self.max_seq_len:]]
             if len(seq) < self.max_seq_len:
