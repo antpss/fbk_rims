@@ -7,6 +7,7 @@ project:
   random_seed: 42
 
 paths:
+  # General Process & Duration / Waiting Time paths
   raw_log: "data/processed/BPI_2012_filtered.xes"
   aligned_log: "data/processed/aligned_BPI_2012.xes"
   petri_net: "models/petri_nets/discovered_model_split.pnml"
@@ -14,10 +15,20 @@ paths:
   output_base_dir: "data/processed"
   models_dir: "models"
 
+  # Routing Decision Point paths (Step 05 Decision Mining)
+  routing_raw_log: "data/processed/BPI_2012_A_only.xes"
+  routing_petri_net: "models/petri_nets/bpi2012_A_net.pnml"
+  routing_models_dir: "models/routing"
+
 # Process Discovery Settings
 discovery:
   miner: "split"                  # Options: "split", "inductive"
   inductive_noise_threshold: 0.2  # Noise threshold for inductive miner
+  split_miner:
+    epsilon: 0.1                  # Concurrency threshold (0.0 - 1.0, lower = more parallel branches)
+    eta: 0.4                      # Edge filtering percentile (0.0 - 1.0, lower = keeps more edges)
+    minimize_or_joins: true       # Replace trivial OR joins with XOR/AND
+    variant: "classic"            # Options: "classic", "sm2"
 
 # Feature Engineering Settings
 features:
@@ -58,6 +69,12 @@ preprocessing:
   milestone_prefixes:
     - "A_"
     - "O_"
+  # Initial milestone activities present at the start of a case (e.g. for generative arrivals)
+  # DEFAULT: Set to [] or omit if the log has no initial milestones.
+  initial_milestones:
+    - "A_SUBMITTED"
+    - "A_PARTLYSUBMITTED"
+
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping:
     "W_Afhandelen leads": "W_Handle leads"
@@ -103,18 +120,12 @@ tasks:
       enabled: false
 
   routing:
-    description: "Decision point / next activity prediction at XOR splits"
-    target_column: "Next_Activity"
-    output_file: "datasets/dataset_routing_global.csv"
-    filter_zero_duration: false
-    sample_weighting:
-      enabled: false
-
-    # Step 05: Decision Mining & Routing Settings
-    # CLI Overrides: python src/05_train_routing.py --classifier decision_tree --min_samples 50
-    classifier_type: "xgboost"    # Classifier engine: "xgboost" (high accuracy) or "decision_tree" (interpretable)
-    min_samples: 30               # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
-    min_f1_threshold: 0.60        # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
+    description: "White-Box XOR decision point routing classifiers"
+    classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
+    max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
+    rf_trees: 5                      # Number of trees for random_forest
+    min_samples: 30                  # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
+    min_f1_threshold: 0.60           # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
     output_dir: "models/routing"
 
 # ===================================================================
@@ -151,11 +162,17 @@ model_strategy:
         engine: "tcn"
       - strategy: "local"
         engine: "tcn"
+      - strategy: "global"
+        engine: "lstm"
+      - strategy: "local"
+        engine: "lstm"
     global_tournament:
       - strategy: "global"
         engine: "xgboost"
       - strategy: "global"
         engine: "tcn"
+      - strategy: "global"
+        engine: "lstm"
 
 # ===================================================================
 # Discrete-Event Simulation Settings (Step 06)
@@ -165,12 +182,38 @@ simulation:
   num_cases: 1000                 # Number of cases to simulate (null for all cases)
   max_events_per_case: 80         # Safety ceiling to prevent non-terminating loops
   output_simulated_log: "data/processed/simulated_log.csv"
+  export_xes: true                # Also export standard IEEE XES log (.xes)
+  output_simulated_xes: "data/processed/simulated_log.xes"
   
-  # Business Hours & Calendar Settings (Legacy RIMS Calendar Upgrade)
+  # Arrival Configuration (Replay historical timeline vs. Generative distribution)
+  arrival:
+    mode: "replay"                # Options: "replay" (replays from aligned_log), "generative" (statistical distribution)
+    distribution: "exponential"   # Distribution for generative mode: "exponential", "uniform", "constant"
+    scale: 300.0                  # Mean seconds between case arrivals (e.g. 300s = 5 min)
+    start_timestamp: "2012-01-01 08:00:00"
+    calendar_bounded: true        # If true, new arrivals only spawn during office hours
+
+  # Business Hours & Calendar Settings (Legacy RIMS Calendar Upgrade + Per-Role Calendars)
   calendar:
     enabled: true                 # If true, shifts work to business hours & pauses weekends
     work_days: [0, 1, 2, 3, 4]    # Monday (0) to Friday (4)
     hour_start: 8                 # 08:00
     hour_end: 17                  # 17:00
+    
+    # Optional Per-Role / Per-Activity Calendars (overrides global calendar for specific roles/activities)
+    # If not specified for a role/activity, it defaults to the global calendar above.
+    per_role: {}
+
+    # For example:
+    # per_role:
+    #   "Emergency Triage":            # Healthcare activity
+    #     work_days: [0, 1, 2, 3, 4, 5, 6, 7]
+    #     hour_start: 0
+    #     hour_end: 24                 # 24/7 ER shift
+    #   "Level 1 Support":             # Helpdesk role
+    #     work_days: [0, 1, 2, 3, 4]
+    #     hour_start: 7
+    #     hour_end: 20
+
 
 

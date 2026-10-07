@@ -4,15 +4,17 @@ This repository contains the advanced **RIMS+** (Runtime Integration of Machine 
 
 ---
 
-## Repository Structure
+### Repository Structure
 
 ```
 fbk_rims/
 ├── config.yaml                        # Central configuration (tasks, features, paths, models)
+├── requirements.txt                   # Formal project dependencies (PyTorch, SimPy, Hyperopt, PM4Py)
 ├── data/
 │   ├── raw/                           # Raw input event logs (BPI_Challenge_2012.xes)
 │   ├── processed/                     # Processed logs and tabular datasets
-│   │   ├── BPI_2012_W_only.xes        # Filtered event log (work items only)
+│   │   ├── BPI_2012_filtered.xes      # Filtered event log (work items only)
+│   │   ├── BPI_2012_A_only.xes        # Filtered event log (application lifecycle for routing)
 │   │   ├── aligned_BPI_2012.xes       # Repaired & aligned event log against Petri net
 │   │   └── datasets/                  # Feature-engineered tabular datasets
 │   │       ├── dataset_duration_global.csv     # Duration dataset (0-duration filtered)
@@ -21,52 +23,56 @@ fbk_rims/
 │   └── generated/                     # Output logs from simulation runs
 ├── models/                            # Process models and predictive ML models
 │   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
-│   │   ├── discovered_model_split.pnml
-│   │   ├── discovered_model_inductive.pnml
-│   │   ├── split_miner_visual.png
-│   │   └── inductive_miner_visual.png
-│   ├── duration/                      # Activity processing duration models (5 Pillars)
-│   │   ├── global_xgboost/            # Pillar 1: Pooled global gradient boosted trees
-│   │   ├── local_xgboost/             # Pillar 2: Specialized local trees per activity
-│   │   ├── global_tcn/                # Pillar 3: Pooled global sequence TCN network
-│   │   ├── local_tcn/                 # Pillar 4: Specialized local sequence TCN networks
-│   │   ├── hybrid_champion/           # Pillar 5: Dynamic Champion Hybrid dispatch & scalers
+│   │   ├── discovered_model_split.pnml# Split Miner workflow net (W_ activities)
+│   │   └── bpi2012_A_net.pnml         # Lifecycle Petri net for XOR decision mining (A_ activities)
+│   ├── duration/                      # Activity processing duration models (XGBoost, TCN, LSTM)
+│   │   ├── global_xgboost/            # Pooled global gradient boosted trees
+│   │   ├── local_xgboost/             # Specialized local trees per activity
+│   │   ├── global_tcn/                # Pooled global sequence TCN network
+│   │   ├── local_tcn/                 # Specialized local sequence TCN networks
+│   │   ├── global_lstm/               # Pooled global sequence LSTM network
+│   │   ├── local_lstm/                # Specialized local sequence LSTM networks
+│   │   ├── hybrid_champion/           # Dynamic Champion Hybrid dispatch & scalers
 │   │   └── benchmark_report.md        # Duration benchmark leaderboard & activity breakdown
-│   ├── waiting_time/                  # Activity waiting time / queue models (5 Pillars)
+│   ├── waiting_time/                  # Activity waiting time / queue models (XGBoost, TCN, LSTM)
 │   │   ├── hybrid_champion/           # Waiting time champion dispatch & scalers
 │   │   └── benchmark_report.md        # Waiting time benchmark leaderboard
-│   └── routing/                       # XOR split decision classifiers (.joblib, .json)
-├── src/                               # Core pipeline scripts (Steps 00 to 05 + Benchmarking)
+│   └── routing/                       # White-box XOR decision classifiers & routing manifest
+│       ├── routing_decisions.json     # Dynamic decision dispatch manifest
+│       └── p_*.pkl                    # Trained decision tree classifiers per XOR place
+├── src/                               # Core pipeline scripts (Steps 00 to 06 + Benchmarking)
 │   ├── 00_filter_log.py               # Step 0: Raw event log filtering
 │   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split / Inductive)
 │   ├── view_models.py                 # Step 1b: Petri net visualization (.png)
 │   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair
 │   ├── 02b_conformance_checking.py    # Step 2b: Conformance evaluation (Fitness, Precision)
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
-│   ├── 04_train.py                    # Step 4: Multi-architecture training engine
-│   ├── benchmark_models.py            # Step 4b: Automated 5-pillar benchmarking & champion synthesis
-│   ├── 05_train_routing.py            # Step 5: XOR decision mining & routing classifiers
+│   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
+│   ├── benchmark_models.py            # Step 4b: Automated benchmarking & champion synthesis
+│   ├── 05_train_routing.py            # Step 5: White-Box XOR decision mining & Hyperopt tuning
+│   ├── 06_simulate.py                 # Step 6: Discrete-event simulation engine
 │   └── config_loader.py               # Central config loader helper
-└── RIMS/                              # The SimPy-based discrete-event simulation engine
 ```
 
 ---
 
 ## Setup & Prerequisites
 
-Activate the virtual environment:
+Activate the virtual environment and install dependencies:
 
 ```bash
 source venv/bin/activate
+pip install -r requirements.txt
 ```
 
 Key dependencies:
-* `pm4py` : Process discovery, conformance checking, and log alignment
+* `pm4py` : Process discovery, conformance checking, and state-equation alignments
 * `simpy` : Discrete-event simulation engine
-* `torch` : Temporal Convolutional Networks (TCN), LSTM, and Transformer models
-* `xgboost` : Gradient-boosted duration regressors and routing classifiers
-* `scikit-learn` : Preprocessing scalers, metrics, and decision trees
-* `pandas`, `numpy` : Tabular data manipulation and feature engineering
+* `torch` : Neural network architectures (**LSTM**, **TCN**, and **Transformer**)
+* `xgboost` : Gradient-boosted regression engines
+* `scikit-learn` : DecisionTreeClassifier, feature scalers, and evaluation metrics
+* `hyperopt` : Bayesian Tree-structured Parzen Estimator (TPE) optimization
+* `pandas`, `numpy` : High-performance tabular manipulation and state extraction
 * `pyyaml` : Centralized configuration parsing
 
 ---
@@ -75,17 +81,21 @@ Key dependencies:
 
 The entire pipeline is driven by [`config.yaml`](config.yaml):
 
-* **`paths`**: File locations for raw logs, aligned logs, Petri nets, datasets, and models.
-* **`discovery`**: Miner algorithm (`split` or `inductive`) and noise threshold.
-* **`features`**: Context features to extract (WIP, activity WIP, role occupancy, calendar, prefix window length, domain attributes like `RequestedAmount`).
+* **`paths`**: Decoupled, non-conflicting paths for dual-process modeling:
+  * Duration & Waiting Time (`W_` work items): `raw_log`, `aligned_log`, `petri_net`.
+  * XOR Decision Routing (`A_` lifecycle): `routing_raw_log`, `routing_petri_net`, `routing_models_dir`.
+* **`discovery`**: Miner algorithm (`split` or `inductive`) and noise parameters.
+* **`preprocessing`**: Activity prefixes (`process_activity_prefixes`), milestone prefixes (`milestone_prefixes`), and Dutch-to-English translation mapping (`activity_mapping`).
+* **`features`**: Context features to extract (WIP, activity WIP, role occupancy, calendar time, prefix window length, domain attributes like `RequestedAmount`).
 * **`tasks`**: Task-specific data settings:
   * `duration`: Filters 0.0s events (automated pass-throughs) and calculates smoothed sample weights.
   * `waiting_time`: Preserves 0.0s events (immediate resource pickups).
-  * `routing`: Classification engine, minimum samples per XOR place, and quality threshold (Macro F1 $\ge 0.60$).
+  * `routing`: Decision mining settings (`classifier_type`, `max_depth: 21`, `min_samples: 30`, `min_f1_threshold: 0.60`).
 * **`model_strategy`**:
-  * `mode`: Exploration mode (`hybrid`, `global_tournament`, or `single_global`).
-  * `dl`: Neural network hyperparameters (`epochs: 50`, `patience: 10`, `batch_size: 256`, `learning_rate: 0.001`).
-  * `candidates`: List of architectures evaluated for each mode.
+  * `mode`: Training mode (`hybrid`, `global_tournament`, or `single_global`).
+  * `single_global_engine`: Engine for single global training (`xgboost`, `tcn`, `lstm`).
+  * `dl`: PyTorch neural network hyperparameters (`epochs: 50`, `patience: 5`, `batch_size: 256`, `learning_rate: 0.001`).
+  * `candidates`: Candidate architectures evaluated for hybrid champion synthesis and global tournament.
 
 ---
 
@@ -168,16 +178,16 @@ python src/03_dataset_builder.py --task waiting_time
 
 ---
 
-### Step 4: Predictive Modeling & 5-Pillar Benchmark Suite
+### Step 4: Predictive Modeling & Multi-Architecture Benchmark Suite
 
-The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/benchmark_models.py`) support **3 Exploration Modes**:
+The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/benchmark_models.py`) support **3 Exploration Modes** across **both duration and waiting time**:
 
 1. **`hybrid`** *(Recommended)*: 
-   Trains the 4 foundational pillars (`global_xgboost`, `local_xgboost`, `global_tcn`, `local_tcn`) and empirically synthesizes the **Best-of-All-Worlds Hybrid Champion** per activity.
+   Trains global and local candidates across architectures (`xgboost`, `tcn`, `lstm`) and empirically synthesizes the **Best-of-All-Worlds Hybrid Champion** per activity.
 2. **`global_tournament`**: 
-   Trains only competing global engines (e.g. Global XGBoost vs. Global TCN) and crowns the single best global model across the whole process.
+   Trains competing global engines (e.g. Global XGBoost vs. Global TCN vs. Global LSTM) and crowns the single best global model across the whole process.
 3. **`single_global`**: 
-   Fast single-model baseline (e.g. Global XGBoost in 3.4 seconds) with zero benchmark overhead.
+   Fast single-model baseline (e.g. Global XGBoost, Global TCN, or Global LSTM) with zero benchmark overhead.
 
 All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split** (partitioned by `Case_ID` to eliminate cross-event data leakage).
 
@@ -185,16 +195,14 @@ All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split*
 
 > **Note**: `src/benchmark_models.py --run_all` is the automated orchestrator. It calls `src/04_train.py` under the hood for each candidate architecture in sequence, evaluates them on held-out test cases, and synthesizes the champion.
 
-Run the full benchmark suite for duration or waiting time:
-
 ```bash
-# 1. Full 5-Pillar Hybrid Benchmark (Duration)
+# 1. Full Hybrid Benchmark (Duration)
 python src/benchmark_models.py --task duration --mode hybrid --run_all
 
-# 2. Full 5-Pillar Hybrid Benchmark (Waiting Time)
+# 2. Full Hybrid Benchmark (Waiting Time)
 python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
 
-# 3. Fast Global-Only Tournament
+# 3. Fast Global-Only Tournament (XGBoost vs. TCN vs. LSTM)
 python src/benchmark_models.py --task duration --mode global_tournament --run_all
 
 # 4. Re-compare & synthesize champion from existing trained models
@@ -203,20 +211,24 @@ python src/benchmark_models.py --task duration --compare
 
 #### Step-by-Step Training (`src/04_train.py`)
 
-You can also train any specific model architecture individually:
+You can train any specific model architecture individually for either task:
 
 ```bash
-# 1. Global XGBoost
+# Duration Task
 python src/04_train.py --task duration --strategy global --model_type xgboost
-
-# 2. Local XGBoost (models per activity)
 python src/04_train.py --task duration --strategy local --model_type xgboost
-
-# 3. Global TCN (sequence neural net)
 python src/04_train.py --task duration --strategy global --model_type tcn
-
-# 4. Local TCN (sequence neural nets per activity)
 python src/04_train.py --task duration --strategy local --model_type tcn
+python src/04_train.py --task duration --strategy global --model_type lstm
+python src/04_train.py --task duration --strategy local --model_type lstm
+
+# Waiting Time Task
+python src/04_train.py --task waiting_time --strategy global --model_type xgboost
+python src/04_train.py --task waiting_time --strategy local --model_type xgboost
+python src/04_train.py --task waiting_time --strategy global --model_type tcn
+python src/04_train.py --task waiting_time --strategy local --model_type tcn
+python src/04_train.py --task waiting_time --strategy global --model_type lstm
+python src/04_train.py --task waiting_time --strategy local --model_type lstm
 ```
 
 * **Outputs**:
@@ -226,25 +238,36 @@ python src/04_train.py --task duration --strategy local --model_type tcn
 
 ---
 
-### Step 5: XOR Decision Mining & Routing (`src/05_train_routing.py`)
-Discovers all decision point places (places with $\ge 2$ outgoing branches) in the Petri net, extracts decision contexts from the aligned log, and trains routing classifiers:
+### Step 5: White-Box XOR Decision Mining & Routing (`src/05_train_routing.py`)
+Discovers all XOR split places (places with $\ge 2$ outgoing branches) in the lifecycle Petri net (`bpi2012_A_net.pnml`), aligns the event log using PM4Py state-equation $A^*$ alignments to extract exact decision contexts, and trains interpretable decision models with Hyperopt Bayesian optimization:
 
-* If `Macro F1 >= min_f1_threshold` (default 0.60): Saves the machine learning classifier (`.joblib` / `.pkl`).
-* If `Macro F1 < min_f1_threshold`: Falls back automatically to empirical branching probabilities.
+* **White-Box Interpretability**: Uses `DecisionTreeClassifier` with human-readable decision rules (`tree.export_text`) directly printed to stdout.
+* **Hyperparameter Optimization (RIMS Parity)**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 evaluations:
+  * `max_depth`: $1 \dots 21$
+  * `min_samples_split`: $2 \dots 20$
+  * `min_samples_leaf`: $1 \dots 25$
+  * `criterion`: `['gini', 'entropy', 'log_loss']`
+  * `class_weight`: `[None, 'balanced']`
+* **Fallback Strategy**:
+  * If $\text{Macro F1} \ge 0.60$: Saves trained white-box model (`models/routing/{place}.pkl` and `routing_{place}.joblib`).
+  * If $\text{Macro F1} < 0.60$ (or highly skewed classes): Automatically falls back to empirical branching probabilities from the aligned log.
 
 ```bash
-# Standard run (reads config.yaml, trains XGBoost routing classifier)
+# Standard run (reads config.yaml, optimizes DecisionTreeClassifier via Hyperopt)
 python src/05_train_routing.py
 
-# Optional: Use an interpretable Decision Tree
-python src/05_train_routing.py --classifier decision_tree
+# Optional: Run with Random Forest ensemble (5 trees)
+python src/05_train_routing.py --classifier random_forest --n_estimators 5
 
-# Optional: Adjust minimum sample threshold
-python src/05_train_routing.py --min_samples 50
+# Optional: Run with XGBoost
+python src/05_train_routing.py --classifier xgboost
+
+# Override max depth ceiling or sample threshold
+python src/05_train_routing.py --max_depth 21 --min_samples 30 --min_f1_threshold 0.60
 ```
 * **Outputs**:
   * Modern dispatch manifest: `models/routing/routing_decisions.json`
-  * Legacy RIMS compatibility: `models/routing/{project}_decision_points.json` and `{place_id}.pkl`
+  * Trained white-box model binaries: `models/routing/p_*.pkl` and `models/routing/routing_p_*.joblib`
 
 ---
 
@@ -298,35 +321,45 @@ The waiting time pipeline operates symmetrically to duration, but with domain-sp
 
 ## Step 6: Modern Discrete-Event Simulation (`src/06_simulate.py`)
 
-The modernized discrete-event simulation engine in `src/06_simulate.py` replaces the legacy RIMS simulation (`predict_simulator.py` / `token_LSTM.py`) with a full config-driven architecture:
+The modernized discrete-event simulation engine in `src/06_simulate.py` combines the theoretical rigor of Petri net token marking semantics with modern machine learning:
 
-1. **Multi-Skilled Shared Worker Pool**: Accurately tracks all 59 distinct human employees with their dynamic role proficiencies (fixing the legacy 266-worker phantom staff bug).
-2. **Dynamic Champion Inference**: Loads the best-performing models directly from `models/duration/hybrid_champion/dispatch_config.json` and `models/waiting_time/hybrid_champion/dispatch_config.json`.
-3. **Agnostic Hybrid Residual Waiting Time Strategy**: Computes extra waiting delay using the formula $\text{Extra Wait} = \max(0, W_{\text{ML}} - W_{\text{queue}})$, seamlessly reconciling physical resource contention with machine-learned business delays.
-4. **Advanced Business Hours & Weekend Calendar Engine**: Operates between 08:00 – 17:00 (Mon–Fri), automatically pausing and shifting activity executions across nights and weekends.
-5. **XOR Decision Routing**: Uses trained XGBoost classifiers (`models/routing/routing_decisions.json`) to route tokens across Petri net branch choices based on case history and milestone progress.
-6. **Automatic Real vs. Simulated Benchmark Evaluation**: Computes Cycle Time MAE, Wasserstein distance, and activity execution breakdown, writing reports to `data/processed/simulation_report.md`.
+1. **True Petri Net Token Marking Semantics**: Loads any discovered Petri Net (`.pnml`), starts at initial marking $M_0$, resolves enabled transitions dynamically using `pm4py.objects.petri_net.semantics`, and fires transitions until the sink marking is reached.
+2. **Dual Arrival Modes (Replay & Generative)**:
+   - **Replay Mode**: Replays historical case arrival timestamps and loan payloads directly from the aligned event log.
+   - **Generative Mode**: Generates purely synthetic cases from scratch using statistical inter-arrival distributions (exponential, uniform, constant) bounded by office hour arrival calendars (matching original RIMS `InterTriggerTimer`).
+3. **Multi-Skilled Shared Worker Pool**: Accurately tracks all 59 distinct human employees with dynamic role proficiencies, eliminating the phantom worker bug.
+4. **Per-Role & Global Calendar Shift Engine**: Supports global office hours (08:00 – 17:00 Mon–Fri) as well as custom per-role work shift overrides, dynamically pausing and rolling active work over nights and weekends.
+5. **Dynamic Champion Inference**: Dispatches winning models per activity from `models/duration/hybrid_champion/dispatch_config.json` and `models/waiting_time/hybrid_champion/dispatch_config.json`.
+6. **Agnostic Hybrid Residual Waiting Time**: Reconciles physical queue contention with ML predictions: $\text{Extra Wait} = \max(0, W_{\text{ML}} - W_{\text{queue}})$.
+7. **XOR Decision Routing**: Uses trained XGBoost/Decision Tree classifiers (`models/routing/routing_decisions.json`) to route tokens across branch choices.
+8. **Standard IEEE XES Export**: Exports both flat CSV and standard IEEE XES event logs (`simulated_log.xes`), allowing direct import into ProM, Disco, Celonis, and PM4Py.
+9. **Automatic Real vs. Simulated Benchmark Evaluation**: Computes Cycle Time MAE, Wasserstein distance, and activity execution breakdown, writing reports to `data/processed/simulation_report.md`.
 
 ```bash
 # 1. 3-Way Ablation Study (compares Pure Physics vs. Pure ML vs. Hybrid Residual)
 python src/06_simulate.py --compare_modes --cases 2500
 
-# 2. Simulate ALL cases available in the event log (Hybrid Residual mode)
+# 2. Replay historical arrivals (Hybrid Residual mode, 1,000 cases)
+python src/06_simulate.py --cases 1000 --arrival_mode replay
+
+# 3. Purely Generative arrivals from scratch (e.g. 1,000 synthetic cases)
+python src/06_simulate.py --cases 1000 --arrival_mode generative
+
+# 4. Simulate ALL cases available in historical log
 python src/06_simulate.py --all
 
-# 3. Simulate specific number of cases (e.g. 1,000 cases)
-python src/06_simulate.py --cases 1000
-
-# 4. Pure Physics mode (SimPy queue contention only)
+# 5. Pure Physics mode (SimPy queue contention only)
 python src/06_simulate.py --cases 1000 --mode pure_physics
 
-# 5. Pure ML mode (ML predicted wait only)
+# 6. Pure ML mode (ML predicted wait only)
 python src/06_simulate.py --cases 1000 --mode pure_ml
 ```
 
 * **Outputs**:
-  * Simulated event log: `data/processed/simulated_log.csv`
+  * Simulated event log (CSV): `data/processed/simulated_log.csv`
+  * Simulated event log (IEEE XES): `data/processed/simulated_log.xes`
   * Markdown benchmark report: `data/processed/simulation_report.md`
   * Ablation study leaderboard: `data/processed/ablation_report.md`
 
 ---
+
