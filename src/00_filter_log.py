@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 cfg = load_config()
 prep_cfg = cfg.get("preprocessing", {})
 
-input_rel = prep_cfg.get("input_log", "data/raw/BPI_Challenge_2012.xes")
+input_rel = prep_cfg.get("input_log", "data/raw/BPI_Challenge_2012.xes") # data/raw/BPI_Challenge_2012.xes is just a fallback
 INPUT_LOG = os.path.join(PROJECT_ROOT, input_rel)
 
 output_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_W_only.xes")

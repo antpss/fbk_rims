@@ -252,25 +252,32 @@ def main():
     window_size = cfg.get("features", {}).get("prefix_window_size", 10)
     case_attrs_cfg = cfg.get("features", {}).get("case_attributes", [])
 
-    # Resolve PNML and Log paths
+    # Resolve PNML and Log paths (CLI override > config.yaml routing keys > config.yaml base workflow keys)
+    paths_cfg = cfg.get("paths", {})
+
     if args.pnml:
         pnml_path = args.pnml if os.path.isabs(args.pnml) else os.path.join(PROJECT_ROOT, args.pnml)
     else:
-        # Check standard paths: discovered PNML or RIMS bpi2012.pnml
-        std_a_pnml = os.path.join(PROJECT_ROOT, "models/petri_nets/bpi2012_A_net.pnml")
-        if os.path.exists(std_a_pnml):
-            pnml_path = std_a_pnml
-        else:
-            pnml_path = os.path.join(PROJECT_ROOT, cfg["paths"]["petri_net"])
+        # Priority: paths.routing_petri_net -> paths.petri_net
+        raw_pnml = paths_cfg.get("routing_petri_net") or paths_cfg.get("petri_net")
+        if not raw_pnml:
+            raise ValueError("No Petri net specified in CLI (--pnml) or config.yaml ('routing_petri_net' / 'petri_net').")
+        pnml_path = raw_pnml if os.path.isabs(raw_pnml) else os.path.join(PROJECT_ROOT, raw_pnml)
 
     if args.log:
         log_path = args.log if os.path.isabs(args.log) else os.path.join(PROJECT_ROOT, args.log)
     else:
-        std_a_log = os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_A_only.xes")
-        if os.path.exists(std_a_log):
-            log_path = std_a_log
-        else:
-            log_path = os.path.join(PROJECT_ROOT, cfg["paths"]["aligned_log"])
+        # Priority: paths.routing_raw_log -> paths.aligned_log
+        raw_log = paths_cfg.get("routing_raw_log") or paths_cfg.get("aligned_log")
+        if not raw_log:
+            raise ValueError("No event log specified in CLI (--log) or config.yaml ('routing_raw_log' / 'aligned_log').")
+        log_path = raw_log if os.path.isabs(raw_log) else os.path.join(PROJECT_ROOT, raw_log)
+
+    # Fail fast if paths do not exist
+    if not os.path.exists(pnml_path):
+        raise FileNotFoundError(f"Petri net file not found at: {pnml_path}")
+    if not os.path.exists(log_path):
+        raise FileNotFoundError(f"Event log file not found at: {log_path}")
 
     print("=" * 85)
     print("  RIMS+ WHITE-BOX XOR DECISION MINING & ROUTING CLASSIFIER")
