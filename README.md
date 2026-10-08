@@ -25,6 +25,8 @@ fbk_rims/
 │   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
 │   │   ├── discovered_model_split.pnml# Split Miner workflow net (W_ activities)
 │   │   └── bpi2012_A_net.pnml         # Lifecycle Petri net for XOR decision mining (A_ activities)
+│   ├── delays/                        # Causal external delays and worker refractory latencies
+│   │   └── delay_manifest.json        # Machine-readable delay manifest with KS-fitted distributions
 │   ├── duration/                      # Activity processing duration models (XGBoost, TCN, LSTM)
 │   │   ├── global_xgboost/            # Pooled global gradient boosted trees
 │   │   ├── local_xgboost/             # Specialized local trees per activity
@@ -46,11 +48,20 @@ fbk_rims/
 │   ├── view_models.py                 # Step 1b: Petri net visualization (.png)
 │   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair
 │   ├── 02b_conformance_checking.py    # Step 2b: Conformance evaluation (Fitness, Precision)
+│   ├── 02c_discover_delays.py         # Step 2c: Causal external delays & worker latency discovery
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
 │   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
 │   ├── benchmark_models.py            # Step 4b: Automated benchmarking & champion synthesis
 │   ├── 05_train_routing.py            # Step 5: White-Box XOR decision mining & Hyperopt tuning
-│   ├── 06_simulate.py                 # Step 6: Discrete-event simulation engine
+│   ├── 06_simulate.py                 # Step 6: Discrete-event simulation CLI runner
+│   ├── simulator/                     # Modular OOP Simulation Package
+│   │   ├── __init__.py                # Package exports
+│   │   ├── calendar.py                # CalendarManager (working shifts, night/weekend rollover)
+│   │   ├── process.py                 # SimulationProcess & SharedWorkerPool (59 human agents)
+│   │   ├── token.py                   # Token (PM4Py Petri net marking semantics, XOR branching)
+│   │   ├── predictor.py               # ChampionPredictor (Runtime XGBoost, TCN, LSTM inference)
+│   │   ├── arrivals.py                # ArrivalGenerator (Historical replay & Generative arrivals)
+│   │   └── metrics.py                 # SimulationEvaluator (IEEE XES/CSV export, Wasserstein MAE)
 │   └── config_loader.py               # Central config loader helper
 ```
 
@@ -101,16 +112,20 @@ The entire pipeline is driven by [`config.yaml`](config.yaml):
 
 ## End-to-End Operational Pipeline
 
-All commands should be executed from the project root directory.
+![RIMS+ Pipeline Flowchart](docs/pipeline_flowchart.svg)
+
+All commands should be executed from the project root directory with your virtual environment active (`source venv/bin/activate`).
 
 ### Step 0: Log Preprocessing & Filtering (`src/00_filter_log.py`)
-Filters the raw BPI Challenge 2012 log to keep human work items (`W_` events) and standardizes lifecycle transitions.
+Filters the raw BPI Challenge 2012 log, translates historical Dutch activity names to standard English, and exports dual logs:
+* Operational human work items (`W_` events) with durations and resources.
+* Application lifecycle milestones (`A_` events) for clean control-flow discovery.
 
 ```bash
 python src/00_filter_log.py
 ```
 * **Input**: `data/raw/BPI_Challenge_2012.xes`
-* **Output**: `data/processed/BPI_2012_W_only.xes`
+* **Outputs**: `data/processed/BPI_2012_filtered.xes` and `data/processed/BPI_2012_A_only.xes`
 
 ---
 
@@ -146,6 +161,17 @@ To evaluate conformance (Fitness, Precision, F1-Score):
 ```bash
 python src/02b_conformance_checking.py --miner split
 ```
+
+---
+
+### Step 2c: Discover Causal Delays & Worker Cooldowns (`src/02c_discover_delays.py`)
+Discovers uncoupled external delays (postal/client response transit) and human refractory inter-ticket latencies, fitting continuous Kolmogorov-Smirnov distributions (Lognormal, Gamma, Exponential).
+
+```bash
+python src/02c_discover_delays.py
+```
+* **Input**: `data/processed/aligned_BPI_2012.xes`
+* **Output**: `models/delays/delay_manifest.json`
 
 ---
 
@@ -319,21 +345,17 @@ The waiting time pipeline operates symmetrically to duration, but with domain-sp
 
 ---
 
-## Step 6: Modern Discrete-Event Simulation (`src/06_simulate.py`)
+## Step 6: Modern Modular Discrete-Event Simulation (`src/06_simulate.py` & `src/simulator/`)
 
-The modernized discrete-event simulation engine in `src/06_simulate.py` combines the theoretical rigor of Petri net token marking semantics with modern machine learning:
+The discrete-event simulation engine is structured into the clean, modular Object-Oriented package `src/simulator/` orchestrated by the slim CLI runner `src/06_simulate.py`:
 
-1. **True Petri Net Token Marking Semantics**: Loads any discovered Petri Net (`.pnml`), starts at initial marking $M_0$, resolves enabled transitions dynamically using `pm4py.objects.petri_net.semantics`, and fires transitions until the sink marking is reached.
-2. **Dual Arrival Modes (Replay & Generative)**:
-   - **Replay Mode**: Replays historical case arrival timestamps and loan payloads directly from the aligned event log.
-   - **Generative Mode**: Generates purely synthetic cases from scratch using statistical inter-arrival distributions (exponential, uniform, constant) bounded by office hour arrival calendars (matching original RIMS `InterTriggerTimer`).
-3. **Multi-Skilled Shared Worker Pool**: Accurately tracks all 59 distinct human employees with dynamic role proficiencies, eliminating the phantom worker bug.
-4. **Per-Role & Global Calendar Shift Engine**: Supports global office hours (08:00 – 17:00 Mon–Fri) as well as custom per-role work shift overrides, dynamically pausing and rolling active work over nights and weekends.
-5. **Dynamic Champion Inference**: Dispatches winning models per activity from `models/duration/hybrid_champion/dispatch_config.json` and `models/waiting_time/hybrid_champion/dispatch_config.json`.
-6. **Agnostic Hybrid Residual Waiting Time**: Reconciles physical queue contention with ML predictions: $\text{Extra Wait} = \max(0, W_{\text{ML}} - W_{\text{queue}})$.
-7. **XOR Decision Routing**: Uses trained XGBoost/Decision Tree classifiers (`models/routing/routing_decisions.json`) to route tokens across branch choices.
-8. **Standard IEEE XES Export**: Exports both flat CSV and standard IEEE XES event logs (`simulated_log.xes`), allowing direct import into ProM, Disco, Celonis, and PM4Py.
-9. **Automatic Real vs. Simulated Benchmark Evaluation**: Computes Cycle Time MAE, Wasserstein distance, and activity execution breakdown, writing reports to `data/processed/simulation_report.md`.
+* **`Token` (`src/simulator/token.py`)**: Models each process case traversing the workflow using formal PM4Py token marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$), resolving XOR branching via white-box decision trees.
+* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct multi-skilled human resources (eliminating the legacy phantom worker bug) with Kolmogorov-Smirnov continuous latency cooldowns.
+* **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and PyTorch LSTM models from `dispatch_config.json`.
+* **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (08:00 – 17:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
+* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes` or synthetic generative distributions (exponential, uniform, constant).
+* **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`simulated_log.csv`) and IEEE XES (`simulated_log.xes`), and evaluates cycle time MAE, RMSE, and 1D Wasserstein distance against real ground truth.
+* **Hybrid Residual Waiting Strategy**: Eliminates the legacy double-waiting bug by acquiring workers in SimPy queue contention first ($W_{\text{queue}}$) and yielding only the uncoupled residual $\max(0, W_{\text{ML}} - W_{\text{queue}})$.
 
 ```bash
 # 1. 3-Way Ablation Study (compares Pure Physics vs. Pure ML vs. Hybrid Residual)
