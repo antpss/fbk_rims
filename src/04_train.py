@@ -218,7 +218,7 @@ def main():
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Target task to train")
     parser.add_argument("--strategy", type=str, default=None, choices=["global", "local", "hybrid"], help="Override strategy (global, local, hybrid)")
-    parser.add_argument("--model_type", type=str, default=None, choices=["xgboost", "lstm", "tcn", "transformer"], help="Override model type")
+    parser.add_argument("--model_type", "--engine", dest="model_type", type=str, default=None, choices=["xgboost", "lstm", "tcn", "transformer"], help="Override model type")
     parser.add_argument("--unweighted", action="store_true", help="Disable importance sample weights")
     args = parser.parse_args()
 

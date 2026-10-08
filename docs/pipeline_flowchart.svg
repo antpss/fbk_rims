@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 883.0013333333333 1747.9" width="883.0013333333333" height="1747.9" style="--bg:#1F1F1F;--fg:#CCCCCC;--line:#CCCCCC;--accent:#0078D4;--muted:#CCCCCC;--surface:#181818;--border:#CCCCCC;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Phase_1_Process_Discovery__Conformance" data-label="Phase 1: Process Discovery &amp; Conformance">
+  <rect x="231.06433333333334" y="317.90000000000003" width="611.9369999999999" height="454.00000000000006" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="231.06433333333334" y="317.90000000000003" width="611.9369999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="243.06433333333334" y="331.90000000000003" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Phase 1: Process Discovery &amp; Conformance</text>
+</g>
+<g class="subgraph" data-id="Phase_2_Feature_Engineering__Time_Models" data-label="Phase 2: Feature Engineering &amp; Time Models">
+  <rect x="40" y="900.2" width="396.58099999999996" height="470.90000000000003" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="900.2" width="396.58099999999996" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="914.2" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Phase 2: Feature Engineering &amp; Time Models</text>
+</g>
+<g class="subgraph" data-id="Phase_3_Decision_Mining__Routing" data-label="Phase 3: Decision Mining &amp; Routing">
+  <rect x="464.5809999999999" y="1233.3000000000002" width="202.143" height="113.80000000000001" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="464.5809999999999" y="1233.3000000000002" width="202.143" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="476.5809999999999" y="1247.3000000000002" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Phase 3: Decision Mining &amp; Routing</text>
+</g>
+<g class="subgraph" data-id="Phase_4_DiscreteEvent_Simulation_Engine" data-label="Phase 4: Discrete-Event Simulation Engine">
+  <rect x="400.57108333333326" y="1475.4" width="322.926" height="232.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="400.57108333333326" y="1475.4" width="322.926" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="412.57108333333326" y="1489.4" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Phase 4: Discrete-Event Simulation Engine</text>
+</g>
+<polyline class="edge" data-from="Raw" data-to="S00" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="420.86030000000005,93.80000000000001 420.86030000000005,141.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S00" data-to="S02" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Filtered Process Log" points="390.03313333333347,195.60000000000002 390.03313333333347,231.60000000000002 327.9485666666667,231.60000000000002 327.9485666666667,299.90000000000003 319.33966666666674,299.90000000000003 319.33966666666674,532" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S00" data-to="S01" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Lifecycle Log (A_)" points="451.68746666666675,195.60000000000002 451.68746666666675,361.90000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S02" data-to="S03" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Aligned Log" points="290.4295333333333,585.8000000000001 290.4295333333333,597.8000000000001 262.7717333333334,597.8000000000001 262.7717333333334,813.9000000000001 197.75799999999992,813.9000000000001 197.75799999999998,948.4250000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S04b" data-to="SimEngine" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="dispatch_config.json" points="197.75799999999998,1343.1000000000001 197.75799999999998,1457.4 535.9855833333332,1457.4 535.9855833333332,1515.1750000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S01" data-to="S05" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Petri Net" points="485.60213333333337,415.70000000000005 485.60213333333337,427.70000000000005 548.0463333333333,427.70000000000005 548.0463333333333,1147.0000000000002 600.4425,1147.0000000000002 600.4425,1215.3000000000002 594.0096666666666,1215.3000000000002 594.0096666666666,1289.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S02" data-to="S05" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Aligned Log" points="333.79473333333334,585.8000000000001 333.79473333333334,609.8000000000001 290.95433333333335,609.8000000000001 290.95433333333335,882.2 530.8625,882.2 530.8625,1215.3000000000002 537.2953333333332,1215.3000000000002 537.2953333333332,1289.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S05" data-to="SimEngine" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="routing_decisions.json + .pkl" points="565.6524999999999,1343.1000000000001 565.6524999999999,1457.4 562.0340833333332,1457.4 562.0340833333332,1515.1750000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S02c" data-to="SimEngine" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="delay_manifest.json" points="693.0238333333333,755.9000000000001 693.0238333333333,1389.1000000000001 746.2239999999999,1389.1000000000001 746.2239999999999,1457.4 588.0825833333332,1457.4 588.0825833333332,1515.1750000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S01" data-to="S02" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Petri Net .pnml" points="417.7728000000001,415.70000000000005 417.7728000000001,427.70000000000005 394.89200000000005,427.70000000000005 394.89200000000005,496.00000000000006 391.615,496.00000000000006 391.615,532" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S02" data-to="S02b" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Aligned Log" points="377.15993333333336,585.8000000000001 377.15993333333336,609.8000000000001 420.00033333333334,609.8000000000001 420.00033333333334,702.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S02" data-to="S02c" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Aligned Log" points="420.5251333333333,585.8000000000001 420.5251333333333,597.8000000000001 693.0238333333333,597.8000000000001 693.0238333333333,702.1000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S03" data-to="S04" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Duration &amp; Wait Datasets" points="197.75799999999998,1002.225 197.75799999999998,1114.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="S04" data-to="S04b" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Model Checkpoints" points="197.75799999999998,1185 197.75799999999998,1289.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SimEngine" data-to="Output" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="562.0340833333332,1552.0750000000003 562.0340833333332,1604.3000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="S00" data-to="S02" data-label="Filtered Process Log">
+  <rect x="268.4485666666667" y="238.60000000000002" width="118.63000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="327.7635666666667" y="253.75000000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Filtered Process Log</text>
+</g>
+<g class="edge-label" data-from="S00" data-to="S01" data-label="Lifecycle Log (A_)">
+  <rect x="399.68746666666675" y="238.60000000000002" width="103.18600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="451.28046666666677" y="253.75000000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Lifecycle Log (A_)</text>
+</g>
+<g class="edge-label" data-from="S02" data-to="S03" data-label="Aligned Log">
+  <rect x="160.25799999999992" y="820.9000000000001" width="74.08000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="197.29799999999994" y="836.0500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Aligned Log</text>
+</g>
+<g class="edge-label" data-from="S04b" data-to="SimEngine" data-label="dispatch_config.json">
+  <rect x="139.75799999999998" y="1420.1000000000001" width="115.06600000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="197.291" y="1435.2500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">dispatch_config.json</text>
+</g>
+<g class="edge-label" data-from="S01" data-to="S05" data-label="Petri Net">
+  <rect x="571.4425" y="1154.0000000000002" width="57.44800000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="600.1665" y="1169.1500000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Petri Net</text>
+</g>
+<g class="edge-label" data-from="S02" data-to="S05" data-label="Aligned Log">
+  <rect x="493.3624999999999" y="1154.0000000000002" width="74.08000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="530.4024999999999" y="1169.1500000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Aligned Log</text>
+</g>
+<g class="edge-label" data-from="S05" data-to="SimEngine" data-label="routing_decisions.json + .pkl">
+  <rect x="489.6524999999999" y="1396.1000000000001" width="151.89400000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="565.5994999999999" y="1411.2500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">routing_decisions.json + .pkl</text>
+</g>
+<g class="edge-label" data-from="S02c" data-to="SimEngine" data-label="delay_manifest.json">
+  <rect x="690.7239999999999" y="1396.1000000000001" width="110.31400000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="745.881" y="1411.2500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">delay_manifest.json</text>
+</g>
+<g class="edge-label" data-from="S01" data-to="S02" data-label="Petri Net .pnml">
+  <rect x="353.39200000000005" y="458.70000000000005" width="82.99000000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="394.88700000000006" y="473.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Petri Net .pnml</text>
+</g>
+<g class="edge-label" data-from="S02" data-to="S02b" data-label="Aligned Log">
+  <rect x="382.50033333333334" y="628.8000000000001" width="74.08000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="419.54033333333336" y="643.95" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Aligned Log</text>
+</g>
+<g class="edge-label" data-from="S02" data-to="S02c" data-label="Aligned Log">
+  <rect x="655.5238333333334" y="628.8000000000001" width="74.08000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="692.5638333333334" y="643.95" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Aligned Log</text>
+</g>
+<g class="edge-label" data-from="S03" data-to="S04" data-label="Duration &amp; Wait Datasets">
+  <rect x="132.25799999999998" y="1041" width="130.51000000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="197.51299999999998" y="1056.15" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Duration &amp; Wait Datasets</text>
+</g>
+<g class="edge-label" data-from="S04" data-to="S04b" data-label="Model Checkpoints">
+  <rect x="143.75799999999998" y="1228" width="107.93800000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="197.72699999999998" y="1243.15" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Model Checkpoints</text>
+</g>
+<g class="node" data-id="Raw" data-label="Raw XES Event Log&#10;(BPI_Challenge_2012.xes)" data-shape="rectangle">
+  <rect x="323.5623000000001" y="40" width="194.59599999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="420.8603000000001" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="420.8603000000001" dy="-3.9000000000000012">Raw XES Event Log</tspan><tspan x="420.8603000000001" dy="16.900000000000002">(BPI_Challenge_2012.xes)</tspan></text>
+</g>
+<g class="node" data-id="S00" data-label="Step 00: Log Filter &amp; Split&#10;(00_filter_log.py)" data-shape="rectangle">
+  <rect x="328.37880000000007" y="141.8" width="184.96299999999997" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="420.86030000000005" y="168.70000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="420.86030000000005" dy="-3.9000000000000012">Step 00: Log Filter &amp; Split</tspan><tspan x="420.86030000000005" dy="16.900000000000002">(00_filter_log.py)</tspan></text>
+</g>
+<g class="node" data-id="S02" data-label="Step 02: Alignment &amp; Repair&#10;(02_align_and_repair_log.py)" data-shape="rectangle">
+  <rect x="247.06433333333334" y="532" width="216.82599999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="355.47733333333334" y="558.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="355.47733333333334" dy="-3.9000000000000012">Step 02: Alignment &amp; Repair</tspan><tspan x="355.47733333333334" dy="16.900000000000002">(02_align_and_repair_log.py)</tspan></text>
+</g>
+<g class="node" data-id="S01" data-label="Step 01: Process Discovery&#10;(01_process_discovery.py)" data-shape="rectangle">
+  <rect x="349.9434666666667" y="361.90000000000003" width="203.488" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="451.68746666666675" y="388.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="451.68746666666675" dy="-3.9000000000000012">Step 01: Process Discovery</tspan><tspan x="451.68746666666675" dy="16.900000000000002">(01_process_discovery.py)</tspan></text>
+</g>
+<g class="node" data-id="S02b" data-label="Step 02b: Conformance Check&#10;(02b_conformance_checking.py)" data-shape="rectangle">
+  <rect x="301.95433333333334" y="702.1000000000001" width="236.09199999999996" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="420.00033333333334" y="729.0000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="420.00033333333334" dy="-3.9000000000000012">Step 02b: Conformance Check</tspan><tspan x="420.00033333333334" dy="16.900000000000002">(02b_conformance_checking.py)</tspan></text>
+</g>
+<g class="node" data-id="S02c" data-label="Step 02c: Discover Delays &amp; Latencies&#10;(02c_discover_delays.py)" data-shape="rectangle">
+  <rect x="559.0463333333333" y="702.1000000000001" width="267.9549999999999" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="693.0238333333333" y="729.0000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="693.0238333333333" dy="-3.9000000000000012">Step 02c: Discover Delays &amp; Latencies</tspan><tspan x="693.0238333333333" dy="16.900000000000002">(02c_discover_delays.py)</tspan></text>
+</g>
+<g class="node" data-id="S03" data-label="Step 03: Dataset Builder&#10;(03_dataset_builder.py)" data-shape="rectangle">
+  <rect x="107.12899999999999" y="948.4250000000001" width="181.25799999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="197.75799999999998" y="975.325" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="197.75799999999998" dy="-3.9000000000000012">Step 03: Dataset Builder</tspan><tspan x="197.75799999999998" dy="16.900000000000002">(03_dataset_builder.py)</tspan></text>
+</g>
+<g class="node" data-id="S04" data-label="&quot;Step 04: Train Models&#10;(04_train.py)&#10;[XGBoost, PyTorch TCN, PyTorch LSTM" data-shape="rectangle">
+  <rect x="56" y="1114.3000000000002" width="283.51599999999996" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="197.75799999999998" y="1149.65" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="197.75799999999998" dy="-12.350000000000001">&quot;Step 04: Train Models</tspan><tspan x="197.75799999999998" dy="16.900000000000002">(04_train.py)</tspan><tspan x="197.75799999999998" dy="16.900000000000002">[XGBoost, PyTorch TCN, PyTorch LSTM</tspan></text>
+</g>
+<g class="node" data-id="S04b" data-label="Step 04b: Benchmark Champions&#10;(benchmark_models.py)" data-shape="rectangle">
+  <rect x="80.8235" y="1289.3000000000002" width="233.86899999999997" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="197.75799999999998" y="1316.2000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="197.75799999999998" dy="-3.9000000000000012">Step 04b: Benchmark Champions</tspan><tspan x="197.75799999999998" dy="16.900000000000002">(benchmark_models.py)</tspan></text>
+</g>
+<g class="node" data-id="SimEngine" data-label="SimEngine" data-shape="rectangle">
+  <rect x="316.38699999999994" y="948.4250000000001" width="104.194" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="368.4839999999999" y="966.8750000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">SimEngine</text>
+</g>
+<g class="node" data-id="S05" data-label="Step 05: Train Routing&#10;(05_train_routing.py)" data-shape="rectangle">
+  <rect x="480.5809999999999" y="1289.3000000000002" width="170.143" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="565.6524999999999" y="1316.2000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="565.6524999999999" dy="-3.9000000000000012">Step 05: Train Routing</tspan><tspan x="565.6524999999999" dy="16.900000000000002">(05_train_routing.py)</tspan></text>
+</g>
+<g class="node" data-id="SimEngine" data-label="SimEngine" data-shape="rectangle">
+  <rect x="509.93708333333325" y="1519.4" width="104.194" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="562.0340833333332" y="1537.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">SimEngine</text>
+</g>
+<g class="node" data-id="Output" data-label="Outputs:&#10;- simulated_log.csv&#10;- simulated_log.xes (IEEE standard)&#10;- simulation_report.md (Wasserstein / MAE)" data-shape="rectangle">
+  <rect x="416.57108333333326" y="1604.3000000000002" width="290.926" height="87.60000000000001" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="562.0340833333332" y="1648.1000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="562.0340833333332" dy="-20.8">Outputs:</tspan><tspan x="562.0340833333332" dy="16.900000000000002">- simulated_log.csv</tspan><tspan x="562.0340833333332" dy="16.900000000000002">- simulated_log.xes (IEEE standard)</tspan><tspan x="562.0340833333332" dy="16.900000000000002">- simulation_report.md (Wasserstein / MAE)</tspan></text>
+</g>
+</svg>
