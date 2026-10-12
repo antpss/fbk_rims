@@ -13,8 +13,11 @@ import os
 import sys
 import json
 import random
+import logging
 import importlib
 from datetime import datetime
+
+logger = logging.getLogger("rims_predictor")
 
 import numpy as np
 import pandas as pd
@@ -26,6 +29,11 @@ try:
     from config_loader import PROJECT_ROOT
 except ImportError:
     from src.config_loader import PROJECT_ROOT
+
+try:
+    from features import FeatureManager, FeatureContext
+except ImportError:
+    from src.features import FeatureManager, FeatureContext
 
 # Dynamic import of 04_train architectures
 src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,14 +60,28 @@ class ChampionPredictor:
         self.target_acts = cfg.get("target_activities", [])
         self.max_seq_len = cfg.get("features", {}).get("prefix_window_size", 10)
 
-        # 1. Load Duration Champions
-        dur_dir = os.path.join(self.models_dir, "duration", "hybrid_champion")
+        # 1. Load Duration Models (hybrid_champion or active candidate directory)
+        dur_base = os.path.join(self.models_dir, "duration")
+        dur_dir = os.path.join(dur_base, "hybrid_champion")
+        if not os.path.exists(dur_dir) and os.path.exists(dur_base):
+            for cand in sorted(os.listdir(dur_base)):
+                alt = os.path.join(dur_base, cand)
+                if os.path.isdir(alt) and os.path.exists(os.path.join(alt, "dispatch_config.json")):
+                    dur_dir = alt
+                    break
         with open(os.path.join(dur_dir, "dispatch_config.json")) as f:
             self.dur_dispatch = json.load(f)["dispatch"]
         self.dur_models = self._load_model_suite(dur_dir, self.dur_dispatch)
 
-        # 2. Load Waiting Time Champions
-        wait_dir = os.path.join(self.models_dir, "waiting_time", "hybrid_champion")
+        # 2. Load Waiting Time Models (hybrid_champion or active candidate directory)
+        wait_base = os.path.join(self.models_dir, "waiting_time")
+        wait_dir = os.path.join(wait_base, "hybrid_champion")
+        if not os.path.exists(wait_dir) and os.path.exists(wait_base):
+            for cand in sorted(os.listdir(wait_base)):
+                alt = os.path.join(wait_base, cand)
+                if os.path.isdir(alt) and os.path.exists(os.path.join(alt, "dispatch_config.json")):
+                    wait_dir = alt
+                    break
         with open(os.path.join(wait_dir, "dispatch_config.json")) as f:
             self.wait_dispatch = json.load(f)["dispatch"]
         self.wait_models = self._load_model_suite(wait_dir, self.wait_dispatch)
@@ -71,17 +93,40 @@ class ChampionPredictor:
             self.routing_manifest = json.load(f)["decision_points"]
         self.routing_models = {}
         for p_id, p_info in self.routing_manifest.items():
-            if p_info.get("strategy") == "machine_learning" and p_info.get("model_file"):
-                m_path = os.path.join(routing_dir, p_info["model_file"])
-                self.routing_models[p_id] = joblib.load(m_path)
+            if p_info.get("strategy") == "machine_learning":
+                m_file = p_info.get("model_file") or p_info.get("legacy_pkl_file")
+                if m_file:
+                    m_path = os.path.join(routing_dir, m_file)
+                    if os.path.exists(m_path):
+                        try:
+                            self.routing_models[p_id] = joblib.load(m_path)
+                        except Exception as e_job:
+                            try:
+                                import pickle
+                                with open(m_path, "rb") as pf:
+                                    self.routing_models[p_id] = pickle.load(pf)
+                            except Exception as e_pkl:
+                                logger.warning(
+                                    f"Failed to load routing model for place '{p_id}' from '{m_path}'. "
+                                    f"joblib error: {e_job}; pickle error: {e_pkl}. Falling back to empirical probabilities."
+                                )
+                    else:
+                        logger.warning(
+                            f"Routing model file '{m_file}' for place '{p_id}' not found at '{m_path}'."
+                        )
 
         # Cache feature columns from training dataset
+        self.feature_mgr = FeatureManager(cfg)
         dur_ds_path = os.path.join(cfg["paths"]["output_base_dir"], cfg["tasks"]["duration"]["output_file"])
         sample_df = pd.read_csv(dur_ds_path, nrows=5)
-        self.feature_cols = [c for c in sample_df.columns if c not in [
+        ignored = {
             "Case_ID", "case_id", "Prefix", "Duration_Seconds", "Wait_Time_Seconds",
-            "Target_Duration", "Resource_ID", "Sample_Weight", "Target_Activity"
-        ]]
+            "Target_Duration", "Sample_Weight", "Target_Activity"
+        }
+        if not self.feature_mgr.is_feature_active("resource_id"):
+            ignored.add("Resource_ID")
+        self.feature_cols = [c for c in sample_df.columns if c not in ignored]
+        self.all_milestones = [c.replace("Milestone_", "") for c in self.feature_cols if c.startswith("Milestone_")]
 
     def _load_model_suite(self, base_dir, dispatch_dict):
         suite = {}
@@ -155,46 +200,64 @@ class ChampionPredictor:
         return suite
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
-                            milestones_seen, offer_count, has_offer, role_oc_array):
-        feats = {
-            "Prev_Proc_Time": 0.0,
-            "WIP": float(wip),
-            "AC_WIP": float(ac_wip.get(target_act, 0)),
-            "Daytime": (dt.hour * 3600 + dt.minute * 60 + dt.second) / 86400.0,
-            "Offer_Count": float(offer_count),
-            "Has_Offer": float(has_offer),
-            "RequestedAmount": float(requested_amount)
-        }
-        for d in range(7):
-            feats[f"Weekday_{d}"] = 1.0 if dt.weekday() == d else 0.0
-        for i, val in enumerate(role_oc_array):
-            feats[f"Role_{i}_OC"] = float(val)
+                            milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0):
+        ctx = FeatureContext(
+            target_act=target_act,
+            prefix=prefix,
+            wip=wip,
+            ac_wip=ac_wip,
+            dt=dt,
+            requested_amount=requested_amount,
+            milestones_seen=milestones_seen,
+            offer_count=offer_count,
+            has_offer=has_offer,
+            role_oc=role_oc_array,
+            worker_id=worker_id or "UNKNOWN",
+            all_milestones=self.all_milestones,
+            prev_dur=float(prev_dur),
+        )
+        feats = self.feature_mgr.build_features(ctx)
+
+        # Ensure universal context variables are available in feats dictionary
+        feats.setdefault("Offer_Count", float(offer_count))
+        feats.setdefault("Has_Offer", float(has_offer))
+        feats.setdefault("RequestedAmount", float(requested_amount))
+        feats["Prev_Proc_Time"] = float(prev_dur)
+        if worker_id:
+            feats.setdefault("Resource_ID", str(worker_id))
 
         for col in self.feature_cols:
-            if col.startswith("Milestone_"):
-                m_name = col.replace("Milestone_", "")
-                feats[col] = 1.0 if m_name in milestones_seen else 0.0
-            elif col not in feats:
-                feats[col] = 0.0
+            if col not in feats:
+                if col.startswith("Milestone_"):
+                    m_name = col.replace("Milestone_", "")
+                    feats[col] = 1.0 if m_name in milestones_seen else 0.0
+                elif col == "Resource_ID":
+                    feats[col] = str(worker_id) if worker_id else "UNKNOWN"
+                elif col == "Prev_Proc_Time":
+                    feats[col] = float(prev_dur)
+                else:
+                    feats[col] = 0.0
         return feats
 
     def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount,
-                         milestones_seen, offer_count, has_offer, role_oc_array):
+                         milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0):
         """Predicts activity execution duration in seconds using champion model."""
         return self._predict_time(self.dur_models, self.dur_dispatch, activity, prefix,
                                   wip, ac_wip, dt, requested_amount, milestones_seen,
-                                  offer_count, has_offer, role_oc_array, default_fallback=600.0)
+                                  offer_count, has_offer, role_oc_array, default_fallback=600.0,
+                                  worker_id=worker_id, prev_dur=prev_dur)
 
     def predict_waiting(self, activity, prefix, wip, ac_wip, dt, requested_amount,
-                        milestones_seen, offer_count, has_offer, role_oc_array):
+                        milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0):
         """Predicts activity waiting time in seconds using champion model."""
         return self._predict_time(self.wait_models, self.wait_dispatch, activity, prefix,
                                   wip, ac_wip, dt, requested_amount, milestones_seen,
-                                  offer_count, has_offer, role_oc_array, default_fallback=3600.0)
+                                  offer_count, has_offer, role_oc_array, default_fallback=3600.0,
+                                  worker_id=worker_id, prev_dur=prev_dur)
 
     def _predict_time(self, suite, dispatch_table, activity, prefix, wip, ac_wip, dt,
                       requested_amount, milestones_seen, offer_count, has_offer,
-                      role_oc_array, default_fallback):
+                      role_oc_array, default_fallback, worker_id=None, prev_dur=0.0):
         entry = suite["models"].get(activity) or suite["models"].get("__default__")
         if not entry:
             return default_fallback
@@ -202,7 +265,8 @@ class ChampionPredictor:
         m_type = entry["type"]
         model = entry["model"]
         f_dict = self._build_feature_dict(activity, prefix, wip, ac_wip, dt, requested_amount,
-                                          milestones_seen, offer_count, has_offer, role_oc_array)
+                                          milestones_seen, offer_count, has_offer, role_oc_array,
+                                          worker_id=worker_id, prev_dur=prev_dur)
 
         if m_type == "xgboost":
             p_features = prefix[-self.max_seq_len:] if len(prefix) > self.max_seq_len else prefix + ["NONE"] * (self.max_seq_len - len(prefix))
@@ -210,12 +274,53 @@ class ChampionPredictor:
             for i, p_act in enumerate(p_features):
                 row_dict[f"Act_Minus_{self.max_seq_len - i}"] = p_act
             row_dict["Target_Activity"] = activity
-            for c in self.feature_cols:
-                row_dict[c] = f_dict[c]
+            for k, v in f_dict.items():
+                row_dict[k] = v
 
-            row_df = pd.DataFrame([row_dict])
+            # Determine expected columns from model booster if available
+            expected_cols = None
+            if hasattr(model, "feature_names_in_") and model.feature_names_in_ is not None:
+                expected_cols = list(model.feature_names_in_)
+            elif hasattr(model, "get_booster") and model.get_booster().feature_names:
+                expected_cols = list(model.get_booster().feature_names)
+            elif hasattr(model, "feature_names") and model.feature_names:
+                expected_cols = list(model.feature_names)
+
+            if expected_cols:
+                for ec in expected_cols:
+                    if ec not in row_dict:
+                        if ec.startswith("Milestone_"):
+                            m_name = ec[len("Milestone_"):]
+                            row_dict[ec] = 1.0 if m_name in milestones_seen else 0.0
+                        elif ec.startswith("Role_") and ec.endswith("_OC"):
+                            try:
+                                r_idx = int(ec.split("_")[1])
+                                row_dict[ec] = float(role_oc_array[r_idx]) if r_idx < len(role_oc_array) else 0.0
+                            except Exception:
+                                row_dict[ec] = 0.0
+                        elif ec.startswith("Weekday_"):
+                            try:
+                                w_idx = int(ec.split("_")[1])
+                                row_dict[ec] = 1.0 if dt and dt.weekday() == w_idx else 0.0
+                            except Exception:
+                                row_dict[ec] = 0.0
+                        elif ec == "Daytime":
+                            row_dict[ec] = (dt.hour * 3600 + dt.minute * 60 + dt.second) / 86400.0 if dt else 0.0
+                        elif ec == "WIP":
+                            row_dict[ec] = float(wip)
+                        elif ec == "AC_WIP":
+                            row_dict[ec] = float(ac_wip.get(activity, 0)) if isinstance(ac_wip, dict) else 0.0
+                        elif ec.startswith("Act_Minus_") or ec in ["Target_Activity", "Resource_ID"]:
+                            row_dict[ec] = "NONE"
+                        else:
+                            row_dict[ec] = 0.0
+                cols_to_use = expected_cols
+            else:
+                cols_to_use = [c for c in row_dict.keys() if c in self.feature_cols or c.startswith("Act_Minus_") or c == "Target_Activity"]
+
+            row_df = pd.DataFrame([{c: row_dict.get(c, 0.0) for c in cols_to_use}])[cols_to_use]
             for col in row_df.columns:
-                if col.startswith("Act_Minus_") or col == "Target_Activity":
+                if col.startswith("Act_Minus_") or col in ["Target_Activity", "Resource_ID"]:
                     row_df[col] = row_df[col].astype("category")
 
             pred_log1p = model.predict(row_df)[0]
@@ -234,7 +339,20 @@ class ChampionPredictor:
 
             scaler = suite["scalers"].get("scaler_local.pkl") or suite["scalers"].get("scaler_global.pkl")
             cols = list(scaler.feature_names_in_) if (scaler and hasattr(scaler, "feature_names_in_")) else self.feature_cols
-            feat_df = pd.DataFrame([{c: f_dict.get(c, 0.0) for c in cols}])
+            feat_dict = {}
+            for c in cols:
+                if c in f_dict:
+                    feat_dict[c] = f_dict[c]
+                elif c.startswith("Milestone_"):
+                    m_name = c[len("Milestone_"):]
+                    feat_dict[c] = 1.0 if m_name in milestones_seen else 0.0
+                elif c == "Offer_Count":
+                    feat_dict[c] = float(offer_count)
+                elif c == "Has_Offer":
+                    feat_dict[c] = float(has_offer)
+                else:
+                    feat_dict[c] = 0.0
+            feat_df = pd.DataFrame([feat_dict])[cols]
             if scaler:
                 feat_vals = scaler.transform(feat_df)
             else:
@@ -278,12 +396,16 @@ class ChampionPredictor:
                 elif col.startswith("has_"):
                     act_name = col.replace("has_", "")
                     row[col] = 1.0 if (act_name in prefix or act_name in milestones_seen) else 0.0
-                elif col not in row:
-                    row[col] = 0.0
+            cat_map = p_info.get("cat_mappings", {})
+            for c in feat_cols:
+                if c in cat_map:
+                    cats = cat_map[c]
+                    val = row.get(c, "<UNKNOWN>")
+                    row[c] = cats.index(val) if val in cats else -1
 
             row_df = pd.DataFrame([row])[feat_cols]
             for c in row_df.columns:
-                if c.startswith("prefix_") or c == "prev_activity":
+                if (c.startswith("prefix_") or c == "prev_activity") and c not in cat_map:
                     row_df[c] = row_df[c].astype("category")
 
             label_enc = p_info["label_encoding"]
@@ -302,8 +424,11 @@ class ChampionPredictor:
                     pred_code = clf.predict(row_df)[0]
 
                 return idx_to_label.get(pred_code)
-            except Exception:
-                pass  # Fall through to empirical probability fallback if unseen sequence category occurs
+            except Exception as e:
+                logger.warning(
+                    f"[Routing] ML inference failed for decision place '{place_id}': {e}. "
+                    "Falling back to empirical probability."
+                )
 
         # 2. Empirical Probability Fallback
         probs = p_info.get("probabilities", {})

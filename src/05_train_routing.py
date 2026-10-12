@@ -51,7 +51,14 @@ try:
 except ImportError:
     HAS_HYPEROPT = False
 
-from config_loader import load_config, PROJECT_ROOT
+src_dir = os.path.dirname(os.path.abspath(__file__))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+try:
+    from config_loader import load_config, PROJECT_ROOT
+except ImportError:
+    from src.config_loader import load_config, PROJECT_ROOT
 
 
 # =====================================================================
@@ -126,7 +133,19 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
     print(f"Loading event log: {log_path}...")
     log_raw = pm4py.read_xes(log_path)
-    log = pm4py.convert_to_event_log(log_raw) if not isinstance(log_raw, pm4py.objects.log.obj.EventLog) else log_raw
+    if not isinstance(log_raw, pd.DataFrame):
+        df_log = pm4py.convert_to_dataframe(log_raw)
+    else:
+        df_log = log_raw.copy()
+
+    if "lifecycle:transition" in df_log.columns:
+        print("Filtering event log to COMPLETE lifecycle events for 1-to-1 Petri net alignment...")
+        df_log = df_log[df_log["lifecycle:transition"].str.upper() == "COMPLETE"].copy()
+        case_counts = df_log.groupby("case:concept:name").size()
+        valid_cases = case_counts[case_counts > 0].index
+        df_log = df_log[df_log["case:concept:name"].isin(valid_cases)].copy()
+
+    log = pm4py.convert_to_event_log(df_log)
 
     # Build transition ID -> label map
     id2label = {}
@@ -227,7 +246,7 @@ def main():
         help="Classifier engine (default: decision_tree)",
     )
     parser.add_argument("--max_depth", type=int, default=None, help="Maximum tree depth ceiling for white-box interpretability (default: from config or 21)")
-    parser.add_argument("--n_estimators", type=int, default=5, help="Number of trees for Random Forest (default: 5)")
+    parser.add_argument("--n_estimators", type=int, default=None, help="Number of trees for Random Forest (default: from config or 5)")
     parser.add_argument("--min_samples", type=int, default=None, help="Minimum samples required at XOR place to train ML (default: 30)")
     parser.add_argument("--min_f1_threshold", type=float, default=None, help="Macro F1 threshold for ML vs probability fallback (default: 0.60)")
     parser.add_argument("--output_dir", type=str, default=None, help="Output directory for routing models and manifests")
@@ -242,7 +261,7 @@ def main():
     min_f1 = args.min_f1_threshold if args.min_f1_threshold is not None else routing_cfg.get("min_f1_threshold", 0.60)
     min_samples = args.min_samples if args.min_samples is not None else routing_cfg.get("min_samples", 30)
     max_depth = args.max_depth if args.max_depth is not None else routing_cfg.get("max_depth", 21)
-    n_estimators = args.n_estimators or routing_cfg.get("rf_trees", 5)
+    n_estimators = args.n_estimators if args.n_estimators is not None else routing_cfg.get("rf_trees", 5)
     output_dir = args.output_dir or os.path.join(
         PROJECT_ROOT,
         cfg.get("paths", {}).get("routing_models_dir") or routing_cfg.get("output_dir", "models/routing")
@@ -267,10 +286,10 @@ def main():
     if args.log:
         log_path = args.log if os.path.isabs(args.log) else os.path.join(PROJECT_ROOT, args.log)
     else:
-        # Priority: paths.routing_raw_log -> paths.aligned_log
-        raw_log = paths_cfg.get("routing_raw_log") or paths_cfg.get("aligned_log")
+        # Priority: paths.routing_train_log -> paths.aligned_log -> paths.routing_raw_log
+        raw_log = paths_cfg.get("routing_train_log") or paths_cfg.get("aligned_log") or paths_cfg.get("routing_raw_log")
         if not raw_log:
-            raise ValueError("No event log specified in CLI (--log) or config.yaml ('routing_raw_log' / 'aligned_log').")
+            raise ValueError("No event log specified in CLI (--log) or config.yaml ('routing_train_log' / 'aligned_log').")
         log_path = raw_log if os.path.isabs(raw_log) else os.path.join(PROJECT_ROOT, raw_log)
 
     # Fail fast if paths do not exist
@@ -317,6 +336,15 @@ def main():
         "window_size": window_size,
         "decision_points": {},
     }
+    manifest_path = os.path.join(output_dir, "routing_decisions.json")
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r") as mf:
+                old_data = json.load(mf)
+                if isinstance(old_data.get("decision_points"), dict):
+                    dispatch_manifest["decision_points"] = dict(old_data["decision_points"])
+        except Exception:
+            pass
 
     results_table = []
     tree_rules_map = {}
@@ -541,6 +569,7 @@ def main():
         dp_entry["label_encoding"] = label_to_idx
         dp_entry["features"] = feat_cols
         dp_entry["feature_importances"] = feat_importances
+        dp_entry["cat_mappings"] = cat_mappings
 
         if macro_f1 >= min_f1:
             dp_entry["strategy"] = "machine_learning"

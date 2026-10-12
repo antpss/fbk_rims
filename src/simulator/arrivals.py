@@ -24,9 +24,10 @@ class ArrivalGenerator:
     Case Spawning Engine (Parity with Legacy InterTriggerTimer).
     Responsible for generating case entry schedules and payloads for the simulation.
     """
-    def __init__(self, cfg, num_cases=None, arrival_mode="replay", calendar=None):
+    def __init__(self, cfg, num_cases=None, arrival_mode="replay", calendar=None, duration_days=None):
         self.cfg = cfg
         self.num_cases = num_cases
+        self.duration_days = duration_days if duration_days is not None else cfg.get("simulation", {}).get("duration_simulation")
         arr_cfg = cfg.get("simulation", {}).get("arrival", {})
         self.arrival_mode = arrival_mode or arr_cfg.get("mode", "replay")
         self.arr_cfg = arr_cfg
@@ -73,6 +74,11 @@ class ArrivalGenerator:
             first_times = df_real.groupby("case:concept:name")["time:timestamp"].min()
             valid_case_series = first_times[first_times.index.isin(cases_with_w)].sort_values()
 
+            if self.duration_days and float(self.duration_days) > 0 and len(valid_case_series) > 0:
+                t_start = valid_case_series.iloc[0]
+                t_cutoff = t_start + pd.Timedelta(days=float(self.duration_days))
+                valid_case_series = valid_case_series[valid_case_series <= t_cutoff]
+
             target_case_ids = list(valid_case_series.index)
             if self.num_cases and self.num_cases > 0:
                 target_case_ids = target_case_ids[:self.num_cases]
@@ -117,10 +123,20 @@ class ArrivalGenerator:
 
         else:
             # Generative Arrival Mode (RIMS InterTriggerTimer Standard)
-            n_cases = self.num_cases or 1000
-            print(f"Generating {n_cases:,} purely synthetic case arrivals (Generative Arrival Mode)...")
+            n_cases = self.num_cases
+            dur_seconds = float(self.duration_days * 86400.0) if (self.duration_days and float(self.duration_days) > 0) else None
+
+            if n_cases:
+                desc_str = f"{n_cases:,} cases"
+            elif self.duration_days:
+                desc_str = f"{self.duration_days} days ({dur_seconds:,.0f}s horizon)"
+            else:
+                desc_str = "1,000 cases"
+            print(f"Generating synthetic case arrivals ({desc_str}) [Generative Arrival Mode]...")
+
             start_str = self.arr_cfg.get("start_timestamp", "2012-01-01 08:00:00")
-            cur_time = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+            start_time = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+            cur_time = start_time
             if self.calendar is not None:
                 self.calendar.set_ref_dt(cur_time)
 
@@ -129,7 +145,15 @@ class ArrivalGenerator:
             calendar_bounded = self.arr_cfg.get("calendar_bounded", True)
             ms_prefixes = tuple(self.cfg.get("preprocessing", {}).get("milestone_prefixes", []))
 
-            for i in range(n_cases):
+            i = 0
+            while True:
+                if n_cases is not None and i >= n_cases:
+                    break
+                if dur_seconds is not None and (cur_time - start_time).total_seconds() >= dur_seconds:
+                    break
+                if n_cases is None and dur_seconds is None and i >= 1000:
+                    break
+
                 cid = f"synth_case_{i+1:05d}"
                 if dist_name == "exponential":
                     interval = float(np.random.exponential(scale))

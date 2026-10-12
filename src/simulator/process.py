@@ -17,6 +17,7 @@ import random
 from collections import defaultdict
 
 import pandas as pd
+import numpy as np
 import scipy.stats as st
 import simpy
 import pm4py
@@ -52,6 +53,7 @@ class SharedWorkerPool:
         self.activity_pools = {k: data[k] for k in data if not k.startswith("__")}
         self.worker_busy = {w: False for w in self.all_workers}
         self.worker_activity = {w: None for w in self.all_workers}
+        self.worker_idle_since = {w: 0.0 for w in self.all_workers}
         self.pending_requests = []
 
     def get_role_occupancy(self, activities_list):
@@ -64,12 +66,16 @@ class SharedWorkerPool:
         return oc
 
     def request_worker(self, activity):
-        """Requests an available worker from the activity's eligible skill pool."""
+        """Requests an available worker from the activity's eligible skill pool using Longest Idle First."""
         eligible = self.activity_pools.get(activity, self.all_workers)
         free_workers = [w for w in eligible if not self.worker_busy[w]]
 
         if free_workers:
-            chosen = random.choice(free_workers)
+            # Longest Idle First: select the worker who has been waiting idle the longest
+            min_idle = min(self.worker_idle_since[w] for w in free_workers)
+            candidates = [w for w in free_workers if self.worker_idle_since[w] == min_idle]
+            chosen = random.choice(candidates) if len(candidates) > 1 else candidates[0]
+
             self.worker_busy[chosen] = True
             self.worker_activity[chosen] = activity
             ev = self.env.event()
@@ -86,13 +92,26 @@ class SharedWorkerPool:
             return ev
 
     def release_worker(self, worker_id):
-        """Releases worker; if human latency modeling is active, worker enters refractory buffer."""
+        """Releases worker; if human latency modeling is active and queue is calm, worker enters refractory buffer."""
         self.worker_activity[worker_id] = None
-        if self.latency_cfg and self.latency_cfg.get("enabled", True):
+
+        cooldown_enabled = self.latency_cfg.get("enabled", True) if self.latency_cfg else False
+        queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
+
+        # Check if any waiting task needs this worker right now
+        has_pending_work = any(
+            worker_id in req["eligible"] and not req["event"].triggered
+            for req in self.pending_requests
+        )
+
+        # Queue-Aware Cooldown: If tickets are waiting, worker immediately takes next ticket.
+        # Only take coffee break cooldown if no immediate tickets are waiting.
+        if cooldown_enabled and (not queue_aware or not has_pending_work):
             cooldown = self._sample_cooldown(worker_id)
             if cooldown > 0:
                 self.env.process(self._cooldown_and_dispatch(worker_id, cooldown))
                 return
+
         self._complete_release(worker_id)
 
     def _sample_cooldown(self, worker_id):
@@ -119,6 +138,7 @@ class SharedWorkerPool:
 
     def _complete_release(self, worker_id):
         self.worker_busy[worker_id] = False
+        self.worker_idle_since[worker_id] = self.env.now
         for i, req in enumerate(self.pending_requests):
             if worker_id in req["eligible"] and not req["event"].triggered:
                 self.pending_requests.pop(i)
@@ -137,12 +157,18 @@ class SimulationProcess:
     Simulation Orchestrator & Process Coordinator (Legacy Parity with checking_process.py).
     Manages SimPy environment, resources, calendar shifts, token lifecycles, and evaluation.
     """
-    def __init__(self, cfg, num_cases=None, mode=None, arrival_mode=None, export_xes=None, pnml_path=None):
+    def __init__(self, cfg, num_cases=None, mode=None, arrival_mode=None, export_xes=None, pnml_path=None, duration_days=None):
         self.cfg = cfg
+        seed = cfg.get("project", {}).get("random_seed", 42)
+        random.seed(seed)
+        np.random.seed(seed)
         self.mode = mode or cfg.get("simulation", {}).get("mode", "hybrid_residual")
         self.num_cases = num_cases
+        self.duration_days = duration_days if duration_days is not None else cfg.get("simulation", {}).get("duration_simulation")
+        self.duration_seconds = float(self.duration_days * 86400.0) if (self.duration_days and float(self.duration_days) > 0) else None
         self.max_events = cfg.get("simulation", {}).get("max_events_per_case", 80)
         self.target_activities = cfg.get("target_activities", [])
+        self.proc_prefixes = tuple(cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
         self.ms_prefixes = tuple(cfg.get("preprocessing", {}).get("milestone_prefixes", []))
 
         # Output paths
@@ -171,17 +197,11 @@ class SimulationProcess:
         self.branch_target_map = self._build_branch_target_map()
 
         # Calendar Manager
-        cal_cfg = cfg.get("simulation", {}).get("calendar", {})
-        self.calendar = CalendarManager(
-            enabled=cal_cfg.get("enabled", True),
-            work_days=cal_cfg.get("work_days", [0, 1, 2, 3, 4]),
-            hour_start=cal_cfg.get("hour_start", 8),
-            hour_end=cal_cfg.get("hour_end", 17),
-            per_role=cal_cfg.get("per_role", {})
-        )
+        self.calendar = CalendarManager.from_config(cfg)
 
         # Load Causal Delays
-        delay_manifest_path = os.path.join(PROJECT_ROOT, "models/delays/delay_manifest.json")
+        models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
+        delay_manifest_path = os.path.join(PROJECT_ROOT, models_dir_rel, "delays/delay_manifest.json")
         self.delay_manifest = None
         self.external_delays = {}
         if os.path.exists(delay_manifest_path):
@@ -195,8 +215,11 @@ class SimulationProcess:
 
         # SimPy Environment & Worker Pool
         self.env = simpy.Environment()
-        role_mapping_path = os.path.join(PROJECT_ROOT, "models/role_mapping.json")
-        latency_cfg = self.delay_manifest.get("human_inter_ticket_latency") if self.delay_manifest else None
+        role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+        latency_cfg = dict(self.delay_manifest.get("human_inter_ticket_latency", {})) if self.delay_manifest else {}
+        user_hl = cfg.get("simulation", {}).get("human_latency", {})
+        if isinstance(user_hl, dict):
+            latency_cfg.update(user_hl)
         self.workers = SharedWorkerPool(self.env, role_mapping_path, latency_cfg=latency_cfg)
 
         # Runtime Champion Predictor
@@ -204,7 +227,7 @@ class SimulationProcess:
 
         # Arrival Generator
         self.arrivals_generator = ArrivalGenerator(
-            cfg, num_cases=self.num_cases, arrival_mode=self.arrival_mode, calendar=self.calendar
+            cfg, num_cases=self.num_cases, arrival_mode=self.arrival_mode, calendar=self.calendar, duration_days=self.duration_days
         )
 
         # Evaluator
@@ -250,9 +273,9 @@ class SimulationProcess:
             return trans_map.get(t_name, t_name)
 
         branch_map = {}
-        for p in self.net.places:
+        for p in sorted(self.net.places, key=lambda pl: pl.name):
             if len(p.out_arcs) >= 2:
-                for arc in p.out_arcs:
+                for arc in sorted(p.out_arcs, key=lambda a: a.target.name):
                     t = arc.target
                     branch_map[(p.name, t.name)] = resolve_target(t.name)
         return branch_map
@@ -297,6 +320,8 @@ class SimulationProcess:
         hl_cfg = self.delay_manifest.get("human_inter_ticket_latency", {}) if self.delay_manifest else {}
         hl_str = f"Active ({hl_cfg.get('global_mean_seconds', 325.4)}s mean gap)" if hl_cfg.get("enabled") else "Disabled"
         print(f"      Latency:     Human Inter-Ticket Latency {hl_str}")
+        if self.duration_seconds is not None:
+            print(f"      Duration:    {self.duration_days} days ({self.duration_seconds:,.0f}s SimPy clock limit)")
         print("=" * 80)
 
         # Prepare Case Arrivals
@@ -322,7 +347,10 @@ class SimulationProcess:
 
         start_exec = time.time()
         print("\nExecuting simulation engine...")
-        self.env.run()
+        if self.duration_seconds is not None:
+            self.env.run(until=self.duration_seconds)
+        else:
+            self.env.run()
         elapsed = time.time() - start_exec
         print(f"\n[✓] Simulation completed in {elapsed:.2f} seconds ({len(self.simulated_records):,} events generated).")
 

@@ -15,9 +15,12 @@ paths:
   output_base_dir: "data/processed"
   models_dir: "models"
 
+  # Milestone Lifecycle Log (Step 00 export destination for milestone traces)
+  milestone_log: "data/processed/BPI_2012_A_only.xes"
+
   # Routing Decision Point paths (Step 05 Decision Mining)
-  routing_raw_log: "data/processed/BPI_2012_A_only.xes"
-  routing_petri_net: "models/petri_nets/bpi2012_A_net.pnml"
+  routing_train_log: "data/processed/aligned_BPI_2012.xes"
+  routing_petri_net: "models/petri_nets/discovered_model_split.pnml"
   routing_models_dir: "models/routing"
 
 # Process Discovery Settings
@@ -33,8 +36,32 @@ discovery:
 # Feature Engineering Settings
 features:
   prefix_window_size: 10          # History window of past activities (trace prefix)
-  
-  # Tier 1: Universal Features
+
+  # Option A: Modular Feature Selection (Registry Pattern)
+  # When selected_features is defined, RIMS+ extracts and trains exclusively on these features.
+  # Available:
+  #   - wip              (Process-level active case count)
+  #   - ac_wip           (Activity-level active case count)
+  #   - daytime          (Daytime normalized in [0, 1])
+  #   - weekday          (One-hot weekday indicators Weekday_0..6)
+  #   - role_occupancy   (Concurrent role/activity utilization vector Role_*_OC)
+  #   - prev_duration    (Duration of previous activity in trace)
+  #   - offer_count      (Business milestone offer count)
+  #   - has_offer        (Binary indicator if case has an offer)
+  #   - milestones       (Binary indicators for milestones seen)
+  #   - case_attributes  (Domain-specific case attributes, e.g. RequestedAmount)
+  #   - resource_id      (Worker/resource identity)
+  selected_features:
+    - wip
+    - ac_wip
+    - daytime
+    - weekday
+    - role_occupancy
+    - prev_duration
+    - case_attributes
+    # - resource_id
+
+  # Tier 1: Universal Features (Fallback if selected_features is omitted)
   universal:
     use_wip: true                 # Process-level active case count (WIP)
     use_ac_wip: true              # Activity-level active case count (AC_WIP)
@@ -178,12 +205,19 @@ model_strategy:
 # Discrete-Event Simulation Settings (Step 06)
 # ===================================================================
 simulation:
-  mode: "hybrid_residual"         # Options: "hybrid_residual", "pure_physics", "pure_ml"
+  mode: "hybrid_residual"         # Options: "hybrid_residual", "pure_physics"
+  duration_simulation: null       # Duration horizon in days (RIMS duration_simulation). If null, bounded by num_cases
   num_cases: 1000                 # Number of cases to simulate (null for all cases)
   max_events_per_case: 80         # Safety ceiling to prevent non-terminating loops
   output_simulated_log: "data/processed/simulated_log.csv"
   export_xes: true                # Also export standard IEEE XES log (.xes)
   output_simulated_xes: "data/processed/simulated_log.xes"
+  
+  # Human Inter-Ticket Latency (Worker Refractory Cooldowns / Coffee Breaks)
+  human_latency:
+    enabled: true                 # Simulate post-task refractory periods (coffee breaks)
+    queue_aware: true             # Queue-aware: only take break when queue has no pending tickets
+    max_cooldown: 1800.0          # Max cooldown ceiling in seconds (30 mins)
   
   # Arrival Configuration (Replay historical timeline vs. Generative distribution)
   arrival:
@@ -198,7 +232,7 @@ simulation:
     enabled: true                 # If true, shifts work to business hours & pauses weekends
     work_days: [0, 1, 2, 3, 4]    # Monday (0) to Friday (4)
     hour_start: 8                 # 08:00
-    hour_end: 17                  # 17:00
+    hour_end: 20                  # 20:00
     
     # Optional Per-Role / Per-Activity Calendars (overrides global calendar for specific roles/activities)
     # If not specified for a role/activity, it defaults to the global calendar above.

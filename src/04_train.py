@@ -17,6 +17,10 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 from config_loader import load_config, PROJECT_ROOT
+try:
+    from features import FeatureManager
+except ImportError:
+    from src.features import FeatureManager
 
 # =====================================================================
 # Prefix Parsing Helper (supports both JSON arrays and legacy comma strings)
@@ -66,7 +70,13 @@ def format_time_duration(seconds: float) -> str:
 class EventLogDataset(Dataset):
     def __init__(self, df, vocab, act_to_idx, max_seq_len, feature_cols, weights):
         self.max_seq_len = max_seq_len
-        self.features = df[feature_cols].values.astype(np.float32)
+        cols_data = []
+        for c in feature_cols:
+            if df[c].dtype == object or str(df[c].dtype) == 'category':
+                cols_data.append(df[c].astype('category').cat.codes.values.astype(np.float32))
+            else:
+                cols_data.append(df[c].values.astype(np.float32))
+        self.features = np.column_stack(cols_data).astype(np.float32) if cols_data else np.zeros((len(df), 0), dtype=np.float32)
         self.weights = weights.astype(np.float32)
         self.durations = df['Target_Duration'].values.astype(np.float32)
         
@@ -264,11 +274,23 @@ def main():
     df['Target_Duration'] = df[target_col]
     print(f"Loaded master dataset: {len(df)} samples across {df['Target_Activity'].nunique()} activities.")
 
-    feature_cols = [c for c in df.columns if c not in [
-        'Case_ID', 'case_id', 'Prefix', 'Duration_Seconds', 'Wait_Time_Seconds', 'Target_Duration',
-        'Resource_ID', 'Sample_Weight', 'Target_Activity'
-    ]]
-    df[feature_cols] = df[feature_cols].fillna(0.0)
+    feature_mgr = FeatureManager(cfg)
+    include_resource = feature_mgr.is_feature_active("resource_id")
+
+    ignored_cols = {'Case_ID', 'case_id', 'Prefix', 'Duration_Seconds', 'Wait_Time_Seconds', 'Target_Duration', 'Sample_Weight', 'Target_Activity'}
+    if not include_resource:
+        ignored_cols.add('Resource_ID')
+
+    feature_cols = [c for c in df.columns if c not in ignored_cols]
+    print(f"Model Feature Columns ({len(feature_cols)}): {feature_cols}")
+
+    for c in feature_cols:
+        if c == "Resource_ID":
+            df[c] = df[c].fillna("UNKNOWN").astype("category")
+        elif df[c].dtype == object:
+            df[c] = df[c].fillna("UNKNOWN")
+        else:
+            df[c] = df[c].fillna(0.0)
 
     # -----------------------------------------------------------------
     # STRATEGY DEFINITION: Determine Local vs Global Allocation
@@ -364,7 +386,10 @@ def main():
             for c in p_df.columns:
                 p_df[c] = p_df[c].astype(prefix_cat_dtype)
             act_cat = data_subset[['Target_Activity']].astype(target_act_dtype)
-            return pd.concat([p_df, act_cat, data_subset[feature_cols]], axis=1)
+            sub_feats = data_subset[feature_cols].copy()
+            if 'Resource_ID' in sub_feats.columns:
+                sub_feats['Resource_ID'] = sub_feats['Resource_ID'].astype('category')
+            return pd.concat([p_df, act_cat, sub_feats], axis=1)
 
         # 1. Train Global Model
         if len(global_targets) > 0 or strategy in ["global", "hybrid"]:

@@ -50,7 +50,7 @@ def main():
     print("Alignments calculated successfully.")
 
     #reconstruct repaired log
-    print("Reconstructing repaired event log preserving SCHEDULE/START lifecycles and business milestones...")
+    print("Reconstructing repaired event log preserving START/COMPLETE lifecycles and business milestones...")
     repaired_log = EventLog()
     
     total_model_moves = 0

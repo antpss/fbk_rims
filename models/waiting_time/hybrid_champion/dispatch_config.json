@@ -15,18 +15,18 @@
       "file": "tcn_global.pth"
     },
     "W_Assess fraud": {
+      "model_type": "xgboost",
+      "source_dir": "global_xgboost",
+      "file": "xgboost_global.json",
+      "best_test_mae": 40089.72,
+      "best_test_smape": 151.91
+    },
+    "W_Call after incomplete files": {
       "model_type": "tcn",
       "source_dir": "global_tcn",
       "file": "tcn_global.pth",
-      "best_test_mae": 79752.36,
-      "best_test_smape": 127.88
-    },
-    "W_Call after incomplete files": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Call_after_incomplete_files.json",
-      "best_test_mae": 45278.67,
-      "best_test_smape": 120.86
+      "best_test_mae": 45548.96,
+      "best_test_smape": 120.66
     },
     "W_Call after offers": {
       "model_type": "tcn",
@@ -37,17 +37,17 @@
     },
     "W_Complete application": {
       "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Complete_application.json",
-      "best_test_mae": 50171.43,
-      "best_test_smape": 119.75
+      "source_dir": "global_xgboost",
+      "file": "xgboost_global.json",
+      "best_test_mae": 46826.78,
+      "best_test_smape": 135.55
     },
     "W_Handle leads": {
       "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Handle_leads.json",
-      "best_test_mae": 9437.61,
-      "best_test_smape": 116.58
+      "source_dir": "global_xgboost",
+      "file": "xgboost_global.json",
+      "best_test_mae": 687.82,
+      "best_test_smape": 184.94
     },
     "W_Validate application": {
       "model_type": "tcn",

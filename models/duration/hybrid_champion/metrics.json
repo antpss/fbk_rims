@@ -3,46 +3,46 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "training_time_seconds": 331.45,
-  "weighted_mae": 589.68,
-  "weighted_smape": 84.24,
-  "macro_mae": 744.16,
+  "training_time_seconds": 381.69,
+  "weighted_mae": 335.92,
+  "weighted_smape": 84.65,
+  "macro_mae": 417.04,
   "activity_metrics": {
     "W_Assess fraud": {
       "count": 63,
       "model_source": "local_xgboost (XGBOOST)",
-      "mae": 910.94,
-      "smape": 71.11
+      "mae": 382.03,
+      "smape": 68.91
     },
     "W_Call after incomplete files": {
       "count": 2319,
       "model_source": "global_xgboost (XGBOOST)",
-      "mae": 781.12,
-      "smape": 99.32
+      "mae": 386.06,
+      "smape": 99.47
     },
     "W_Call after offers": {
       "count": 4622,
       "model_source": "local_xgboost (XGBOOST)",
-      "mae": 451.93,
-      "smape": 76.42
+      "mae": 208.36,
+      "smape": 76.35
     },
     "W_Complete application": {
       "count": 4586,
       "model_source": "local_xgboost (XGBOOST)",
-      "mae": 471.33,
-      "smape": 86.51
+      "mae": 316.39,
+      "smape": 86.63
     },
     "W_Handle leads": {
       "count": 692,
-      "model_source": "global_xgboost (XGBOOST)",
-      "mae": 668.44,
-      "smape": 76.38
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 431.3,
+      "smape": 75.75
     },
     "W_Validate application": {
       "count": 1117,
-      "model_source": "local_tcn (TCN)",
-      "mae": 1181.18,
-      "smape": 81.6
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 778.12,
+      "smape": 86.55
     }
   }
 }

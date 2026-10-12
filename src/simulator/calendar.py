@@ -16,7 +16,7 @@ class CalendarManager:
     Supports a global business shift as well as per-role / per-activity calendar overrides.
     Ensures human resources only perform work during configured office hours.
     """
-    def __init__(self, enabled=True, work_days=(0, 1, 2, 3, 4), hour_start=8, hour_end=17, ref_dt=None, per_role=None):
+    def __init__(self, enabled=True, work_days=(0, 1, 2, 3, 4), hour_start=8, hour_end=20, ref_dt=None, per_role=None):
         self.enabled = enabled
         self.work_days = set(work_days)
         self.hour_start = hour_start
@@ -34,6 +34,19 @@ class CalendarManager:
                 hour_end=r_cfg.get("hour_end", self.hour_end),
                 ref_dt=self.ref_dt
             )
+
+    @classmethod
+    def from_config(cls, cfg, ref_dt=None):
+        """Factory method constructing CalendarManager directly from central config.yaml dictionary."""
+        cal_cfg = cfg.get("simulation", {}).get("calendar", {})
+        return cls(
+            enabled=cal_cfg.get("enabled", True),
+            work_days=cal_cfg.get("work_days", [0, 1, 2, 3, 4]),
+            hour_start=cal_cfg.get("hour_start", 8),
+            hour_end=cal_cfg.get("hour_end", 20),
+            ref_dt=ref_dt,
+            per_role=cal_cfg.get("per_role", {})
+        )
 
     def set_ref_dt(self, ref_dt):
         """Synchronizes reference start timestamp across global and per-role calendars."""
@@ -113,4 +126,36 @@ class CalendarManager:
 
         total_elapsed = max(duration_seconds, (curr_dt - start_dt).total_seconds())
         return total_elapsed
+
+    def calculate_net_working_seconds(self, start_dt, end_dt, role_or_act=None):
+        """
+        Computes effective business working duration (excluding nights and weekends).
+        Uses specialized per-role calendar if defined, otherwise falls back to global calendar.
+        """
+        if role_or_act and role_or_act in self.role_calendars:
+            return self.role_calendars[role_or_act].calculate_net_working_seconds(start_dt, end_dt)
+
+        s_dt = start_dt.replace(tzinfo=None) if hasattr(start_dt, "tzinfo") and start_dt.tzinfo else start_dt
+        e_dt = end_dt.replace(tzinfo=None) if hasattr(end_dt, "tzinfo") and end_dt.tzinfo else end_dt
+
+        raw_seconds = max(0.0, (e_dt - s_dt).total_seconds())
+        if not self.enabled or raw_seconds <= 0:
+            return raw_seconds
+
+        curr_d = s_dt.date()
+        net_seconds = 0.0
+        while curr_d <= e_dt.date():
+            if curr_d.weekday() in self.work_days:
+                shift_s = datetime(curr_d.year, curr_d.month, curr_d.day, self.hour_start, 0, 0)
+                shift_e = datetime(curr_d.year, curr_d.month, curr_d.day, self.hour_end, 0, 0)
+                win_s = max(s_dt, shift_s)
+                win_e = min(e_dt, shift_e)
+                if win_e > win_s:
+                    net_seconds += (win_e - win_s).total_seconds()
+            curr_d += timedelta(days=1)
+
+        if net_seconds <= 0:
+            net_seconds = min(raw_seconds, 3600.0)
+
+        return net_seconds
 

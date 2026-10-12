@@ -265,7 +265,7 @@ python src/04_train.py --task waiting_time --strategy local --model_type lstm
 ---
 
 ### Step 5: White-Box XOR Decision Mining & Routing (`src/05_train_routing.py`)
-Discovers all XOR split places (places with $\ge 2$ outgoing branches) in the lifecycle Petri net (`bpi2012_A_net.pnml`), aligns the event log using PM4Py state-equation $A^*$ alignments to extract exact decision contexts, and trains interpretable decision models with Hyperopt Bayesian optimization:
+Discovers all XOR split places (places with $\ge 2$ outgoing branches) in the Petri net, extracts decision contexts from aligned event traces on `COMPLETE` events, and trains interpretable decision models with Hyperopt Bayesian optimization:
 
 * **White-Box Interpretability**: Uses `DecisionTreeClassifier` with human-readable decision rules (`tree.export_text`) directly printed to stdout.
 * **Hyperparameter Optimization (RIMS Parity)**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 evaluations:
@@ -276,11 +276,17 @@ Discovers all XOR split places (places with $\ge 2$ outgoing branches) in the li
   * `class_weight`: `[None, 'balanced']`
 * **Fallback Strategy**:
   * If $\text{Macro F1} \ge 0.60$: Saves trained white-box model (`models/routing/{place}.pkl` and `routing_{place}.joblib`).
-  * If $\text{Macro F1} < 0.60$ (or highly skewed classes): Automatically falls back to empirical branching probabilities from the aligned log.
+  * If $\text{Macro F1} < 0.60$ (or highly skewed/stochastic classes): Automatically falls back to empirical branching probabilities from the aligned log.
+* **Dual Net Targets (Merged in `routing_decisions.json`)**:
+  * **Operational Workflow Net** (`discovered_model_split.pnml`): Resolves human work item loopbacks and splits during runtime simulation.
+  * **Milestone Lifecycle Net** (`bpi2012_A_net.pnml`): Benchmarks business milestone transitions (Accepted, Declined, Cancelled).
 
 ```bash
-# Standard run (reads config.yaml, optimizes DecisionTreeClassifier via Hyperopt)
-python src/05_train_routing.py
+# 1. Operational Net (simulated by default)
+python src/05_train_routing.py --pnml models/petri_nets/discovered_model_split.pnml --log data/processed/aligned_BPI_2012.xes
+
+# 2. Milestone Lifecycle Net (RIMS reference net)
+python src/05_train_routing.py --pnml models/petri_nets/bpi2012_A_net.pnml --log data/processed/BPI_2012_A_only.xes
 
 # Optional: Run with Random Forest ensemble (5 trees)
 python src/05_train_routing.py --classifier random_forest --n_estimators 5
@@ -330,7 +336,7 @@ The dynamic champion selects the winning foundation model per activity:
 
 ---
 
-## Waiting Time Task (Ready for Execution)
+## Waiting Time Task
 
 The waiting time pipeline operates symmetrically to duration, but with domain-specific physics:
 * **Preserves 0.0s waiting times**: An activity that starts immediately upon enablement experiences 0 waiting time. Dropping 0s would introduce severe upward bias.
@@ -350,21 +356,21 @@ The waiting time pipeline operates symmetrically to duration, but with domain-sp
 The discrete-event simulation engine is structured into the clean, modular Object-Oriented package `src/simulator/` orchestrated by the slim CLI runner `src/06_simulate.py`:
 
 * **`Token` (`src/simulator/token.py`)**: Models each process case traversing the workflow using formal PM4Py token marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$), resolving XOR branching via white-box decision trees.
-* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct multi-skilled human resources (eliminating the legacy phantom worker bug) with Kolmogorov-Smirnov continuous latency cooldowns.
+* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct multi-skilled human resources (eliminating the legacy phantom worker bug) with Kolmogorov-Smirnov continuous latency cooldowns. Worker assignment strictly respects active operating hours, ensuring workers are not assigned outside shift boundaries.
 * **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and PyTorch LSTM models from `dispatch_config.json`.
-* **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (08:00 – 17:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
+* **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (08:00 – 20:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
 * **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes` or synthetic generative distributions (exponential, uniform, constant).
 * **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`simulated_log.csv`) and IEEE XES (`simulated_log.xes`), and evaluates cycle time MAE, RMSE, and 1D Wasserstein distance against real ground truth.
-* **Hybrid Residual Waiting Strategy**: Eliminates the legacy double-waiting bug by acquiring workers in SimPy queue contention first ($W_{\text{queue}}$) and yielding only the uncoupled residual $\max(0, W_{\text{ML}} - W_{\text{queue}})$.
+* **Hybrid Residual Waiting Strategy**: Eliminates double-waiting distortion by acquiring workers in SimPy queue contention first ($W_{\text{queue}}$) and yielding only the uncoupled residual $\max(0, W_{\text{ML}} - W_{\text{queue}})$.
 
 ```bash
-# 1. 3-Way Ablation Study (compares Pure Physics vs. Pure ML vs. Hybrid Residual)
-python src/06_simulate.py --compare_modes --cases 2500
+# 1. 2-Way Comparison Study (compares Pure Physics vs. Hybrid Residual side-by-side)
+python src/06_simulate.py --compare_modes --cases 500
 
 # 2. Replay historical arrivals (Hybrid Residual mode, 1,000 cases)
 python src/06_simulate.py --cases 1000 --arrival_mode replay
 
-# 3. Purely Generative arrivals from scratch (e.g. 1,000 synthetic cases)
+# 3. Purely Generative arrivals (e.g. 1,000 synthetic cases)
 python src/06_simulate.py --cases 1000 --arrival_mode generative
 
 # 4. Simulate ALL cases available in historical log
@@ -373,8 +379,8 @@ python src/06_simulate.py --all
 # 5. Pure Physics mode (SimPy queue contention only)
 python src/06_simulate.py --cases 1000 --mode pure_physics
 
-# 6. Pure ML mode (ML predicted wait only)
-python src/06_simulate.py --cases 1000 --mode pure_ml
+# 6. Set simulation horizon by duration (e.g. 365 days / 1 year)
+python src/06_simulate.py --duration 365 --arrival_mode generative
 ```
 
 * **Outputs**:
@@ -383,5 +389,13 @@ python src/06_simulate.py --cases 1000 --mode pure_ml
   * Markdown benchmark report: `data/processed/simulation_report.md`
   * Ablation study leaderboard: `data/processed/ablation_report.md`
 
----
+### Simulation Validation Leaderboard (Empirical vs. Real Historical Log)
+
+Evaluated against the ground-truth historical log on identical test cases:
+
+| Simulation Mode | Mean Cycle Time (Sim) | Mean Cycle Time (Real) | Cycle Time MAE | Wasserstein Distance | Realism / Contention |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **`hybrid_residual`** | **13.1 days** | **11.5 days** | **1.54 days** | **5.4 days** | Captures both physical queues and unobserved backlog latency |
+| `pure_physics` | 33.4 days | 11.5 days | 22.0 days | 22.0 days | Over-estimates cycle time due to unbounded FIFO queue pile-up |
+
 

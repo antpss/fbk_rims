@@ -51,12 +51,16 @@ class Token:
         self.ms_states = ms_states or []
         self.events_done = 0
         self.prev_act = None
+        self.prev_dur = 0.0
 
         # Initialize marking at source place(s)
         self.marking = self.process.im.copy()
 
     def update_milestones(self, act):
         """Updates milestone progress context dynamically based on config rules."""
+        if not self.process.predictor.feature_mgr.is_feature_active("milestones"):
+            return
+
         ms_prefixes = self.process.ms_prefixes
         if not ms_prefixes:
             return
@@ -91,7 +95,10 @@ class Token:
 
         # Step through Petri Net until final marking or safety ceiling
         while self.marking and self.marking != self.process.fm and self.events_done < self.process.max_events:
-            enabled = list(semantics.enabled_transitions(self.process.net, self.marking))
+            enabled = sorted(
+                list(semantics.enabled_transitions(self.process.net, self.marking)),
+                key=lambda t: t.name
+            )
             if not enabled:
                 # Deadlock or process termination reached
                 break
@@ -101,7 +108,10 @@ class Token:
                 chosen_t = enabled[0]
             else:
                 # XOR Decision Point: identify place in marking with out-degree >= 2
-                decision_places = [p for p in self.marking if len(p.out_arcs) >= 2]
+                decision_places = sorted(
+                    [p for p in self.marking if len(p.out_arcs) >= 2],
+                    key=lambda p: p.name
+                )
                 if decision_places:
                     dp = decision_places[0].name
                     predicted_target = self.process.predictor.predict_routing(
@@ -111,14 +121,15 @@ class Token:
                     )
                     # Match predicted target to an enabled transition
                     matched_t = None
-                    for cand_t in enabled:
-                        tgt = self.process.branch_target_map.get((dp, cand_t.name))
-                        if tgt == predicted_target:
-                            matched_t = cand_t
-                            break
-                    chosen_t = matched_t if matched_t else enabled[0]
+                    if predicted_target is not None:
+                        for cand_t in enabled:
+                            tgt = self.process.branch_target_map.get((dp, cand_t.name))
+                            if tgt == predicted_target or cand_t.name == predicted_target or (cand_t.label is not None and cand_t.label == predicted_target):
+                                matched_t = cand_t
+                                break
+                    chosen_t = matched_t if matched_t else random.choice(enabled)
                 else:
-                    chosen_t = enabled[0]
+                    chosen_t = random.choice(enabled)
 
             # 2. Check if chosen transition is Silent vs. Observable Work Item
             if chosen_t.label is None:
@@ -126,53 +137,93 @@ class Token:
                 self.marking = semantics.execute(chosen_t, self.process.net, self.marking)
                 continue
 
-            # Observable Work Item Activity
+            # Observable Work Item Activity vs. Instantaneous Milestone
             act = chosen_t.label
             self.events_done += 1
+
+            proc_prefixes = self.process.proc_prefixes
+            ms_prefixes = self.process.ms_prefixes
+            if self.process.target_activities:
+                is_work_item = (act in self.process.target_activities)
+            elif proc_prefixes:
+                is_work_item = act.startswith(proc_prefixes)
+            elif ms_prefixes:
+                is_work_item = not act.startswith(ms_prefixes)
+            else:
+                is_work_item = True
+
+            if not is_work_item:
+                # Instantaneous lifecycle milestone (e.g. A_ / O_ state transition)
+                self.milestones_seen.add(act)
+                t_event = self.env.now
+                self.marking = semantics.execute(chosen_t, self.process.net, self.marking)
+                event_ts = self.process.calendar.to_datetime(t_event).strftime("%Y-%m-%d %H:%M:%S")
+                self.process.record_event({
+                    "case_id": self.case_id,
+                    "activity": act,
+                    "start_timestamp": event_ts,
+                    "complete_timestamp": event_ts,
+                    "resource_id": "SYSTEM",
+                    "duration_seconds": 0.0,
+                    "wait_time_seconds": 0.0,
+                    "queue_wait_seconds": 0.0,
+                    "wip": self.process.active_cases_count
+                })
+                self.prefix.append(act)
+                self.prev_act = act
+                self.prev_dur = 0.0
+                continue
 
             # 3. External Uncoupled Delay (e.g. customer postal / response transit)
             if self.prev_act and (self.prev_act, act) in self.process.external_delays:
                 ext_delay = self.process.sample_external_delay(self.prev_act, act)
                 if ext_delay > 0:
                     yield self.env.timeout(ext_delay)
+            else:
+                ext_delay = 0.0
 
-            # 4. Physical Queue Contention (SimPy)
-            t_req = self.env.now
-            worker_event = self.process.workers.request_worker(act)
-            worker_id = yield worker_event
-            t_acquired = self.env.now
-            w_queue = max(0.0, t_acquired - t_req)
-
-            # 5. Predicted Waiting Time & Agnostic Hybrid Residual
+            # 4. Worklist Waiting Time (ML expectation: batching & uncoupled backlog)
             role_oc = self.process.workers.get_role_occupancy(self.process.target_activities)
             curr_dt = self.process.calendar.to_datetime(self.env.now)
-            if self.process.mode != "pure_physics":
+            if self.process.mode == "hybrid_residual":
                 w_ml = self.process.predictor.predict_waiting(
                     act, self.prefix, self.process.active_cases_count,
                     self.process.ac_wip, curr_dt, self.requested_amount,
-                    self.milestones_seen, self.offer_count, self.has_offer, role_oc
+                    self.milestones_seen, self.offer_count, self.has_offer, role_oc,
+                    prev_dur=self.prev_dur
                 )
+                w_worklist = max(0.0, w_ml - ext_delay)
+                if w_worklist > 0:
+                    yield self.env.timeout(w_worklist)
             else:
-                w_ml = 0.0
+                w_worklist = 0.0
 
-            if self.process.mode == "hybrid_residual":
-                w_residual = max(0.0, w_ml - w_queue)
-                if w_residual > 0:
-                    yield self.env.timeout(w_residual)
-                total_wait = w_queue + w_residual
-            elif self.process.mode == "pure_ml":
-                yield self.env.timeout(w_ml)
-                total_wait = w_ml
-            elif self.process.mode == "pure_physics":
-                total_wait = w_queue
+            # 5. Calendar Working Hours Gate: If office is closed, ticket waits in worklist queue until shift begins
+            cal = self.process.calendar.get_calendar(act)
+            if cal.enabled:
+                curr_dt_shift = cal.to_datetime(self.env.now)
+                shift_gap = cal.get_gap_to_next_work_window(curr_dt_shift)
+                if shift_gap > 0:
+                    yield self.env.timeout(shift_gap)
+            else:
+                shift_gap = 0.0
 
-            # 6. Execution Duration with Calendar Working Hours (Per-Role or Global)
+            # 6. Physical Worker Acquisition at Start of Execution
+            t_req = self.env.now
+            worker_event = self.process.workers.request_worker(act)
+            worker_id = yield worker_event
             t_start = self.env.now
+            w_queue = max(0.0, t_start - t_req)
+            total_wait = ext_delay + w_worklist + shift_gap + w_queue
+
+            # 7. Execution Duration with Calendar Working Hours (Per-Role or Global)
             self.process.ac_wip[act] += 1
             dur_pred = self.process.predictor.predict_duration(
                 act, self.prefix, self.process.active_cases_count,
                 self.process.ac_wip, curr_dt, self.requested_amount,
-                self.milestones_seen, self.offer_count, self.has_offer, role_oc
+                self.milestones_seen, self.offer_count, self.has_offer, role_oc,
+                worker_id=worker_id,
+                prev_dur=self.prev_dur
             )
 
             actual_dur = self.process.calendar.calculate_calendar_duration(
@@ -181,7 +232,7 @@ class Token:
             yield self.env.timeout(actual_dur)
             t_comp = self.env.now
 
-            # 7. Release Worker
+            # 8. Release Worker
             self.process.ac_wip[act] = max(0, self.process.ac_wip[act] - 1)
             self.process.workers.release_worker(worker_id)
 
@@ -205,20 +256,24 @@ class Token:
 
             self.prefix.append(act)
             self.prev_act = act
+            self.prev_dur = dur_pred
 
-            # Advance milestone state if available from case history, else apply progression
-            if self.events_done < len(self.ms_states):
-                self.milestones_seen = set(self.ms_states[self.events_done])
+            # Advance milestone state only if milestone features are active
+            if self.process.predictor.feature_mgr.is_feature_active("milestones"):
+                if self.events_done < len(self.ms_states):
+                    self.milestones_seen = set(self.ms_states[self.events_done])
+                else:
+                    self.update_milestones(act)
+
+            if self.process.predictor.feature_mgr.is_feature_active("offer_count"):
+                self.offer_count = sum(1 for m in self.milestones_seen if m.startswith("O_"))
             else:
-                self.update_milestones(act)
+                self.offer_count = 0.0
 
-            ms_prefixes = self.process.ms_prefixes
-            self.offer_count = (
-                sum(1 for m in self.milestones_seen if m.startswith("O_"))
-                if ("Offer_Count" in self.process.predictor.feature_cols or "O_" in ms_prefixes)
-                else 0
-            )
-            self.has_offer = 1 if self.offer_count > 0 else 0
+            if self.process.predictor.feature_mgr.is_feature_active("has_offer"):
+                self.has_offer = 1.0 if self.offer_count > 0 else 0.0
+            else:
+                self.has_offer = 0.0
 
         self.process.active_cases_count = max(0, self.process.active_cases_count - 1)
 

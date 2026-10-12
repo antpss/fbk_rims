@@ -147,7 +147,14 @@ class SimulationEvaluator:
             sim_wait=("wait_time_seconds", "mean"),
             sim_queue=("queue_wait_seconds", "mean")
         )
-        for act in self.cfg.get("target_activities", []):
+        cfg_acts = self.cfg.get("target_activities", [])
+        if not cfg_acts:
+            acts_to_show = sorted(df_sim["activity"].unique())
+        else:
+            extra = [a for a in sorted(df_sim["activity"].unique()) if a not in cfg_acts]
+            acts_to_show = list(cfg_acts) + extra
+
+        for act in acts_to_show:
             cnt = int(sim_act_stats.loc[act, "count"]) if act in sim_act_stats.index else 0
             s_dur = sim_act_stats.loc[act, "sim_dur"] if act in sim_act_stats.index else 0.0
             s_wait = sim_act_stats.loc[act, "sim_wait"] if act in sim_act_stats.index else 0.0
@@ -156,7 +163,8 @@ class SimulationEvaluator:
         print("=" * 92 + "\n")
 
         # Save Comprehensive Markdown Report
-        rep_path = os.path.join(PROJECT_ROOT, "data/processed/simulation_report.md")
+        out_base = self.cfg.get("paths", {}).get("output_base_dir", "data/processed")
+        rep_path = os.path.join(PROJECT_ROOT, out_base, "simulation_report.md")
         with open(rep_path, "w") as f:
             f.write("# RIMS+ Simulation Benchmark Report\n\n")
             f.write(f"- **Simulation Mode:** `{self.mode}`\n")
@@ -182,7 +190,7 @@ class SimulationEvaluator:
             f.write("## Activity Execution Breakdown\n\n")
             f.write("| Activity | Simulated Count | Sim Mean Duration | Sim Mean Wait | Sim Mean Queue Wait |\n")
             f.write("|---|---|---|---|---|\n")
-            for act in self.cfg.get("target_activities", []):
+            for act in acts_to_show:
                 cnt = int(sim_act_stats.loc[act, "count"]) if act in sim_act_stats.index else 0
                 s_dur = sim_act_stats.loc[act, "sim_dur"] if act in sim_act_stats.index else 0.0
                 s_wait = sim_act_stats.loc[act, "sim_wait"] if act in sim_act_stats.index else 0.0

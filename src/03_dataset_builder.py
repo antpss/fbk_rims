@@ -6,12 +6,20 @@ import pandas as pd
 import numpy as np
 import pm4py
 from config_loader import load_config, PROJECT_ROOT
+try:
+    from features import FeatureManager, FeatureContext
+except ImportError:
+    from src.features import FeatureManager, FeatureContext
+try:
+    from simulator.calendar import CalendarManager
+except ImportError:
+    from src.simulator.calendar import CalendarManager
 
 def main():
     parser = argparse.ArgumentParser(description="Config-Driven Dataset Creation for RIMS+")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
-    parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time", "routing"],
-                        help="Task-specific dataset to generate (duration, waiting_time, routing)")
+    parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"],
+                        help="Task-specific dataset to generate ('duration' or 'waiting_time')")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -58,12 +66,14 @@ def main():
     # Feature extraction settings
     feat_cfg = cfg.get("features", {})
     prefix_window = feat_cfg.get("prefix_window_size", 10)
-    univ_cfg = feat_cfg.get("universal", {})
     case_attrs = feat_cfg.get("case_attributes", [])
     event_attrs = feat_cfg.get("event_attributes", [])
 
+    feature_mgr = FeatureManager(cfg)
+    calendar = CalendarManager.from_config(cfg)
     print(f"Prefix Window: {prefix_window}")
-    print(f"Universal Features: WIP={univ_cfg.get('use_wip')}, Roles={univ_cfg.get('use_role_occupancy')}, Calendar={univ_cfg.get('use_calendar_time')}")
+    print(f"Calendar Active: {calendar.enabled} ({calendar.hour_start}:00 - {calendar.hour_end}:00, Days: {calendar.work_days})")
+    print(f"Selected Feature Extractors ({len(feature_mgr.selected_features)}): {feature_mgr.selected_features}")
     print(f"Domain Case Attributes (Tier 2): {[c['feature_name'] for c in case_attrs]}")
     print(f"Domain Event Attributes (Tier 2): {event_attrs}")
 
@@ -85,12 +95,13 @@ def main():
     df = df.sort_values(by="time:timestamp").reset_index(drop=True)
 
     active_cases = set()
-    role_file = os.path.join(PROJECT_ROOT, "models/role_mapping.json")
+    models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
+    role_file = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
     if os.path.exists(role_file):
         with open(role_file, 'r') as f:
             role_data = json.load(f)
     else:
-        print("models/role_mapping.json not found. Automatically discovering resource pools from log...")
+        print(f"{role_file} not found. Automatically discovering resource pools from log...")
         role_data = {}
         for act in activities:
             act_df = df[(df["concept:name"] == act) & (df["org:resource"].notna()) & (df["org:resource"].astype(str).str.upper() != "SYNTHETIC")]
@@ -109,7 +120,6 @@ def main():
 
     case_prefixes = {}
     case_start_times = defaultdict(dict)
-    case_schedule_times = defaultdict(dict)
     case_start_features = defaultdict(dict)
     case_milestones_seen = defaultdict(set)
     case_offer_count = defaultdict(int)
@@ -178,41 +188,39 @@ def main():
                 synthetic_skipped += 1
                 case_prefixes[case_id].append(activity_name)
 
-            elif transition == "SCHEDULE":
-                case_schedule_times[case_id][activity_name] = timestamp
 
             elif transition == "START":
                 ac_wip[activity_name] += 1
                 case_start_times[case_id][activity_name] = timestamp
 
-                # True Queue Wait Calculation:
-                # 1. Scheduled task: START - SCHEDULE (worklist queue wait)
-                # 2. Unscheduled follow-up/loop: START - prev_end_time (inter-activity idle wait)
-                if activity_name in case_schedule_times[case_id]:
-                    current_wait = (timestamp - case_schedule_times[case_id][activity_name]).total_seconds()
-                    del case_schedule_times[case_id][activity_name]
-                elif case_id in case_prev_end_time:
+                # Universal Queue Wait Calculation (Agnostic across all event logs):
+                # START - prev_end_time (inter-activity idle wait from previous completed work item)
+                if case_id in case_prev_end_time:
                     current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
                 else:
                     current_wait = 0.0
 
                 current_wait = max(0.0, current_wait)
 
-                feat_dict = {
-                    "Weekday": weekday,
-                    "Daytime": daytime,
-                    "WIP": wip,
-                    "AC_WIP": ac_wip[activity_name],
-                    "RP_OC_Array": rp_oc_array,
-                    "Prev_Proc_Time": case_prev_time[case_id],
-                    "Wait_Time_Seconds": current_wait,
-                    "Offer_Count": float(case_offer_count[case_id]),
-                    "Has_Offer": 1.0 if case_offer_count[case_id] > 0 else 0.0,
-                    **extracted_case_attrs,
-                    **extracted_event_attrs
-                }
-                for m in all_milestones:
-                    feat_dict[f"Milestone_{m}"] = 1.0 if m in case_milestones_seen[case_id] else 0.0
+                ctx = FeatureContext(
+                    target_act=activity_name,
+                    wip=wip,
+                    ac_wip=ac_wip,
+                    dt=timestamp,
+                    role_oc=rp_oc_array,
+                    prev_dur=case_prev_time[case_id],
+                    offer_count=case_offer_count[case_id],
+                    has_offer=1.0 if case_offer_count[case_id] > 0 else 0.0,
+                    milestones_seen=case_milestones_seen[case_id],
+                    all_milestones=all_milestones,
+                    activities=activities,
+                    case_attrs=extracted_case_attrs,
+                    event_attrs=extracted_event_attrs,
+                    worker_id=row.get("org:resource", "UNKNOWN")
+                )
+                feat_dict = feature_mgr.build_features(ctx)
+                feat_dict["Wait_Time_Seconds"] = current_wait
+                feat_dict["Prev_Proc_Time"] = case_prev_time[case_id]
 
                 case_start_features[case_id][activity_name] = feat_dict
 
@@ -221,7 +229,8 @@ def main():
                     ac_wip[activity_name] -= 1
 
                 if activity_name in case_start_times[case_id]:
-                    duration = (timestamp - case_start_times[case_id][activity_name]).total_seconds()
+                    start_ts = case_start_times[case_id][activity_name]
+                    duration = calendar.calculate_net_working_seconds(start_ts, timestamp, role_or_act=activity_name)
                     has_valid_start = True
                     del case_start_times[case_id][activity_name]
                 else:
@@ -247,32 +256,10 @@ def main():
                             "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
                         }
 
-                        if univ_cfg.get("use_prev_duration", True):
-                            row_dict["Prev_Proc_Time"] = feat.get("Prev_Proc_Time", 0.0)
-                        if univ_cfg.get("use_wip", True):
-                            row_dict["WIP"] = feat.get("WIP", wip)
-                        if univ_cfg.get("use_ac_wip", True):
-                            row_dict["AC_WIP"] = feat.get("AC_WIP", 0)
-                        if univ_cfg.get("use_calendar_time", True):
-                            row_dict["Daytime"] = feat.get("Daytime", daytime)
-                            for i in range(7):
-                                row_dict[f"Weekday_{i}"] = 1.0 if feat["Weekday"] == i else 0.0
-                        if univ_cfg.get("use_role_occupancy", True):
-                            for i, act in enumerate(activities):
-                                row_dict[f"Role_{i}_OC"] = float(feat["RP_OC_Array"][i])
-
-                        # Append dynamic milestone context
-                        row_dict["Offer_Count"] = feat.get("Offer_Count", 0.0)
-                        row_dict["Has_Offer"] = feat.get("Has_Offer", 0.0)
-                        for m in all_milestones:
-                            row_dict[f"Milestone_{m}"] = feat.get(f"Milestone_{m}", 0.0)
-
-                        # Append domain-specific Tier 2 features
-                        for attr in case_attrs:
-                            fname = attr["feature_name"]
-                            row_dict[fname] = feat.get(fname, attr.get("fill_value", 0.0))
-                        for col in event_attrs:
-                            row_dict[col] = feat.get(col, "UNKNOWN")
+                        # Merge all dynamically extracted features
+                        for k, v in feat.items():
+                            if k not in row_dict:
+                                row_dict[k] = v
 
                         all_rows.append(row_dict)
 
@@ -282,7 +269,6 @@ def main():
             active_cases.discard(case_id)
             if case_id in case_prefixes: del case_prefixes[case_id]
             if case_id in case_start_times: del case_start_times[case_id]
-            if case_id in case_schedule_times: del case_schedule_times[case_id]
             if case_id in case_start_features: del case_start_features[case_id]
             if case_id in case_milestones_seen: del case_milestones_seen[case_id]
             if case_id in case_offer_count: del case_offer_count[case_id]

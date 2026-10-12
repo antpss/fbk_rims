@@ -15,6 +15,8 @@ Orchestrates discrete-event simulation via the modular OOP package `src.simulato
 import os
 import sys
 import argparse
+import random
+import numpy as np
 
 # Ensure src is on sys.path
 src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -47,7 +49,7 @@ def main():
                         help="Number of cases to simulate (e.g. 1000, 2500, or 'all')")
     parser.add_argument("--all", action="store_true",
                         help="Simulate all cases available in the event log")
-    parser.add_argument("--mode", type=str, default=None, choices=["hybrid_residual", "pure_physics", "pure_ml"],
+    parser.add_argument("--mode", type=str, default=None, choices=["hybrid_residual", "pure_physics"],
                         help="Simulation waiting time mode")
     parser.add_argument("--arrival_mode", type=str, default=None, choices=["replay", "generative"],
                         help="Arrival generation mode: 'replay' from aligned log, or 'generative' distribution")
@@ -55,11 +57,22 @@ def main():
                         help="Export standard IEEE XES log (.xes)")
     parser.add_argument("--pnml", type=str, default=None,
                         help="Path to override Petri net PNML file")
+    parser.add_argument("--duration", type=float, default=None,
+                        help="Simulation horizon duration in days")
     parser.add_argument("--compare_modes", action="store_true",
-                        help="Run 3-way ablation study comparing all simulation modes")
+                        help="Run 2-way comparison study between pure_physics and hybrid_residual")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    seed = cfg.get("project", {}).get("random_seed", 42)
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+        torch.manual_seed(seed)
+    except ImportError:
+        pass
+
     if args.all or (args.cases and str(args.cases).lower() == "all"):
         num_cases = None
     elif args.cases is not None:
@@ -72,12 +85,12 @@ def main():
     pnml_path = args.pnml or os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("petri_net", "models/petri_nets/discovered_model_split.pnml"))
 
     if args.compare_modes:
-        modes = ["pure_physics", "pure_ml", "hybrid_residual"]
+        modes = ["pure_physics", "hybrid_residual"]
         results = []
         case_label = f"{num_cases:,}" if num_cases else "ALL"
         print("\n" + "=" * 105)
-        print("                        RIMS+ 3-WAY SIMULATION ABLATION SUITE")
-        print(f"                        Evaluating {case_label} cases across all 3 modes")
+        print("                        RIMS+ 2-WAY SIMULATION BENCHMARK SUITE")
+        print(f"                        Evaluating {case_label} cases (Pure Physics vs. Hybrid Residual)")
         print("=" * 105)
 
         for m in modes:
@@ -88,7 +101,8 @@ def main():
                 mode=m,
                 arrival_mode=arrival_mode,
                 export_xes=export_xes,
-                pnml_path=pnml_path
+                pnml_path=pnml_path,
+                duration_days=args.duration,
             )
             res = sim.run()
             results.append(res)
@@ -133,7 +147,8 @@ def main():
             mode=mode,
             arrival_mode=arrival_mode,
             export_xes=export_xes,
-            pnml_path=pnml_path
+            pnml_path=pnml_path,
+            duration_days=args.duration,
         )
         sim.run()
 

@@ -10,51 +10,51 @@
   ],
   "dispatch": {
     "__default__": {
-      "model_type": "tcn",
-      "source_dir": "global_tcn",
-      "file": "tcn_global.pth"
+      "model_type": "xgboost",
+      "source_dir": "global_xgboost",
+      "file": "xgboost_global.json"
     },
     "W_Assess fraud": {
       "model_type": "xgboost",
       "source_dir": "local_xgboost",
       "file": "xgboost_local_W_Assess_fraud.json",
-      "best_test_mae": 910.94,
-      "best_test_smape": 71.11
+      "best_test_mae": 382.03,
+      "best_test_smape": 68.91
     },
     "W_Call after incomplete files": {
       "model_type": "xgboost",
       "source_dir": "global_xgboost",
       "file": "xgboost_global.json",
-      "best_test_mae": 781.12,
-      "best_test_smape": 99.32
+      "best_test_mae": 386.06,
+      "best_test_smape": 99.47
     },
     "W_Call after offers": {
       "model_type": "xgboost",
       "source_dir": "local_xgboost",
       "file": "xgboost_local_W_Call_after_offers.json",
-      "best_test_mae": 451.93,
-      "best_test_smape": 76.42
+      "best_test_mae": 208.36,
+      "best_test_smape": 76.35
     },
     "W_Complete application": {
       "model_type": "xgboost",
       "source_dir": "local_xgboost",
       "file": "xgboost_local_W_Complete_application.json",
-      "best_test_mae": 471.33,
-      "best_test_smape": 86.51
+      "best_test_mae": 316.39,
+      "best_test_smape": 86.63
     },
     "W_Handle leads": {
       "model_type": "xgboost",
-      "source_dir": "global_xgboost",
-      "file": "xgboost_global.json",
-      "best_test_mae": 668.44,
-      "best_test_smape": 76.38
+      "source_dir": "local_xgboost",
+      "file": "xgboost_local_W_Handle_leads.json",
+      "best_test_mae": 431.3,
+      "best_test_smape": 75.75
     },
     "W_Validate application": {
-      "model_type": "tcn",
-      "source_dir": "local_tcn",
-      "file": "tcn_local_W_Validate_application.pth",
-      "best_test_mae": 1181.18,
-      "best_test_smape": 81.6
+      "model_type": "xgboost",
+      "source_dir": "local_xgboost",
+      "file": "xgboost_local_W_Validate_application.json",
+      "best_test_mae": 778.12,
+      "best_test_smape": 86.55
     }
   }
 }
