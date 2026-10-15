@@ -41,14 +41,13 @@ fbk_rims/
 │   │   └── benchmark_report.md        # Waiting time benchmark leaderboard
 │   └── routing/                       # White-box XOR decision classifiers & routing manifest
 │       ├── routing_decisions.json     # Dynamic decision dispatch manifest
-│       └── p_*.pkl                    # Trained decision tree classifiers per XOR place
+│       └── routing_*.joblib           # Trained decision tree classifiers per XOR place
 ├── src/                               # Core pipeline scripts (Steps 00 to 06 + Benchmarking)
 │   ├── 00_filter_log.py               # Step 0: Raw event log filtering
 │   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split / Inductive)
 │   ├── view_models.py                 # Step 1b: Petri net visualization (.png)
 │   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair
-│   ├── 02b_conformance_checking.py    # Step 2b: Conformance evaluation (Fitness, Precision)
-│   ├── 02c_discover_delays.py         # Step 2c: Causal external delays & worker latency discovery
+│   ├── 02b_discover_delays.py         # Step 2b: Causal external delays & worker latency discovery
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
 │   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
 │   ├── benchmark_models.py            # Step 4b: Automated benchmarking & champion synthesis
@@ -83,6 +82,7 @@ Key dependencies:
 * `xgboost` : Gradient-boosted regression engines
 * `scikit-learn` : DecisionTreeClassifier, feature scalers, and evaluation metrics
 * `hyperopt` : Bayesian Tree-structured Parzen Estimator (TPE) optimization
+* `prophet` : Time-series forecasting for case arrival intensities (DeepSimulator parity)
 * `pandas`, `numpy` : High-performance tabular manipulation and state extraction
 * `pyyaml` : Centralized configuration parsing
 
@@ -157,18 +157,11 @@ python src/02_align_and_repair_log.py
 ```
 * **Output**: `data/processed/aligned_BPI_2012.xes`
 
-To evaluate conformance (Fitness, Precision, F1-Score):
-```bash
-python src/02b_conformance_checking.py --miner split
-```
-
----
-
-### Step 2c: Discover Causal Delays & Worker Cooldowns (`src/02c_discover_delays.py`)
+### Step 2b: Discover Causal Delays & Worker Cooldowns (`src/02b_discover_delays.py`)
 Discovers uncoupled external delays (postal/client response transit) and human refractory inter-ticket latencies, fitting continuous Kolmogorov-Smirnov distributions (Lognormal, Gamma, Exponential).
 
 ```bash
-python src/02c_discover_delays.py
+python src/02b_discover_delays.py
 ```
 * **Input**: `data/processed/aligned_BPI_2012.xes`
 * **Output**: `models/delays/delay_manifest.json`
@@ -275,7 +268,7 @@ Discovers all XOR split places (places with $\ge 2$ outgoing branches) in the Pe
   * `criterion`: `['gini', 'entropy', 'log_loss']`
   * `class_weight`: `[None, 'balanced']`
 * **Fallback Strategy**:
-  * If $\text{Macro F1} \ge 0.60$: Saves trained white-box model (`models/routing/{place}.pkl` and `routing_{place}.joblib`).
+  * If $\text{Macro F1} \ge 0.60$: Saves trained white-box model (`models/routing/routing_{place}.joblib`).
   * If $\text{Macro F1} < 0.60$ (or highly skewed/stochastic classes): Automatically falls back to empirical branching probabilities from the aligned log.
 * **Dual Net Targets (Merged in `routing_decisions.json`)**:
   * **Operational Workflow Net** (`discovered_model_split.pnml`): Resolves human work item loopbacks and splits during runtime simulation.
@@ -299,7 +292,7 @@ python src/05_train_routing.py --max_depth 21 --min_samples 30 --min_f1_threshol
 ```
 * **Outputs**:
   * Modern dispatch manifest: `models/routing/routing_decisions.json`
-  * Trained white-box model binaries: `models/routing/p_*.pkl` and `models/routing/routing_p_*.joblib`
+  * Trained white-box model binaries: `models/routing/routing_*.joblib`
 
 ---
 
@@ -359,7 +352,7 @@ The discrete-event simulation engine is structured into the clean, modular Objec
 * **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct multi-skilled human resources (eliminating the legacy phantom worker bug) with Kolmogorov-Smirnov continuous latency cooldowns. Worker assignment strictly respects active operating hours, ensuring workers are not assigned outside shift boundaries.
 * **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and PyTorch LSTM models from `dispatch_config.json`.
 * **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (08:00 – 20:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
-* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes` or synthetic generative distributions (exponential, uniform, constant).
+* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes`, synthetic generative distributions (exponential, uniform, constant), or time-series forecasting via **Facebook Prophet** (hourly case arrival intensity and seasonal decomposition).
 * **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`simulated_log.csv`) and IEEE XES (`simulated_log.xes`), and evaluates cycle time MAE, RMSE, and 1D Wasserstein distance against real ground truth.
 * **Hybrid Residual Waiting Strategy**: Eliminates double-waiting distortion by acquiring workers in SimPy queue contention first ($W_{\text{queue}}$) and yielding only the uncoupled residual $\max(0, W_{\text{ML}} - W_{\text{queue}})$.
 
@@ -372,6 +365,9 @@ python src/06_simulate.py --cases 1000 --arrival_mode replay
 
 # 3. Purely Generative arrivals (e.g. 1,000 synthetic cases)
 python src/06_simulate.py --cases 1000 --arrival_mode generative
+
+# 4. Prophet Time-Series Forecasting arrivals (DeepSimulator parity)
+python src/06_simulate.py --cases 1000 --arrival_mode prophet
 
 # 4. Simulate ALL cases available in historical log
 python src/06_simulate.py --all

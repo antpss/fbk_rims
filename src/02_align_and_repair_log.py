@@ -9,9 +9,7 @@ def main():
     raw_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_filtered.xes")
     input_log_path = raw_rel if os.path.isabs(raw_rel) else os.path.join(PROJECT_ROOT, raw_rel)
     if not os.path.exists(input_log_path):
-        fallback_path = os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes")
-        if os.path.exists(fallback_path):
-            input_log_path = fallback_path
+        raise FileNotFoundError(f"Raw log not found at: {input_log_path}")
     input_pnml_path = cfg["paths"].get("petri_net", os.path.join(PROJECT_ROOT, "models/petri_nets/discovered_model_split.pnml"))
     output_log_path = cfg["paths"].get("aligned_log", os.path.join(PROJECT_ROOT, "data/processed/aligned_BPI_2012.xes"))
 
@@ -72,7 +70,6 @@ def main():
         # Separate milestones vs process activity executions
         milestones = []
         work_items = []
-        pending_sched = {}
         pending_start = {}
 
         for _, row in grp_sorted.iterrows():
@@ -84,14 +81,11 @@ def main():
             if act.startswith(milestone_prefixes):
                 milestones.append(evt)
             elif act.startswith(proc_prefixes):
-                if trans == "SCHEDULE":
-                    pending_sched[act] = evt
-                elif trans == "START":
+                if trans == "START":
                     pending_start[act] = evt
                 elif trans == "COMPLETE":
                     wi = {
                         "act": act,
-                        "schedule": pending_sched.pop(act, None),
                         "start": pending_start.pop(act, None),
                         "complete": evt
                     }
@@ -113,13 +107,11 @@ def main():
                     continue
 
                 if log_move != ">>" and model_move != ">>":
-                    # Sync move: keep real work item with full lifecycle
+                    # Sync move: keep real work item with full lifecycle (START + COMPLETE)
                     total_sync_moves += 1
                     if wi_idx < len(work_items):
                         wi = work_items[wi_idx]
                         wi_idx += 1
-                        if wi["schedule"] is not None:
-                            repaired_events.append(wi["schedule"])
                         if wi["start"] is not None:
                             repaired_events.append(wi["start"])
                         repaired_events.append(wi["complete"])
@@ -145,8 +137,6 @@ def main():
         else:
             # For cases without alignment or non-process traces, retain all original work items
             for wi in work_items:
-                if wi["schedule"] is not None:
-                    repaired_events.append(wi["schedule"])
                 if wi["start"] is not None:
                     repaired_events.append(wi["start"])
                 repaired_events.append(wi["complete"])

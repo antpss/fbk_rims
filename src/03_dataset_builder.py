@@ -188,12 +188,11 @@ def main():
                 synthetic_skipped += 1
                 case_prefixes[case_id].append(activity_name)
 
-
             elif transition == "START":
                 ac_wip[activity_name] += 1
                 case_start_times[case_id][activity_name] = timestamp
 
-                # Universal Queue Wait Calculation (Agnostic across all event logs):
+                # Universal Queue Wait Calculation:
                 # START - prev_end_time (inter-activity idle wait from previous completed work item)
                 if case_id in case_prev_end_time:
                     current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()

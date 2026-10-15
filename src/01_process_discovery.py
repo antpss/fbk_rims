@@ -19,7 +19,7 @@ def main():
     chosen_miner = args.miner if args.miner is not None else disc_cfg.get("miner", "split")
     noise_threshold = args.noise_threshold if args.noise_threshold is not None else disc_cfg.get("inductive_noise_threshold", 0.2)
 
-    # Split Miner hyperparameters configured purely via config.yaml
+    # Standard optimal Split Miner parameters
     split_cfg = disc_cfg.get("split_miner", {})
     epsilon = split_cfg.get("epsilon", 0.1)
     eta = split_cfg.get("eta", 0.4)
@@ -30,10 +30,7 @@ def main():
     raw_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_filtered.xes")
     input_log_path = raw_rel if os.path.isabs(raw_rel) else os.path.join(PROJECT_ROOT, raw_rel)
     if not os.path.exists(input_log_path):
-        fallback_path = os.path.join(PROJECT_ROOT, "data/processed/BPI_2012_W_only.xes")
-        if os.path.exists(fallback_path):
-            print(f"[Notice] '{input_log_path}' not found, falling back to existing '{fallback_path}'.")
-            input_log_path = fallback_path
+        raise FileNotFoundError(f"Input log not found at: {input_log_path}")
     petri_nets_dir = os.path.join(PROJECT_ROOT, cfg["paths"].get("petri_nets_dir", "models/petri_nets"))
     os.makedirs(petri_nets_dir, exist_ok=True)
     output_pnml_path = os.path.join(petri_nets_dir, f"discovered_model_{chosen_miner}.pnml")
@@ -62,7 +59,7 @@ def main():
 
     if chosen_miner == "split":
         # Discover BPMN model using Split Miner and convert to Petri Net
-        print(f"Discovering BPMN model using Split Miner (epsilon={epsilon}, eta={eta}, variant='{variant}', minimize_or_joins={minimize_or_joins})...")
+        print("Discovering BPMN model using Split Miner...")
         bpmn_model = pm4py.discover_bpmn_split_miner(
             discovery_log,
             epsilon=epsilon,

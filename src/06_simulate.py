@@ -51,8 +51,8 @@ def main():
                         help="Simulate all cases available in the event log")
     parser.add_argument("--mode", type=str, default=None, choices=["hybrid_residual", "pure_physics"],
                         help="Simulation waiting time mode")
-    parser.add_argument("--arrival_mode", type=str, default=None, choices=["replay", "generative"],
-                        help="Arrival generation mode: 'replay' from aligned log, or 'generative' distribution")
+    parser.add_argument("--arrival_mode", type=str, default=None, choices=["replay", "generative", "prophet"],
+                        help="Arrival generation mode: 'replay' from aligned log, 'generative' distribution, or 'prophet' time-series")
     parser.add_argument("--export_xes", action="store_true", default=None,
                         help="Export standard IEEE XES log (.xes)")
     parser.add_argument("--pnml", type=str, default=None,
@@ -126,18 +126,20 @@ def main():
         print("=" * 105 + "\n")
 
         # Save Ablation Report
-        abl_path = os.path.join(PROJECT_ROOT, "data/processed/ablation_report.md")
-        with open(abl_path, "w") as f:
-            f.write("# RIMS+ Simulation Ablation Benchmark Report\n\n")
-            f.write(f"- **Evaluated Cases per Mode:** {case_label}\n")
-            f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n\n")
-            f.write("| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | Run Time |\n")
-            f.write("|---|---|---|---|---|---|\n")
-            f.write(f"| **REAL HISTORICAL** | {format_dur(real_m)} | {format_dur(real_med)} | --- | --- | --- |\n")
-            for r in sorted_res:
-                tag = " ★ (Best)" if r["mode"] == best_mode else ""
-                f.write(f"| `{r['mode']}`{tag} | {format_dur(r['sim_mean'])} | {format_dur(r['sim_median'])} | {format_dur(r['mae_cycle'])} | {format_dur(r['wd'])} | {r['elapsed']:.1f}s |\n")
-        print(f"[✓] Saved comprehensive ablation report to: {abl_path}\n")
+        for rep_name in ["ablation_report.md", f"ablation_report_{arrival_mode}.md"]:
+            abl_path = os.path.join(PROJECT_ROOT, "data/processed", rep_name)
+            with open(abl_path, "w") as f:
+                f.write(f"# RIMS+ Simulation Ablation Benchmark Report ({arrival_mode.upper()} ARRIVAL)\n\n")
+                f.write(f"- **Arrival Mode:** `{arrival_mode}`\n")
+                f.write(f"- **Evaluated Cases per Mode:** {case_label}\n")
+                f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n\n")
+                f.write("| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | Run Time |\n")
+                f.write("|---|---|---|---|---|---|\n")
+                f.write(f"| **REAL HISTORICAL** | {format_dur(real_m)} | {format_dur(real_med)} | --- | --- | --- |\n")
+                for r in sorted_res:
+                    tag = " ★ (Best)" if r["mode"] == best_mode else ""
+                    f.write(f"| `{r['mode']}`{tag} | {format_dur(r['sim_mean'])} | {format_dur(r['sim_median'])} | {format_dur(r['mae_cycle'])} | {format_dur(r['wd'])} | {r['elapsed']:.1f}s |\n")
+            print(f"[✓] Saved comprehensive ablation report to: {abl_path}\n")
 
     else:
         mode = args.mode or cfg.get("simulation", {}).get("mode", "hybrid_residual")

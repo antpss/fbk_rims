@@ -28,7 +28,6 @@ Implements the RIMS & RIMS_tool methodology:
 import os
 import sys
 import json
-import pickle
 import argparse
 import joblib
 import numpy as np
@@ -122,11 +121,11 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, window_size=10, case_attrs_cfg=None):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, window_size=10, case_attrs_cfg=None, milestone_prefixes=None, excluded_milestones=None):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
-    Extracts prefix history, presence indicators, case attributes, and temporal features
-    at each XOR split encounter.
+    Extracts prefix history, loop counts, milestone business state, offer counts,
+    case attributes, and temporal features at each XOR split encounter.
     """
     print(f"Loading Petri net: {pnml_path}...")
     net, im, fm = pm4py.read_pnml(pnml_path)
@@ -152,12 +151,22 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
     for t in net.transitions:
         id2label[t.name] = t.label if t.label is not None else t.name
 
-    # Identify frequent activities for presence tracking
+    # Identify frequent process activities for presence tracking
     all_acts = set()
     for t in net.transitions:
         if t.label is not None:
             all_acts.add(t.label)
     common_acts = sorted(list(all_acts))
+
+    # Identify distinct milestone activities present in the log (excluding terminal outcome milestones)
+    ms_prefixes_tuple = tuple(milestone_prefixes) if milestone_prefixes else ()
+    excluded_ms = set(excluded_milestones or [])
+    all_milestones = sorted([
+        act for act in df_log["concept:name"].unique()
+        if ms_prefixes_tuple and act.startswith(ms_prefixes_tuple) and act not in excluded_ms
+    ])
+    if all_milestones:
+        print(f"Identified {len(all_milestones)} business milestone states to track as decision context (excluded {len(excluded_ms)} terminal outcomes).")
 
     print(f"Computing optimal PM4Py alignments across {len(log)} traces...")
     params = {
@@ -172,7 +181,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         trace = log[i]
         case_id = trace.attributes.get("concept:name", str(i))
 
-        # Dynamic case attributes
+        # Dynamic case attributes (e.g. RequestedAmount, ApplicationType, LoanGoal)
         case_features = {}
         if case_attrs_cfg:
             for attr in case_attrs_cfg:
@@ -182,12 +191,14 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                 clean_col = col.replace("case:", "")
                 val = trace.attributes.get(col, trace.attributes.get(clean_col, fill_val))
                 try:
-                    val = float(val) if attr.get("type") == "continuous" else val
+                    if attr.get("type") == "continuous":
+                        val = float(val) if val is not None else float(fill_val)
+                    else:
+                        val = str(val) if val is not None else str(fill_val)
                 except Exception:
                     val = fill_val
                 case_features[feat_name] = val
         else:
-            # Fallback default for AMOUNT_REQ if present
             amt = trace.attributes.get("case:AMOUNT_REQ", trace.attributes.get("AMOUNT_REQ", 0.0))
             case_features["RequestedAmount"] = float(amt) if amt is not None else 0.0
 
@@ -197,14 +208,29 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         weekday = first_dt.weekday() if first_dt is not None else 0
 
         prefix_labels = []
+        milestones_seen = set()
+        offer_count = 0
+        dp_counts = defaultdict(int)
+
         for move in trace_res["alignment"]:
+            log_label = move[1][0]
             model_t_id = move[0][1]
+
+            # 1. Track log milestone & offer events even when unmodeled in Petri net
+            if log_label != ">>":
+                if ms_prefixes_tuple and log_label.startswith(ms_prefixes_tuple):
+                    if log_label not in excluded_ms:
+                        milestones_seen.add(log_label)
+                if log_label.startswith("O_") or "offer" in log_label.lower():
+                    offer_count += 1
+
+            # 2. Skip if transition did not fire in Petri net
             if model_t_id == ">>":
-                continue  # Log move, skip
+                continue
 
             chosen_label = id2label.get(model_t_id, model_t_id)
 
-            # Check if this transition belongs to any XOR decision point
+            # 3. Check if this transition belongs to any XOR decision point
             for p_id, p_info in xor_decision_points.items():
                 if model_t_id in p_info["branches"]:
                     sample = {
@@ -213,14 +239,22 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                         "hour": hour,
                         "weekday": weekday,
                         "prev_activity": prefix_labels[-1] if prefix_labels else "<START>",
+                        "loop_count": float(dp_counts[p_id]),
+                        "offer_count": float(offer_count),
+                        "has_offer": 1.0 if offer_count > 0 else 0.0,
                         **case_features,
                     }
 
-                    # Activity presence indicators (e.g. has_A_PREACCEPTED, has_A_ACCEPTED, has_A_FINALIZED)
+                    # Milestone presence indicators
+                    for ms in all_milestones:
+                        sample[f"has_{ms}"] = 1.0 if ms in milestones_seen else 0.0
+
+                    # Process activity presence indicators
                     for act in common_acts:
                         sample[f"has_{act}"] = 1.0 if act in prefix_labels else 0.0
 
                     decision_data[p_id].append(sample)
+                    dp_counts[p_id] += 1
 
             prefix_labels.append(chosen_label)
 
@@ -262,6 +296,7 @@ def main():
     min_samples = args.min_samples if args.min_samples is not None else routing_cfg.get("min_samples", 30)
     max_depth = args.max_depth if args.max_depth is not None else routing_cfg.get("max_depth", 21)
     n_estimators = args.n_estimators if args.n_estimators is not None else routing_cfg.get("rf_trees", 5)
+    force_prob_places = set(routing_cfg.get("force_probability_places", []))
     output_dir = args.output_dir or os.path.join(
         PROJECT_ROOT,
         cfg.get("paths", {}).get("routing_models_dir") or routing_cfg.get("output_dir", "models/routing")
@@ -309,6 +344,8 @@ def main():
         print(f"  Num Trees:     {n_estimators} (White-Box Ensemble)")
     print(f"  Min Samples:   {min_samples}")
     print(f"  F1 Threshold:  {min_f1}")
+    if force_prob_places:
+        print(f"  Forced Probs:  {list(force_prob_places)} (Parity with Legacy RIMS)")
     print(f"  Output Dir:    {output_dir}")
     print("=" * 85)
 
@@ -319,6 +356,13 @@ def main():
         branch_labels = [b["raw_trans"] for b in p_info["branches"].values()]
         print(f"  - Place [{p_id}]: {len(branch_labels)} branches -> {branch_labels}")
 
+    prep_cfg = cfg.get("preprocessing", {})
+    milestone_prefixes = prep_cfg.get("milestone_prefixes", ["A_", "O_"])
+    excluded_milestones = prep_cfg.get("excluded_milestones", [
+        "O_ACCEPTED", "A_DECLINED", "A_CANCELLED", "A_ACTIVATED",
+        "A_APPROVED", "A_REGISTERED", "O_DECLINED", "O_CANCELLED"
+    ])
+
     # 2. Align Log & Extract Decision Samples
     decision_dfs = extract_decision_samples_via_alignment(
         log_path=log_path,
@@ -326,6 +370,8 @@ def main():
         xor_decision_points=xor_points,
         window_size=window_size,
         case_attrs_cfg=case_attrs_cfg,
+        milestone_prefixes=milestone_prefixes,
+        excluded_milestones=excluded_milestones,
     )
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
@@ -368,6 +414,35 @@ def main():
             "classes_observed": counts,
             "branches_defined": targets_available,
         }
+
+        # Case 0: Explicitly configured empirical probability place (e.g. entry split parity with legacy RIMS)
+        if p_id in force_prob_places:
+            probs = {cls: float(cnt / n_samples) for cls, cnt in counts.items()} if n_samples > 0 else {t: 1.0/len(targets_available) for t in targets_available}
+            dp_entry["strategy"] = "empirical_probability"
+            dp_entry["probabilities"] = probs
+            dp_entry["model_file"] = None
+            dp_entry["accuracy"] = None
+            dp_entry["macro_f1"] = None
+            dispatch_manifest["decision_points"][p_id] = dp_entry
+
+            # Remove stale model files if present
+            stale_path = os.path.join(output_dir, f"routing_{safe_name}.joblib")
+            if os.path.exists(stale_path):
+                try:
+                    os.remove(stale_path)
+                except OSError:
+                    pass
+
+            results_table.append({
+                "Place": p_id,
+                "Samples": n_samples,
+                "Classes": n_classes,
+                "Strategy": "Empirical Prob (Forced)",
+                "Accuracy": "---",
+                "Macro F1": "---",
+                "Status": "Forced Empirical Probability",
+            })
+            continue
 
         # Case 1: Insufficient samples or single class -> Empirical Branching Probability
         if n_samples < min_samples or n_classes < 2:
@@ -574,11 +649,7 @@ def main():
         if macro_f1 >= min_f1:
             dp_entry["strategy"] = "machine_learning"
             model_joblib_file = f"routing_{safe_name}.joblib"
-            model_pkl_file = f"{safe_name}.pkl"
-
             joblib.dump(clf, os.path.join(output_dir, model_joblib_file))
-            with open(os.path.join(output_dir, model_pkl_file), "wb") as pf:
-                pickle.dump(clf, pf)
 
             dp_entry["model_file"] = model_joblib_file
             if tree_text:

@@ -94,22 +94,17 @@ class ChampionPredictor:
         self.routing_models = {}
         for p_id, p_info in self.routing_manifest.items():
             if p_info.get("strategy") == "machine_learning":
-                m_file = p_info.get("model_file") or p_info.get("legacy_pkl_file")
+                m_file = p_info.get("model_file")
                 if m_file:
                     m_path = os.path.join(routing_dir, m_file)
                     if os.path.exists(m_path):
                         try:
                             self.routing_models[p_id] = joblib.load(m_path)
                         except Exception as e_job:
-                            try:
-                                import pickle
-                                with open(m_path, "rb") as pf:
-                                    self.routing_models[p_id] = pickle.load(pf)
-                            except Exception as e_pkl:
-                                logger.warning(
-                                    f"Failed to load routing model for place '{p_id}' from '{m_path}'. "
-                                    f"joblib error: {e_job}; pickle error: {e_pkl}. Falling back to empirical probabilities."
-                                )
+                            logger.warning(
+                                f"Failed to load routing model for place '{p_id}' from '{m_path}': {e_job}. "
+                                "Falling back to empirical probabilities."
+                            )
                     else:
                         logger.warning(
                             f"Routing model file '{m_file}' for place '{p_id}' not found at '{m_path}'."
@@ -132,9 +127,13 @@ class ChampionPredictor:
         suite = {}
         v_path = os.path.join(base_dir, "vocab.json")
         vocab = {}
+        act_to_idx = {}
         if os.path.exists(v_path):
             with open(v_path) as f:
-                vocab = json.load(f)
+                v_data = json.load(f)
+                if isinstance(v_data, dict):
+                    vocab = v_data.get("vocab", v_data)
+                    act_to_idx = v_data.get("act_to_idx", {})
 
         scalers = {}
         for fn in os.listdir(base_dir):
@@ -142,8 +141,32 @@ class ChampionPredictor:
                 scalers[fn] = joblib.load(os.path.join(base_dir, fn))
 
         suite["vocab"] = vocab
+        suite["act_to_idx"] = act_to_idx
         suite["scalers"] = scalers
         suite["models"] = {}
+
+        def _resolve_scaler(s_dir, num_feats):
+            cand_scalers = []
+            if s_dir:
+                parent_models_dir = os.path.dirname(base_dir)
+                cand_dir = os.path.join(parent_models_dir, s_dir)
+                if os.path.isdir(cand_dir):
+                    for fn in sorted(os.listdir(cand_dir)):
+                        if fn.startswith("scaler_") and fn.endswith(".pkl"):
+                            try:
+                                cand_scalers.append(joblib.load(os.path.join(cand_dir, fn)))
+                            except Exception:
+                                pass
+            for fn in sorted(scalers.keys()):
+                cand_scalers.append(scalers[fn])
+
+            for sc in cand_scalers:
+                if hasattr(sc, "feature_names_in_") and len(sc.feature_names_in_) == num_feats:
+                    return sc
+            for sc in cand_scalers:
+                if not hasattr(sc, "feature_names_in_"):
+                    return sc
+            return cand_scalers[0] if cand_scalers else None
 
         for act, entry in dispatch_dict.items():
             m_type = entry.get("model_type", "xgboost")
@@ -179,7 +202,14 @@ class ChampionPredictor:
                                   num_features=num_feats, hidden_dim=hidden, num_layers=3)
                 tcn.load_state_dict(sd)
                 tcn.eval()
-                suite["models"][act] = {"type": "tcn", "model": tcn}
+                s_dir = entry.get("source_dir", "")
+                suite["models"][act] = {
+                    "type": "tcn",
+                    "model": tcn,
+                    "source_dir": s_dir,
+                    "num_feats": num_feats,
+                    "scaler": _resolve_scaler(s_dir, num_feats)
+                }
             elif m_type == "lstm":
                 if DurationLSTM is None:
                     raise ImportError("DurationLSTM class could not be loaded from 04_train.")
@@ -196,7 +226,14 @@ class ChampionPredictor:
                                     num_features=num_feats, hidden_dim=hidden, num_layers=2)
                 lstm.load_state_dict(sd)
                 lstm.eval()
-                suite["models"][act] = {"type": "lstm", "model": lstm}
+                s_dir = entry.get("source_dir", "")
+                suite["models"][act] = {
+                    "type": "lstm",
+                    "model": lstm,
+                    "source_dir": s_dir,
+                    "num_feats": num_feats,
+                    "scaler": _resolve_scaler(s_dir, num_feats)
+                }
         return suite
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
@@ -278,13 +315,16 @@ class ChampionPredictor:
                 row_dict[k] = v
 
             # Determine expected columns from model booster if available
-            expected_cols = None
-            if hasattr(model, "feature_names_in_") and model.feature_names_in_ is not None:
-                expected_cols = list(model.feature_names_in_)
-            elif hasattr(model, "get_booster") and model.get_booster().feature_names:
-                expected_cols = list(model.get_booster().feature_names)
-            elif hasattr(model, "feature_names") and model.feature_names:
-                expected_cols = list(model.feature_names)
+            if "expected_cols" not in entry:
+                expected_cols = None
+                if hasattr(model, "feature_names_in_") and model.feature_names_in_ is not None:
+                    expected_cols = list(model.feature_names_in_)
+                elif hasattr(model, "get_booster") and model.get_booster().feature_names:
+                    expected_cols = list(model.get_booster().feature_names)
+                elif hasattr(model, "feature_names") and model.feature_names:
+                    expected_cols = list(model.feature_names)
+                entry["expected_cols"] = expected_cols
+            expected_cols = entry["expected_cols"]
 
             if expected_cols:
                 for ec in expected_cols:
@@ -329,16 +369,42 @@ class ChampionPredictor:
 
         elif m_type in ["tcn", "lstm"]:
             vocab = suite["vocab"]
+            act_to_idx = suite.get("act_to_idx", {})
             seq = [vocab.get(a, 1) for a in prefix[-self.max_seq_len:]]
             if len(seq) < self.max_seq_len:
                 seq = [0] * (self.max_seq_len - len(seq)) + seq
             seq_t = torch.tensor([seq], dtype=torch.long)
 
-            act_idx = self.target_acts.index(activity) if activity in self.target_acts else 0
+            if activity in act_to_idx:
+                act_idx = act_to_idx[activity]
+            elif activity in self.target_acts:
+                act_idx = self.target_acts.index(activity)
+            else:
+                act_idx = 0
             act_t = torch.tensor([act_idx], dtype=torch.long)
 
-            scaler = suite["scalers"].get("scaler_local.pkl") or suite["scalers"].get("scaler_global.pkl")
-            cols = list(scaler.feature_names_in_) if (scaler and hasattr(scaler, "feature_names_in_")) else self.feature_cols
+            scaler = entry.get("scaler")
+            target_n = entry.get("num_feats")
+            if scaler is None:
+                s_dir = entry.get("source_dir", "")
+                if "global" in s_dir:
+                    scaler = suite["scalers"].get("scaler_global.pkl")
+                elif "local" in s_dir:
+                    scaler = suite["scalers"].get(f"scaler_local_{activity}.pkl") or suite["scalers"].get("scaler_local.pkl")
+
+                if scaler is None and target_n is not None:
+                    for sc in suite["scalers"].values():
+                        if hasattr(sc, "feature_names_in_") and len(sc.feature_names_in_) == target_n:
+                            scaler = sc
+                            break
+
+                if scaler is None:
+                    scaler = suite["scalers"].get("scaler_global.pkl") or suite["scalers"].get("scaler_local.pkl")
+                entry["scaler"] = scaler
+
+            if "cols" not in entry:
+                entry["cols"] = list(scaler.feature_names_in_) if (scaler and hasattr(scaler, "feature_names_in_")) else self.feature_cols
+            cols = entry["cols"]
             feat_dict = {}
             for c in cols:
                 if c in f_dict:
@@ -359,6 +425,13 @@ class ChampionPredictor:
                 feat_vals = feat_df.values.astype(np.float32)
             feat_t = torch.tensor(feat_vals, dtype=torch.float32)
 
+            if target_n is not None and feat_t.shape[1] != target_n:
+                if feat_t.shape[1] > target_n:
+                    feat_t = feat_t[:, :target_n]
+                else:
+                    pad = torch.zeros((feat_t.shape[0], target_n - feat_t.shape[1]), dtype=feat_t.dtype)
+                    feat_t = torch.cat([feat_t, pad], dim=1)
+
             with torch.no_grad():
                 out = model(seq_t, act_t, feat_t).item()
             val = float(np.expm1(np.clip(out, 0.0, 25.0)))
@@ -366,7 +439,7 @@ class ChampionPredictor:
 
         return default_fallback
 
-    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer, curr_dt=None):
+    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer, curr_dt=None, loop_count=0.0):
         """Predicts outgoing transition branch at an XOR split place."""
         p_info = self.routing_manifest.get(place_id)
         if not p_info:
@@ -382,9 +455,11 @@ class ChampionPredictor:
             for k, p_act in enumerate(recent_p):
                 row[f"prefix_{k+1}"] = p_act
             row["RequestedAmount"] = float(requested_amount)
-            row["amount"] = float(requested_amount)
             row["Offer_Count"] = float(offer_count)
             row["Has_Offer"] = float(has_offer)
+            row["offer_count"] = float(offer_count)
+            row["has_offer"] = float(has_offer)
+            row["loop_count"] = float(loop_count)
             row["prev_activity"] = prefix[-1] if prefix else "<START>"
             row["hour"] = curr_dt.hour if curr_dt is not None else 12
             row["weekday"] = curr_dt.weekday() if curr_dt is not None else 0

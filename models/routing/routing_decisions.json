@@ -329,42 +329,54 @@
       "place_id": "exi_W_Assess fraud__loop_split",
       "sample_count": 6084,
       "classes_observed": {
-        "sfl_779bfa57-a3a4-4a58-a099-98ee1f32ba91": 5955,
-        "sfl_c7aaf615-a8bb-4f65-ae1b-1a9274cbe136": 129
+        "sfl_7880bfc5-2176-4f7b-925d-a22aef0d9ddf": 5955,
+        "sfl_eb838431-f18f-46a8-ae92-a7a1ba50b189": 129
       },
       "branches_defined": [
-        "sfl_c7aaf615-a8bb-4f65-ae1b-1a9274cbe136",
-        "sfl_779bfa57-a3a4-4a58-a099-98ee1f32ba91"
+        "sfl_eb838431-f18f-46a8-ae92-a7a1ba50b189",
+        "sfl_7880bfc5-2176-4f7b-925d-a22aef0d9ddf"
       ],
       "best_parameters": {
-        "max_depth": 9,
-        "min_samples_split": 10,
-        "min_samples_leaf": 4,
+        "max_depth": 16,
+        "min_samples_split": 3,
+        "min_samples_leaf": 21,
         "criterion": "entropy",
         "class_weight": null
       },
-      "accuracy": 0.9747,
-      "macro_f1": 0.6638,
-      "weighted_f1": 0.9686,
+      "accuracy": 0.9803,
+      "macro_f1": 0.7222,
+      "weighted_f1": 0.9789,
       "confusion_matrix": [
         [
-          1187,
-          4
+          1182,
+          9
         ],
         [
-          27,
-          8
+          15,
+          10
         ]
       ],
       "label_encoding": {
-        "sfl_779bfa57-a3a4-4a58-a099-98ee1f32ba91": 0,
-        "sfl_c7aaf615-a8bb-4f65-ae1b-1a9274cbe136": 1
+        "sfl_7880bfc5-2176-4f7b-925d-a22aef0d9ddf": 0,
+        "sfl_eb838431-f18f-46a8-ae92-a7a1ba50b189": 1
       },
       "features": [
         "hour",
         "weekday",
         "prev_activity",
+        "loop_count",
+        "offer_count",
+        "has_offer",
         "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_SUBMITTED",
+        "has_O_CREATED",
+        "has_O_SELECTED",
+        "has_O_SENT",
+        "has_O_SENT_BACK",
         "has_W_Assess fraud",
         "has_W_Call after incomplete files",
         "has_W_Call after offers",
@@ -373,10 +385,22 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.415,
-        "weekday": 0.1397,
+        "hour": 0.1683,
+        "weekday": 0.0469,
         "prev_activity": 0.0,
-        "RequestedAmount": 0.4453,
+        "loop_count": 0.6089,
+        "offer_count": 0.0,
+        "has_offer": 0.0,
+        "RequestedAmount": 0.1664,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0095,
+        "has_A_SUBMITTED": 0.0,
+        "has_O_CREATED": 0.0,
+        "has_O_SELECTED": 0.0,
+        "has_O_SENT": 0.0,
+        "has_O_SENT_BACK": 0.0,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
@@ -396,42 +420,54 @@
       "place_id": "exi_W_Handle leads__loop_split",
       "sample_count": 3450,
       "classes_observed": {
-        "sfl_86377a92-a370-4375-8b09-cfd93c166478": 2597,
-        "sfl_f16a3559-6805-4784-a980-61d8a9b25ef5": 853
+        "sfl_a48c0452-15e0-45d5-943b-8c163caedea7": 2597,
+        "sfl_62b9ad3b-bb63-47fe-adaa-57fd43a71b6a": 853
       },
       "branches_defined": [
-        "sfl_86377a92-a370-4375-8b09-cfd93c166478",
-        "sfl_f16a3559-6805-4784-a980-61d8a9b25ef5"
+        "sfl_62b9ad3b-bb63-47fe-adaa-57fd43a71b6a",
+        "sfl_a48c0452-15e0-45d5-943b-8c163caedea7"
       ],
       "best_parameters": {
-        "max_depth": 17,
-        "min_samples_split": 7,
-        "min_samples_leaf": 2,
+        "max_depth": 3,
+        "min_samples_split": 15,
+        "min_samples_leaf": 25,
         "criterion": "gini",
-        "class_weight": null
+        "class_weight": "balanced"
       },
-      "accuracy": 0.7729,
-      "macro_f1": 0.5435,
-      "weighted_f1": 0.7329,
+      "accuracy": 0.8561,
+      "macro_f1": 0.7843,
+      "weighted_f1": 0.8461,
       "confusion_matrix": [
         [
-          486,
-          34
+          97,
+          78
         ],
         [
-          115,
-          21
+          22,
+          498
         ]
       ],
       "label_encoding": {
-        "sfl_86377a92-a370-4375-8b09-cfd93c166478": 0,
-        "sfl_f16a3559-6805-4784-a980-61d8a9b25ef5": 1
+        "sfl_62b9ad3b-bb63-47fe-adaa-57fd43a71b6a": 0,
+        "sfl_a48c0452-15e0-45d5-943b-8c163caedea7": 1
       },
       "features": [
         "hour",
         "weekday",
         "prev_activity",
+        "loop_count",
+        "offer_count",
+        "has_offer",
         "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_SUBMITTED",
+        "has_O_CREATED",
+        "has_O_SELECTED",
+        "has_O_SENT",
+        "has_O_SENT_BACK",
         "has_W_Assess fraud",
         "has_W_Call after incomplete files",
         "has_W_Call after offers",
@@ -440,10 +476,22 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.3862,
-        "weekday": 0.2074,
+        "hour": 0.0,
+        "weekday": 0.0,
         "prev_activity": 0.0,
-        "RequestedAmount": 0.4064,
+        "loop_count": 0.0483,
+        "offer_count": 0.0,
+        "has_offer": 0.0,
+        "RequestedAmount": 0.0,
+        "has_A_ACCEPTED": 0.1615,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.7903,
+        "has_A_SUBMITTED": 0.0,
+        "has_O_CREATED": 0.0,
+        "has_O_SELECTED": 0.0,
+        "has_O_SENT": 0.0,
+        "has_O_SENT_BACK": 0.0,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
@@ -456,63 +504,71 @@
           "W_Handle leads"
         ]
       },
-      "strategy": "empirical_probability",
-      "probabilities": {
-        "sfl_86377a92-a370-4375-8b09-cfd93c166478": 0.7527536231884058,
-        "sfl_f16a3559-6805-4784-a980-61d8a9b25ef5": 0.2472463768115942
-      },
-      "model_file": null
+      "strategy": "machine_learning",
+      "model_file": "routing_exi_W_Handle_leads__loop_split.joblib"
     },
     "exi_W_Validate application__loop_split": {
       "place_id": "exi_W_Validate application__loop_split",
       "sample_count": 9490,
       "classes_observed": {
-        "sfl_4b9c2b42-bf25-45c1-b869-738b00a6df5b": 5554,
-        "sfl_1c713235-2894-4921-bf12-e1f36949759f": 2358,
-        "sfl_d396b618-5500-4389-a87d-247901c22acc": 1578
+        "sfl_e3b0804c-7695-42ff-9fd6-64abbbd2858d": 5554,
+        "sfl_209ee772-9f1e-497f-8772-f702cc504bd6": 2358,
+        "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab": 1578
       },
       "branches_defined": [
-        "sfl_4b9c2b42-bf25-45c1-b869-738b00a6df5b",
-        "sfl_1c713235-2894-4921-bf12-e1f36949759f",
-        "sfl_d396b618-5500-4389-a87d-247901c22acc"
+        "sfl_e3b0804c-7695-42ff-9fd6-64abbbd2858d",
+        "sfl_209ee772-9f1e-497f-8772-f702cc504bd6",
+        "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab"
       ],
       "best_parameters": {
-        "max_depth": 15,
-        "min_samples_split": 19,
-        "min_samples_leaf": 14,
+        "max_depth": 7,
+        "min_samples_split": 16,
+        "min_samples_leaf": 8,
         "criterion": "entropy",
         "class_weight": "balanced"
       },
-      "accuracy": 0.3725,
-      "macro_f1": 0.3337,
-      "weighted_f1": 0.3936,
+      "accuracy": 0.6436,
+      "macro_f1": 0.5829,
+      "weighted_f1": 0.678,
       "confusion_matrix": [
         [
-          132,
-          197,
-          209
+          220,
+          84,
+          0
         ],
         [
-          253,
-          481,
-          365
+          255,
+          215,
+          0
         ],
         [
-          85,
-          124,
-          119
+          215,
+          122,
+          786
         ]
       ],
       "label_encoding": {
-        "sfl_1c713235-2894-4921-bf12-e1f36949759f": 0,
-        "sfl_4b9c2b42-bf25-45c1-b869-738b00a6df5b": 1,
-        "sfl_d396b618-5500-4389-a87d-247901c22acc": 2
+        "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab": 0,
+        "sfl_209ee772-9f1e-497f-8772-f702cc504bd6": 1,
+        "sfl_e3b0804c-7695-42ff-9fd6-64abbbd2858d": 2
       },
       "features": [
         "hour",
         "weekday",
         "prev_activity",
+        "loop_count",
+        "offer_count",
+        "has_offer",
         "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_SUBMITTED",
+        "has_O_CREATED",
+        "has_O_SELECTED",
+        "has_O_SENT",
+        "has_O_SENT_BACK",
         "has_W_Assess fraud",
         "has_W_Call after incomplete files",
         "has_W_Call after offers",
@@ -521,15 +577,27 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.2954,
-        "weekday": 0.2105,
+        "hour": 0.0196,
+        "weekday": 0.0059,
         "prev_activity": 0.0,
-        "RequestedAmount": 0.4499,
+        "loop_count": 0.0396,
+        "offer_count": 0.0454,
+        "has_offer": 0.0,
+        "RequestedAmount": 0.0259,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0,
+        "has_A_SUBMITTED": 0.0,
+        "has_O_CREATED": 0.0,
+        "has_O_SELECTED": 0.0,
+        "has_O_SENT": 0.0,
+        "has_O_SENT_BACK": 0.8609,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0442,
+        "has_W_Handle leads": 0.0027,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -539,9 +607,9 @@
       },
       "strategy": "empirical_probability",
       "probabilities": {
-        "sfl_4b9c2b42-bf25-45c1-b869-738b00a6df5b": 0.5852476290832456,
-        "sfl_1c713235-2894-4921-bf12-e1f36949759f": 0.24847207586933615,
-        "sfl_d396b618-5500-4389-a87d-247901c22acc": 0.16628029504741834
+        "sfl_e3b0804c-7695-42ff-9fd6-64abbbd2858d": 0.5852476290832456,
+        "sfl_209ee772-9f1e-497f-8772-f702cc504bd6": 0.24847207586933615,
+        "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab": 0.16628029504741834
       },
       "model_file": null
     },
@@ -549,42 +617,54 @@
       "place_id": "exi_W_Complete application__loop_split",
       "sample_count": 23728,
       "classes_observed": {
-        "sfl_3448c319-a2c1-467f-8acf-1ae69c91a182": 16596,
-        "sfl_374da8b2-305e-4d0f-ba06-39a18776aafb": 7132
+        "sfl_b8cecb34-da17-40c4-a674-3be994801469": 16596,
+        "sfl_29253fc5-c71e-4ba3-b348-1462f684e2c2": 7132
       },
       "branches_defined": [
-        "sfl_3448c319-a2c1-467f-8acf-1ae69c91a182",
-        "sfl_374da8b2-305e-4d0f-ba06-39a18776aafb"
+        "sfl_29253fc5-c71e-4ba3-b348-1462f684e2c2",
+        "sfl_b8cecb34-da17-40c4-a674-3be994801469"
       ],
       "best_parameters": {
-        "max_depth": 21,
-        "min_samples_split": 18,
-        "min_samples_leaf": 1,
-        "criterion": "entropy",
+        "max_depth": 3,
+        "min_samples_split": 15,
+        "min_samples_leaf": 25,
+        "criterion": "gini",
         "class_weight": "balanced"
       },
-      "accuracy": 0.4528,
-      "macro_f1": 0.4519,
-      "weighted_f1": 0.4605,
+      "accuracy": 0.7942,
+      "macro_f1": 0.764,
+      "weighted_f1": 0.7964,
       "confusion_matrix": [
         [
-          1157,
-          2111
+          1011,
+          416
         ],
         [
-          458,
-          969
+          537,
+          2667
         ]
       ],
       "label_encoding": {
-        "sfl_3448c319-a2c1-467f-8acf-1ae69c91a182": 0,
-        "sfl_374da8b2-305e-4d0f-ba06-39a18776aafb": 1
+        "sfl_29253fc5-c71e-4ba3-b348-1462f684e2c2": 0,
+        "sfl_b8cecb34-da17-40c4-a674-3be994801469": 1
       },
       "features": [
         "hour",
         "weekday",
         "prev_activity",
+        "loop_count",
+        "offer_count",
+        "has_offer",
         "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_SUBMITTED",
+        "has_O_CREATED",
+        "has_O_SELECTED",
+        "has_O_SENT",
+        "has_O_SENT_BACK",
         "has_W_Assess fraud",
         "has_W_Call after incomplete files",
         "has_W_Call after offers",
@@ -593,15 +673,27 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.3227,
-        "weekday": 0.209,
+        "hour": 0.0022,
+        "weekday": 0.0,
         "prev_activity": 0.0,
-        "RequestedAmount": 0.4404,
+        "loop_count": 0.0,
+        "offer_count": 0.0559,
+        "has_offer": 0.0,
+        "RequestedAmount": 0.0,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_FINALIZED": 0.883,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0408,
+        "has_A_SUBMITTED": 0.0,
+        "has_O_CREATED": 0.0,
+        "has_O_SELECTED": 0.0,
+        "has_O_SENT": 0.0,
+        "has_O_SENT_BACK": 0.0,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0279,
+        "has_W_Handle leads": 0.0181,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -609,53 +701,61 @@
           "W_Complete application"
         ]
       },
-      "strategy": "empirical_probability",
-      "probabilities": {
-        "sfl_3448c319-a2c1-467f-8acf-1ae69c91a182": 0.6994268374915711,
-        "sfl_374da8b2-305e-4d0f-ba06-39a18776aafb": 0.30057316250842886
-      },
-      "model_file": null
+      "strategy": "machine_learning",
+      "model_file": "routing_exi_W_Complete_application__loop_split.joblib"
     },
     "exi_W_Call after incomplete files__loop_split": {
       "place_id": "exi_W_Call after incomplete files__loop_split",
       "sample_count": 11182,
       "classes_observed": {
-        "sfl_63dd1a73-0e3d-449d-9a4f-019637c46e30": 9604,
-        "sfl_75ae4ff3-b45e-4cc4-b5ad-66e1f87945a9": 1578
+        "sfl_8efe2c8f-581b-4db0-b64b-a11789b3a938": 9604,
+        "sfl_9440a9a8-a283-4441-99df-3c46dbec6376": 1578
       },
       "branches_defined": [
-        "sfl_63dd1a73-0e3d-449d-9a4f-019637c46e30",
-        "sfl_75ae4ff3-b45e-4cc4-b5ad-66e1f87945a9"
+        "sfl_9440a9a8-a283-4441-99df-3c46dbec6376",
+        "sfl_8efe2c8f-581b-4db0-b64b-a11789b3a938"
       ],
       "best_parameters": {
-        "max_depth": 2,
-        "min_samples_split": 15,
-        "min_samples_leaf": 20,
+        "max_depth": 21,
+        "min_samples_split": 6,
+        "min_samples_leaf": 1,
         "criterion": "gini",
-        "class_weight": "balanced"
+        "class_weight": null
       },
-      "accuracy": 0.7352,
-      "macro_f1": 0.5133,
-      "weighted_f1": 0.7476,
+      "accuracy": 0.6579,
+      "macro_f1": 0.4923,
+      "weighted_f1": 0.702,
       "confusion_matrix": [
         [
-          1553,
-          333
+          1403,
+          564
         ],
         [
-          250,
-          66
+          217,
+          99
         ]
       ],
       "label_encoding": {
-        "sfl_63dd1a73-0e3d-449d-9a4f-019637c46e30": 0,
-        "sfl_75ae4ff3-b45e-4cc4-b5ad-66e1f87945a9": 1
+        "sfl_8efe2c8f-581b-4db0-b64b-a11789b3a938": 0,
+        "sfl_9440a9a8-a283-4441-99df-3c46dbec6376": 1
       },
       "features": [
         "hour",
         "weekday",
         "prev_activity",
+        "loop_count",
+        "offer_count",
+        "has_offer",
         "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_SUBMITTED",
+        "has_O_CREATED",
+        "has_O_SELECTED",
+        "has_O_SENT",
+        "has_O_SENT_BACK",
         "has_W_Assess fraud",
         "has_W_Call after incomplete files",
         "has_W_Call after offers",
@@ -664,15 +764,27 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.0,
-        "weekday": 0.4933,
+        "hour": 0.2026,
+        "weekday": 0.1405,
         "prev_activity": 0.0,
-        "RequestedAmount": 0.5067,
+        "loop_count": 0.1686,
+        "offer_count": 0.2554,
+        "has_offer": 0.0,
+        "RequestedAmount": 0.1949,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_FINALIZED": 0.0,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0,
+        "has_A_SUBMITTED": 0.0,
+        "has_O_CREATED": 0.0,
+        "has_O_SELECTED": 0.0,
+        "has_O_SENT": 0.0,
+        "has_O_SENT_BACK": 0.0,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0,
+        "has_W_Handle leads": 0.038,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -682,8 +794,8 @@
       },
       "strategy": "empirical_probability",
       "probabilities": {
-        "sfl_63dd1a73-0e3d-449d-9a4f-019637c46e30": 0.8588803434090503,
-        "sfl_75ae4ff3-b45e-4cc4-b5ad-66e1f87945a9": 0.14111965659094974
+        "sfl_8efe2c8f-581b-4db0-b64b-a11789b3a938": 0.8588803434090503,
+        "sfl_9440a9a8-a283-4441-99df-3c46dbec6376": 0.14111965659094974
       },
       "model_file": null
     },
@@ -691,42 +803,54 @@
       "place_id": "exi_W_Call after offers__loop_split",
       "sample_count": 25093,
       "classes_observed": {
-        "sfl_aabf2cde-0785-4c3e-9845-227dacd781ef": 17961,
-        "sfl_269d3ab5-f6d9-4c96-a24e-60898799a0f1": 7132
+        "sfl_8e385c9d-a3fc-4b79-b4e4-3e1f18168d4a": 17961,
+        "sfl_5cd8a556-4bb9-427b-b139-7127247285ec": 7132
       },
       "branches_defined": [
-        "sfl_269d3ab5-f6d9-4c96-a24e-60898799a0f1",
-        "sfl_aabf2cde-0785-4c3e-9845-227dacd781ef"
+        "sfl_5cd8a556-4bb9-427b-b139-7127247285ec",
+        "sfl_8e385c9d-a3fc-4b79-b4e4-3e1f18168d4a"
       ],
       "best_parameters": {
-        "max_depth": 6,
-        "min_samples_split": 14,
-        "min_samples_leaf": 11,
-        "criterion": "log_loss",
-        "class_weight": "balanced"
+        "max_depth": 11,
+        "min_samples_split": 7,
+        "min_samples_leaf": 5,
+        "criterion": "gini",
+        "class_weight": null
       },
-      "accuracy": 0.6063,
-      "macro_f1": 0.531,
-      "weighted_f1": 0.6142,
+      "accuracy": 0.838,
+      "macro_f1": 0.8023,
+      "weighted_f1": 0.8378,
       "confusion_matrix": [
         [
-          527,
-          900
+          1022,
+          405
         ],
         [
-          1117,
-          2579
+          396,
+          3120
         ]
       ],
       "label_encoding": {
-        "sfl_269d3ab5-f6d9-4c96-a24e-60898799a0f1": 0,
-        "sfl_aabf2cde-0785-4c3e-9845-227dacd781ef": 1
+        "sfl_5cd8a556-4bb9-427b-b139-7127247285ec": 0,
+        "sfl_8e385c9d-a3fc-4b79-b4e4-3e1f18168d4a": 1
       },
       "features": [
         "hour",
         "weekday",
         "prev_activity",
+        "loop_count",
+        "offer_count",
+        "has_offer",
         "RequestedAmount",
+        "has_A_ACCEPTED",
+        "has_A_FINALIZED",
+        "has_A_PARTLYSUBMITTED",
+        "has_A_PREACCEPTED",
+        "has_A_SUBMITTED",
+        "has_O_CREATED",
+        "has_O_SELECTED",
+        "has_O_SENT",
+        "has_O_SENT_BACK",
         "has_W_Assess fraud",
         "has_W_Call after incomplete files",
         "has_W_Call after offers",
@@ -735,15 +859,27 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.2173,
-        "weekday": 0.0614,
+        "hour": 0.0187,
+        "weekday": 0.0117,
         "prev_activity": 0.0,
-        "RequestedAmount": 0.4944,
+        "loop_count": 0.1337,
+        "offer_count": 0.0946,
+        "has_offer": 0.0,
+        "RequestedAmount": 0.0253,
+        "has_A_ACCEPTED": 0.0,
+        "has_A_FINALIZED": 0.4126,
+        "has_A_PARTLYSUBMITTED": 0.0,
+        "has_A_PREACCEPTED": 0.0,
+        "has_A_SUBMITTED": 0.0,
+        "has_O_CREATED": 0.0,
+        "has_O_SELECTED": 0.0,
+        "has_O_SENT": 0.0,
+        "has_O_SENT_BACK": 0.3022,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.2269,
+        "has_W_Handle leads": 0.0012,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -751,94 +887,31 @@
           "W_Call after offers"
         ]
       },
-      "strategy": "empirical_probability",
-      "probabilities": {
-        "sfl_aabf2cde-0785-4c3e-9845-227dacd781ef": 0.7157773084127047,
-        "sfl_269d3ab5-f6d9-4c96-a24e-60898799a0f1": 0.28422269158729524
-      },
-      "model_file": null
+      "strategy": "machine_learning",
+      "model_file": "routing_exi_W_Call_after_offers__loop_split.joblib"
     },
     "exi_xor_1": {
       "place_id": "exi_xor_1",
       "sample_count": 13087,
       "classes_observed": {
-        "sfl_e3f30f95-6161-45d5-b5b2-0bdeb91630aa": 5955,
-        "sfl_0d927727-fc7c-4307-ac1e-5c350bd3adb6": 4535,
-        "sfl_b7d0ca61-0bdd-4c7c-aaf5-404d60e5e7e2": 2597
+        "sfl_fd23cc6c-f68a-4780-b2c2-e08b955a4062": 5955,
+        "sfl_29e750fe-6eab-4957-9f5f-532da56aa994": 4535,
+        "sfl_f4bb1369-90cb-458a-88ba-af8a80ada8ad": 2597
       },
       "branches_defined": [
-        "sfl_b7d0ca61-0bdd-4c7c-aaf5-404d60e5e7e2",
-        "sfl_0d927727-fc7c-4307-ac1e-5c350bd3adb6",
-        "sfl_e3f30f95-6161-45d5-b5b2-0bdeb91630aa"
+        "sfl_29e750fe-6eab-4957-9f5f-532da56aa994",
+        "sfl_f4bb1369-90cb-458a-88ba-af8a80ada8ad",
+        "sfl_fd23cc6c-f68a-4780-b2c2-e08b955a4062"
       ],
-      "best_parameters": {
-        "max_depth": 5,
-        "min_samples_split": 3,
-        "min_samples_leaf": 12,
-        "criterion": "entropy",
-        "class_weight": "balanced"
-      },
-      "accuracy": 0.4343,
-      "macro_f1": 0.4082,
-      "weighted_f1": 0.435,
-      "confusion_matrix": [
-        [
-          531,
-          205,
-          157
-        ],
-        [
-          272,
-          147,
-          119
-        ],
-        [
-          524,
-          204,
-          459
-        ]
-      ],
-      "label_encoding": {
-        "sfl_0d927727-fc7c-4307-ac1e-5c350bd3adb6": 0,
-        "sfl_b7d0ca61-0bdd-4c7c-aaf5-404d60e5e7e2": 1,
-        "sfl_e3f30f95-6161-45d5-b5b2-0bdeb91630aa": 2
-      },
-      "features": [
-        "hour",
-        "weekday",
-        "prev_activity",
-        "RequestedAmount",
-        "has_W_Assess fraud",
-        "has_W_Call after incomplete files",
-        "has_W_Call after offers",
-        "has_W_Complete application",
-        "has_W_Handle leads",
-        "has_W_Validate application"
-      ],
-      "feature_importances": {
-        "hour": 0.155,
-        "weekday": 0.033,
-        "prev_activity": 0.0,
-        "RequestedAmount": 0.812,
-        "has_W_Assess fraud": 0.0,
-        "has_W_Call after incomplete files": 0.0,
-        "has_W_Call after offers": 0.0,
-        "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0,
-        "has_W_Validate application": 0.0
-      },
-      "cat_mappings": {
-        "prev_activity": [
-          "d91aeec9-9496-4160-b218-2eb9fd387dde"
-        ]
-      },
       "strategy": "empirical_probability",
       "probabilities": {
-        "sfl_e3f30f95-6161-45d5-b5b2-0bdeb91630aa": 0.45503171085810346,
-        "sfl_0d927727-fc7c-4307-ac1e-5c350bd3adb6": 0.3465270879498739,
-        "sfl_b7d0ca61-0bdd-4c7c-aaf5-404d60e5e7e2": 0.19844120119202263
+        "sfl_fd23cc6c-f68a-4780-b2c2-e08b955a4062": 0.45503171085810346,
+        "sfl_29e750fe-6eab-4957-9f5f-532da56aa994": 0.3465270879498739,
+        "sfl_f4bb1369-90cb-458a-88ba-af8a80ada8ad": 0.19844120119202263
       },
-      "model_file": null
+      "model_file": null,
+      "accuracy": null,
+      "macro_f1": null
     }
   }
 }

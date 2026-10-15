@@ -3,23 +3,25 @@
   "task": "duration",
   "description": "Synthesized Best-of-All-Worlds Hybrid (dynamically selects champion model per activity)",
   "source_candidates": [
+    "global_lstm",
     "global_tcn",
     "global_xgboost",
+    "local_lstm",
     "local_tcn",
     "local_xgboost"
   ],
   "dispatch": {
     "__default__": {
-      "model_type": "xgboost",
-      "source_dir": "global_xgboost",
-      "file": "xgboost_global.json"
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth"
     },
     "W_Assess fraud": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Assess_fraud.json",
-      "best_test_mae": 382.03,
-      "best_test_smape": 68.91
+      "model_type": "tcn",
+      "source_dir": "global_tcn",
+      "file": "tcn_global.pth",
+      "best_test_mae": 382.02,
+      "best_test_smape": 66.63
     },
     "W_Call after incomplete files": {
       "model_type": "xgboost",
@@ -43,18 +45,18 @@
       "best_test_smape": 86.63
     },
     "W_Handle leads": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Handle_leads.json",
-      "best_test_mae": 431.3,
-      "best_test_smape": 75.75
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 430.31,
+      "best_test_smape": 75.58
     },
     "W_Validate application": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Validate_application.json",
-      "best_test_mae": 778.12,
-      "best_test_smape": 86.55
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 763.34,
+      "best_test_smape": 80.73
     }
   }
 }

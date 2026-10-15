@@ -3,16 +3,16 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "training_time_seconds": 381.69,
-  "weighted_mae": 335.92,
-  "weighted_smape": 84.65,
-  "macro_mae": 417.04,
+  "training_time_seconds": 473.51,
+  "weighted_mae": 334.63,
+  "weighted_smape": 84.15,
+  "macro_mae": 414.41,
   "activity_metrics": {
     "W_Assess fraud": {
       "count": 63,
-      "model_source": "local_xgboost (XGBOOST)",
-      "mae": 382.03,
-      "smape": 68.91
+      "model_source": "global_tcn (TCN)",
+      "mae": 382.02,
+      "smape": 66.63
     },
     "W_Call after incomplete files": {
       "count": 2319,
@@ -34,15 +34,15 @@
     },
     "W_Handle leads": {
       "count": 692,
-      "model_source": "local_xgboost (XGBOOST)",
-      "mae": 431.3,
-      "smape": 75.75
+      "model_source": "global_lstm (LSTM)",
+      "mae": 430.31,
+      "smape": 75.58
     },
     "W_Validate application": {
       "count": 1117,
-      "model_source": "local_xgboost (XGBOOST)",
-      "mae": 778.12,
-      "smape": 86.55
+      "model_source": "global_lstm (LSTM)",
+      "mae": 763.34,
+      "smape": 80.73
     }
   }
 }

@@ -26,12 +26,6 @@ paths:
 # Process Discovery Settings
 discovery:
   miner: "split"                  # Options: "split", "inductive"
-  inductive_noise_threshold: 0.2  # Noise threshold for inductive miner
-  split_miner:
-    epsilon: 0.1                  # Concurrency threshold (0.0 - 1.0, lower = more parallel branches)
-    eta: 0.4                      # Edge filtering percentile (0.0 - 1.0, lower = keeps more edges)
-    minimize_or_joins: true       # Replace trivial OR joins with XOR/AND
-    variant: "classic"            # Options: "classic", "sm2"
 
 # Feature Engineering Settings
 features:
@@ -59,6 +53,7 @@ features:
     - role_occupancy
     - prev_duration
     - case_attributes
+    - milestones
     # - resource_id
 
   # Tier 1: Universal Features (Fallback if selected_features is omitted)
@@ -101,6 +96,26 @@ preprocessing:
   initial_milestones:
     - "A_SUBMITTED"
     - "A_PARTLYSUBMITTED"
+
+  # Empirical distribution of initial milestone profiles observed upon case submission
+  initial_milestones_distribution:
+    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED", "A_PREACCEPTED"]
+      probability: 0.35
+    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
+      probability: 0.20
+    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
+      probability: 0.45
+
+  # Terminal outcome milestones excluded from decision routing to avoid reverse causality
+  excluded_milestones:
+    - "O_ACCEPTED"
+    - "A_DECLINED"
+    - "A_CANCELLED"
+    - "A_ACTIVATED"
+    - "A_APPROVED"
+    - "A_REGISTERED"
+    - "O_DECLINED"
+    - "O_CANCELLED"
 
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping:
@@ -154,6 +169,9 @@ tasks:
     min_samples: 30                  # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
     min_f1_threshold: 0.60           # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
     output_dir: "models/routing"
+    # Optional decision places to force empirical branching probabilities (parity with legacy RIMS entry split)
+    force_probability_places:
+      - "exi_xor_1"
 
 # ===================================================================
 # Model Strategy & Architecture (Step 04)
@@ -221,13 +239,13 @@ simulation:
   
   # Arrival Configuration (Replay historical timeline vs. Generative distribution)
   arrival:
-    mode: "replay"                # Options: "replay" (replays from aligned_log), "generative" (statistical distribution)
+    mode: "generative"                # Options: "replay" (replays from aligned_log), "generative" (statistical distribution)
     distribution: "exponential"   # Distribution for generative mode: "exponential", "uniform", "constant"
     scale: 300.0                  # Mean seconds between case arrivals (e.g. 300s = 5 min)
     start_timestamp: "2012-01-01 08:00:00"
     calendar_bounded: true        # If true, new arrivals only spawn during office hours
 
-  # Business Hours & Calendar Settings (Legacy RIMS Calendar Upgrade + Per-Role Calendars)
+  # Business Hours & Calendar Settings
   calendar:
     enabled: true                 # If true, shifts work to business hours & pauses weekends
     work_days: [0, 1, 2, 3, 4]    # Monday (0) to Friday (4)

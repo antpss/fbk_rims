@@ -13,6 +13,7 @@ Encapsulates individual process instance lifecycle, including:
 """
 
 import random
+from collections import defaultdict
 from pm4py.objects.petri_net import semantics
 
 
@@ -52,15 +53,13 @@ class Token:
         self.events_done = 0
         self.prev_act = None
         self.prev_dur = 0.0
+        self.dp_counts = defaultdict(int)
 
         # Initialize marking at source place(s)
         self.marking = self.process.im.copy()
 
     def update_milestones(self, act):
         """Updates milestone progress context dynamically based on config rules."""
-        if not self.process.predictor.feature_mgr.is_feature_active("milestones"):
-            return
-
         ms_prefixes = self.process.ms_prefixes
         if not ms_prefixes:
             return
@@ -114,10 +113,13 @@ class Token:
                 )
                 if decision_places:
                     dp = decision_places[0].name
+                    loop_count = float(self.dp_counts[dp])
+                    self.dp_counts[dp] += 1
                     predicted_target = self.process.predictor.predict_routing(
                         dp, self.prefix, self.requested_amount, self.milestones_seen,
                         self.offer_count, self.has_offer,
-                        curr_dt=self.process.calendar.to_datetime(self.env.now)
+                        curr_dt=self.process.calendar.to_datetime(self.env.now),
+                        loop_count=loop_count
                     )
                     # Match predicted target to an enabled transition
                     matched_t = None

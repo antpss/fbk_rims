@@ -8,12 +8,13 @@ numpy>=1.25.0
 pandas>=2.0.0
 scipy>=1.11.0
 
-# Machine Learning & Deep Learning
+# Machine Learning
 scikit-learn>=1.3.0
 xgboost>=2.0.0
 torch>=2.0.0
+prophet>=1.1.5
 
-# Optimization & Hyperparameter Tuning
+# Hyperparameter Tuning
 hyperopt>=0.2.7
 
 # Serialization & Visualizations
