@@ -42,6 +42,7 @@ class ArrivalGenerator:
         Prepares case arrival schedule:
           - Replay Mode: Replays historical timestamps & case payloads from aligned XES log.
           - Generative Mode: Generates synthetic arrivals from distributions bounded by working calendar.
+          - Prophet Mode: Generates synthetic arrivals forecasting hourly intensity via Facebook Prophet.
         Returns:
           tuple: (arrivals: list[dict], df_real: pd.DataFrame or None)
         """
@@ -221,17 +222,6 @@ class ArrivalGenerator:
                 "but no valid event log was found."
             )
 
-        n_cases = self.num_cases
-        dur_days = float(self.duration_days) if (self.duration_days and float(self.duration_days) > 0) else None
-
-        if n_cases:
-            desc_str = f"{n_cases:,} cases"
-        elif dur_days:
-            desc_str = f"{dur_days} days horizon"
-        else:
-            desc_str = "1,000 cases"
-        print(f"Generating synthetic case arrivals ({desc_str}) [Prophet Time-Series Arrival Mode]...")
-
         # 1. Extract historical case start times and aggregate into hourly counts
         first_times = df_real.groupby("case:concept:name")["time:timestamp"].min().reset_index()
         first_times.columns = ["case_id", "timestamp"]
@@ -246,6 +236,21 @@ class ArrivalGenerator:
             .reset_index()
         )
         hourly_counts.columns = ["ds", "y"]
+
+        n_cases = self.num_cases
+        dur_days = float(self.duration_days) if (self.duration_days and float(self.duration_days) > 0) else None
+
+        if n_cases is not None:
+            effective_cases = n_cases
+            desc_str = f"{n_cases:,} cases"
+        elif dur_days is not None:
+            effective_cases = None
+            desc_str = f"{dur_days} days horizon"
+        else:
+            effective_cases = len(first_times)
+            desc_str = f"{effective_cases:,} cases (matching historical log)"
+
+        print(f"Generating synthetic case arrivals ({desc_str}) [Prophet Time-Series Arrival Mode]...")
 
         # 2. Configure & Fit Prophet
         prophet_cfg = self.arr_cfg.get("prophet", {})
@@ -274,7 +279,7 @@ class ArrivalGenerator:
         if dur_days is not None:
             hours_to_forecast = int(np.ceil(dur_days * 24))
         else:
-            target_n = n_cases if n_cases is not None else 1000
+            target_n = effective_cases if effective_cases is not None else 1000
             active_hours = hourly_counts[hourly_counts["y"] > 0]
             mean_per_hour = max(0.5, float(active_hours["y"].mean()) if not active_hours.empty else 2.0)
             hours_to_forecast = max(24, int((target_n / mean_per_hour) * 2.5))
@@ -292,7 +297,7 @@ class ArrivalGenerator:
             forecast = model.predict(df_future)
 
             for _, row in forecast.iterrows():
-                if n_cases is not None and len(arrivals) >= n_cases:
+                if effective_cases is not None and len(arrivals) >= effective_cases:
                     break
                 if dur_days is not None and (cur_time - start_time).total_seconds() >= dur_days * 86400.0:
                     break
@@ -303,7 +308,7 @@ class ArrivalGenerator:
                     continue
 
                 for _ in range(hourly_expected):
-                    if n_cases is not None and len(arrivals) >= n_cases:
+                    if effective_cases is not None and len(arrivals) >= effective_cases:
                         break
 
                     if intra_dist == "normal":
@@ -343,10 +348,14 @@ class ArrivalGenerator:
                     })
                     case_idx += 1
 
-            if n_cases is not None:
-                if len(arrivals) >= n_cases:
+            if effective_cases is not None:
+                if len(arrivals) >= effective_cases:
                     break
                 # Extend window forward if more cases still needed
+                cur_start = future_dates[-1] + timedelta(hours=1)
+            elif dur_days is not None:
+                if (cur_time - start_time).total_seconds() >= dur_days * 86400.0:
+                    break
                 cur_start = future_dates[-1] + timedelta(hours=1)
             else:
                 break
