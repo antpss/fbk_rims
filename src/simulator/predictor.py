@@ -439,7 +439,7 @@ class ChampionPredictor:
 
         return default_fallback
 
-    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer, curr_dt=None, loop_count=0.0):
+    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer, curr_dt=None, loop_count=0.0, inter_arrival_seconds=0.0):
         """Predicts outgoing transition branch at an XOR split place."""
         p_info = self.routing_manifest.get(place_id)
         if not p_info:
@@ -463,6 +463,7 @@ class ChampionPredictor:
             row["prev_activity"] = prefix[-1] if prefix else "<START>"
             row["hour"] = curr_dt.hour if curr_dt is not None else 12
             row["weekday"] = curr_dt.weekday() if curr_dt is not None else 0
+            row["inter_arrival_seconds"] = float(inter_arrival_seconds)
 
             for col in feat_cols:
                 if col.startswith("Milestone_"):

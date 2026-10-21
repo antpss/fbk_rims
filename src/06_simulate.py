@@ -107,23 +107,24 @@ def main():
             res = sim.run()
             results.append(res)
 
-        print("\n" + "=" * 105)
+        print("\n" + "=" * 120)
         print("                           RIMS+ SIMULATION ABLATION LEADERBOARD")
-        print("=" * 105)
-        print(f"{'Simulation Mode':<18} | {'Mean Cycle':>14} | {'Median Cycle':>14} | {'Cycle Time MAE':>16} | {'Wasserstein':>14} | {'Run Time':>10}")
-        print("-" * 105)
+        print("=" * 120)
+        print(f"{'Simulation Mode':<18} | {'Mean Cycle':>14} | {'Median Cycle':>14} | {'Cycle Time MAE':>16} | {'Wasserstein':>14} | {'RED Dist':>12} | {'Run Time':>10}")
+        print("-" * 120)
         real_m = results[0]["real_mean"]
         real_med = results[0]["real_median"]
-        print(f"{'REAL HISTORICAL':<18} | {format_dur(real_m):>14} | {format_dur(real_med):>14} | {'---':>16} | {'---':>14} | {'---':>10}")
-        print("-" * 105)
+        print(f"{'REAL HISTORICAL':<18} | {format_dur(real_m):>14} | {format_dur(real_med):>14} | {'---':>16} | {'---':>14} | {'---':>12} | {'---':>10}")
+        print("-" * 120)
 
         # Sort by lowest Wasserstein distance
         sorted_res = sorted(results, key=lambda x: x["wd"])
         best_mode = sorted_res[0]["mode"]
         for r in results:
             tag = " ★ (Best)" if r["mode"] == best_mode else ""
-            print(f"{r['mode']:<18} | {format_dur(r['sim_mean']):>14} | {format_dur(r['sim_median']):>14} | {format_dur(r['mae_cycle']):>16} | {format_dur(r['wd']):>14} | {r['elapsed']:>9.1f}s{tag}")
-        print("=" * 105 + "\n")
+            red_str = f"{r.get('red_dist', 0.0):.1f}h"
+            print(f"{r['mode']:<18} | {format_dur(r['sim_mean']):>14} | {format_dur(r['sim_median']):>14} | {format_dur(r['mae_cycle']):>16} | {format_dur(r['wd']):>14} | {red_str:>12} | {r['elapsed']:>9.1f}s{tag}")
+        print("=" * 120 + "\n")
 
         # Save Ablation Report
         for rep_name in ["ablation_report.md", f"ablation_report_{arrival_mode}.md"]:
@@ -133,12 +134,13 @@ def main():
                 f.write(f"- **Arrival Mode:** `{arrival_mode}`\n")
                 f.write(f"- **Evaluated Cases per Mode:** {case_label}\n")
                 f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n\n")
-                f.write("| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | Run Time |\n")
-                f.write("|---|---|---|---|---|---|\n")
-                f.write(f"| **REAL HISTORICAL** | {format_dur(real_m)} | {format_dur(real_med)} | --- | --- | --- |\n")
+                f.write("| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Run Time |\n")
+                f.write("|---|---|---|---|---|---|---|\n")
+                f.write(f"| **REAL HISTORICAL** | {format_dur(real_m)} | {format_dur(real_med)} | --- | --- | --- | --- |\n")
                 for r in sorted_res:
                     tag = " ★ (Best)" if r["mode"] == best_mode else ""
-                    f.write(f"| `{r['mode']}`{tag} | {format_dur(r['sim_mean'])} | {format_dur(r['sim_median'])} | {format_dur(r['mae_cycle'])} | {format_dur(r['wd'])} | {r['elapsed']:.1f}s |\n")
+                    red_str = f"{r.get('red_dist', 0.0):.2f}h"
+                    f.write(f"| `{r['mode']}`{tag} | {format_dur(r['sim_mean'])} | {format_dur(r['sim_median'])} | {format_dur(r['mae_cycle'])} | {format_dur(r['wd'])} | {red_str} | {r['elapsed']:.1f}s |\n")
             print(f"[✓] Saved comprehensive ablation report to: {abl_path}\n")
 
     else:

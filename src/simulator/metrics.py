@@ -76,6 +76,35 @@ class SimulationEvaluator:
         pm4py.write_xes(df_xes, self.output_simulated_xes)
         print(f"[✓] Saved standard IEEE XES log to: {self.output_simulated_xes}")
 
+    def compute_red_distance(self, df_real, df_sim, bin_size_hours=1.0):
+        """
+        Computes Relative Event Distribution (RED) distance (Earth Mover's Distance)
+        between real and simulated logs (Chapela-Campa).
+        Measures how closely simulated event offsets replicate historical event timing
+        relative to trace start.
+        """
+        try:
+            bin_sec = bin_size_hours * 3600.0
+            r_df = df_real.copy()
+            c_col = "case:concept:name" if "case:concept:name" in r_df.columns else "case_id"
+            t_col = "time:timestamp" if "time:timestamp" in r_df.columns else "start_timestamp"
+            r_ts = pd.to_datetime(r_df[t_col])
+            r_starts = r_df.groupby(c_col)[t_col].transform("min")
+            r_offsets = (r_ts - pd.to_datetime(r_starts)).dt.total_seconds().values
+            r_bins = np.floor(r_offsets / bin_sec)
+
+            s_df = df_sim.copy()
+            s_ts = pd.to_datetime(s_df["start_timestamp"])
+            s_starts = s_df.groupby("case_id")["start_timestamp"].transform("min")
+            s_offsets = (s_ts - pd.to_datetime(s_starts)).dt.total_seconds().values
+            s_bins = np.floor(s_offsets / bin_sec)
+
+            if len(r_bins) > 0 and len(s_bins) > 0:
+                return float(wasserstein_distance(r_bins, s_bins))
+            return 0.0
+        except Exception:
+            return 0.0
+
     def evaluate(self, df_real, df_sim, elapsed=0.0):
         """
         Compares simulated event log against real historical log (or summarizes simulated stats),
@@ -119,6 +148,7 @@ class SimulationEvaluator:
             real_median = float(np.median(real_cycles)) if len(real_cycles) > 0 else 0.0
             wd = float(wasserstein_distance(real_cycles, sim_cycles)) if (len(real_cycles) > 0 and len(sim_cycles) > 0) else 0.0
             mae_cycle = float(abs(real_mean - sim_mean))
+            red_dist = self.compute_red_distance(real_w, df_sim)
 
             print(f"Metric                      | Real Historical | Simulated RIMS+ | Difference")
             print("-" * 75)
@@ -127,6 +157,7 @@ class SimulationEvaluator:
             print(f"Mean Case Cycle Time        | {format_dur(real_mean):>15} | {format_dur(sim_mean):>15} | {format_dur(mae_cycle)}")
             print(f"Median Case Cycle Time      | {format_dur(real_median):>15} | {format_dur(sim_median):>15} | ---")
             print(f"Cycle Time Wasserstein Dist |             --- |             --- | {format_dur(wd)}")
+            print(f"Relative Event Dist (RED)   |             --- |             --- | {red_dist:>12.2f}h EMD")
             print("=" * 75)
         else:
             real_mean = real_median = mae_cycle = wd = 0.0
@@ -186,7 +217,8 @@ class SimulationEvaluator:
             f.write(f"| **Total Work Events** | {len(real_w) if real_w is not None else 'N/A'} | {len(df_sim):,} | --- |\n")
             f.write(f"| **Mean Case Cycle Time** | {format_dur(real_mean)} | {format_dur(sim_mean)} | {format_dur(mae_cycle)} |\n")
             f.write(f"| **Median Case Cycle Time** | {format_dur(real_median)} | {format_dur(sim_median)} | --- |\n")
-            f.write(f"| **Cycle Time Wasserstein Dist** | --- | --- | {format_dur(wd)} |\n\n")
+            f.write(f"| **Cycle Time Wasserstein Dist** | --- | --- | {format_dur(wd)} |\n")
+            f.write(f"| **Relative Event Dist (RED)** | --- | --- | **{red_dist:.2f}h EMD** |\n\n")
             f.write("## Activity Execution Breakdown\n\n")
             f.write("| Activity | Simulated Count | Sim Mean Duration | Sim Mean Wait | Sim Mean Queue Wait |\n")
             f.write("|---|---|---|---|---|\n")
@@ -208,5 +240,6 @@ class SimulationEvaluator:
             "sim_median": sim_median,
             "mae_cycle": mae_cycle,
             "wd": wd,
+            "red_dist": red_dist,
             "elapsed": elapsed
         }

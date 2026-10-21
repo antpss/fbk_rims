@@ -204,12 +204,37 @@ class SimulationProcess:
         delay_manifest_path = os.path.join(PROJECT_ROOT, models_dir_rel, "delays/delay_manifest.json")
         self.delay_manifest = None
         self.external_delays = {}
+        self.ex_ante_delays = {}
         if os.path.exists(delay_manifest_path):
             try:
                 with open(delay_manifest_path, "r") as f:
                     self.delay_manifest = json.load(f)
-                for d in self.delay_manifest.get("external_uncoupled_delays", []):
-                    self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
+
+                # Check configuration to include internal queue delays if requested
+                delays_cfg = cfg.get("simulation", {}).get("extraneous_delays", {})
+                delays_enabled = delays_cfg.get("enabled", True)
+                if delays_enabled:
+                    use_all = delays_cfg.get("include_internal_queue_delays", False)
+                    active_delays = list(self.delay_manifest.get("external_uncoupled_delays", []))
+                    if use_all:
+                        active_delays.extend(self.delay_manifest.get("internal_queue_delays", []))
+
+                    for d in active_delays:
+                        # Ex-Ante activity-level delays (Chapela-Campa)
+                        act = d.get("activity")
+                        if act and d.get("placement", "ex_ante") == "ex_ante":
+                            self.ex_ante_delays[act] = d
+
+                        # Arc-level delays
+                        trig = d.get("trigger_activity")
+                        res = d.get("resume_activity")
+                        if trig and res:
+                            self.external_delays[(trig, res)] = d
+
+                    # Also register causal transition arcs if present
+                    for d in self.delay_manifest.get("causal_transition_arcs", []):
+                        self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
+
             except Exception as e:
                 print(f"[!] Warning: Failed to load delay manifest: {e}")
 
@@ -280,11 +305,25 @@ class SimulationProcess:
                     branch_map[(p.name, t.name)] = resolve_target(t.name)
         return branch_map
 
+    def has_ex_ante_delay(self, activity):
+        """Returns True if activity has a discovered Chapela-Campa Ex-Ante extraneous delay."""
+        return activity in self.ex_ante_delays
+
+    def sample_ex_ante_delay(self, activity):
+        """Samples from empirical causal distribution for Ex-Ante extraneous delay."""
+        d = self.ex_ante_delays.get(activity)
+        if not d:
+            return 0.0
+        return self._sample_delay_dist(d)
+
     def sample_external_delay(self, trigger_act, resume_act):
         """Samples from empirical causal distribution for external uncoupled delay."""
         d = self.external_delays.get((trigger_act, resume_act))
         if not d:
             return 0.0
+        return self._sample_delay_dist(d)
+
+    def _sample_delay_dist(self, d):
         dist = d.get("best_distribution", "lognormal")
         params = d.get("distribution_params", {})
         try:
@@ -341,7 +380,8 @@ class SimulationProcess:
                 requested_amount=arr["requested_amount"],
                 process=self,
                 init_ms=arr["init_ms"],
-                ms_states=arr["ms_states"]
+                ms_states=arr["ms_states"],
+                inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0)
             )
             self.env.process(token.run())
 

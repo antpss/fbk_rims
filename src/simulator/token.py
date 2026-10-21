@@ -22,10 +22,11 @@ class Token:
     Case Instance (Parity with Legacy token_LSTM.py / event_trace.py).
     Represents an active case token flowing through the Petri net process model.
     """
-    def __init__(self, case_id, arrival_offset, requested_amount, process, init_ms=None, ms_states=None):
+    def __init__(self, case_id, arrival_offset, requested_amount, process, init_ms=None, ms_states=None, inter_arrival_seconds=0.0):
         self.case_id = str(case_id)
         self.arrival_offset = arrival_offset
         self.requested_amount = float(requested_amount)
+        self.inter_arrival_seconds = float(inter_arrival_seconds)
         self.process = process
         self.env = process.env
 
@@ -119,7 +120,8 @@ class Token:
                         dp, self.prefix, self.requested_amount, self.milestones_seen,
                         self.offer_count, self.has_offer,
                         curr_dt=self.process.calendar.to_datetime(self.env.now),
-                        loop_count=loop_count
+                        loop_count=loop_count,
+                        inter_arrival_seconds=self.inter_arrival_seconds
                     )
                     # Match predicted target to an enabled transition
                     matched_t = None
@@ -176,13 +178,16 @@ class Token:
                 self.prev_dur = 0.0
                 continue
 
-            # 3. External Uncoupled Delay (e.g. customer postal / response transit)
-            if self.prev_act and (self.prev_act, act) in self.process.external_delays:
+            # 3. Chapela-Campa Ex-Ante Extraneous Delay or Transition-Arc Delay
+            ext_delay = 0.0
+            if self.process.has_ex_ante_delay(act):
+                ext_delay = self.process.sample_ex_ante_delay(act)
+                if ext_delay > 0:
+                    yield self.env.timeout(ext_delay)
+            elif self.prev_act and (self.prev_act, act) in self.process.external_delays:
                 ext_delay = self.process.sample_external_delay(self.prev_act, act)
                 if ext_delay > 0:
                     yield self.env.timeout(ext_delay)
-            else:
-                ext_delay = 0.0
 
             # 4. Worklist Waiting Time (ML expectation: batching & uncoupled backlog)
             role_oc = self.process.workers.get_role_occupancy(self.process.target_activities)

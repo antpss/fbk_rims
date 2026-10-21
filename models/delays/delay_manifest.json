@@ -1,505 +1,266 @@
 {
   "source_log": "/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes",
-  "discovery_timestamp": "2026-10-13 10:45:22",
-  "engine_version": "RIMS+ Causal Delay Engine",
+  "discovery_timestamp": "2026-10-21 12:20:04",
+  "engine": "RIMS+ & Chapela-Campa Causal Delay",
+  "estimator": "eclaw_plus",
+  "placement": "ex_ante",
+  "concurrency_zeta": 0.2,
+  "outlier_delta": 0.05,
   "external_uncoupled_delays": [
     {
-      "trigger_activity": "W_Complete application",
-      "resume_activity": "W_Validate application",
-      "sample_count": 190,
+      "activity": "W_Call after offers",
+      "placement": "ex_ante",
+      "trigger_activity": "W_Call after offers",
+      "resume_activity": "W_Call after offers",
+      "sample_count": 25093,
+      "positive_delay_ratio": 0.845,
       "classification": "External Uncoupled Delay (EUD)",
       "is_external": true,
+      "clock_type": "24_7",
       "causal_evidence": {
-        "wip_correlation": -0.0334,
-        "mean_off_calendar_ratio": 0.7044,
-        "unassigned_target_rate": 0.0
+        "wip_correlation": 0.0147,
+        "mean_off_calendar_ratio": 0.4114
       },
-      "median_hours": 193.99,
-      "median_days": 8.08,
-      "mean_days": 10.37,
+      "median_hours": 43.92,
+      "median_days": 1.83,
+      "mean_days": 3.11,
       "best_distribution": "gamma",
       "distribution_params": {
-        "shape": 0.7510113693926669,
+        "shape": 0.3132088908333797,
         "loc": 0.0,
-        "scale": 1192712.4235614438
-      }
-    },
-    {
-      "trigger_activity": "W_Complete application",
-      "resume_activity": "O_SENT_BACK",
-      "sample_count": 561,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0271,
-        "mean_off_calendar_ratio": 0.6462,
-        "unassigned_target_rate": 0.0
+        "scale": 858853.9075632835
       },
-      "median_hours": 142.25,
-      "median_days": 5.93,
-      "mean_days": 5.37,
-      "best_distribution": "exponential",
-      "distribution_params": {
-        "loc": 0.0,
-        "scale": 464170.25595187163
-      }
-    },
+      "top_causal_predecessors": [
+        "W_Call after offers",
+        "W_Complete application",
+        "W_Validate application"
+      ]
+    }
+  ],
+  "internal_queue_delays": [
     {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "A_REGISTERED",
-      "sample_count": 92,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0086,
-        "mean_off_calendar_ratio": 0.6011,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 74.92,
-      "median_days": 3.12,
-      "mean_days": 3.06,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 1.0946865492382483,
-        "loc": 0.0,
-        "scale": 241141.56896744517
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "A_ACTIVATED",
-      "sample_count": 81,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.1251,
-        "mean_off_calendar_ratio": 0.5455,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 73.17,
-      "median_days": 3.05,
-      "mean_days": 2.81,
-      "best_distribution": "exponential",
-      "distribution_params": {
-        "loc": 0.0,
-        "scale": 243045.51314814817
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "A_APPROVED",
-      "sample_count": 167,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.0963,
-        "mean_off_calendar_ratio": 0.5771,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 73.18,
-      "median_days": 3.05,
-      "mean_days": 3.04,
-      "best_distribution": "exponential",
-      "distribution_params": {
-        "loc": 0.0,
-        "scale": 262706.8897904191
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "O_SENT_BACK",
-      "sample_count": 2693,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.0166,
-        "mean_off_calendar_ratio": 0.697,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 71.21,
-      "median_days": 2.97,
-      "mean_days": 3.6,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 1.0571934400360752,
-        "loc": 0.0,
-        "scale": 293891.3223395488
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "O_ACCEPTED",
-      "sample_count": 304,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0577,
-        "mean_off_calendar_ratio": 0.5733,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 71.11,
-      "median_days": 2.96,
-      "mean_days": 2.76,
-      "best_distribution": "exponential",
-      "distribution_params": {
-        "loc": 0.0,
-        "scale": 238307.0914506579
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "A_DECLINED",
-      "sample_count": 213,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.0854,
-        "mean_off_calendar_ratio": 0.6156,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 69.18,
-      "median_days": 2.88,
-      "mean_days": 2.77,
-      "best_distribution": "exponential",
-      "distribution_params": {
-        "loc": 0.0,
-        "scale": 239558.97138967138
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "O_DECLINED",
-      "sample_count": 183,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.1013,
-        "mean_off_calendar_ratio": 0.5878,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 54.68,
-      "median_days": 2.28,
-      "mean_days": 2.66,
-      "best_distribution": "exponential",
-      "distribution_params": {
-        "loc": 0.0,
-        "scale": 229874.88409289616
-      }
-    },
-    {
+      "activity": "W_Validate application",
+      "placement": "ex_ante",
       "trigger_activity": "W_Call after offers",
       "resume_activity": "W_Validate application",
-      "sample_count": 2474,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
+      "sample_count": 9490,
+      "positive_delay_ratio": 0.5688,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "clock_type": "business_shift",
       "causal_evidence": {
-        "wip_correlation": -0.0268,
-        "mean_off_calendar_ratio": 0.5735,
-        "unassigned_target_rate": 0.0065
+        "wip_correlation": 0.0394,
+        "mean_off_calendar_ratio": 0.2191
       },
-      "median_hours": 53.1,
-      "median_days": 2.21,
-      "mean_days": 3.04,
-      "best_distribution": "exponential",
+      "median_hours": 24.51,
+      "median_days": 1.02,
+      "mean_days": 1.71,
+      "best_distribution": "gamma",
       "distribution_params": {
+        "shape": 0.34118946881759693,
         "loc": 0.0,
-        "scale": 262917.813890865
+        "scale": 433859.1144238898
+      },
+      "top_causal_predecessors": [
+        "W_Call after offers",
+        "W_Validate application",
+        "W_Complete application"
+      ]
+    },
+    {
+      "activity": "W_Assess fraud",
+      "placement": "ex_ante",
+      "trigger_activity": "A_SUBMITTED",
+      "resume_activity": "W_Assess fraud",
+      "sample_count": 2655,
+      "positive_delay_ratio": 0.0719,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "clock_type": "business_shift",
+      "causal_evidence": {
+        "wip_correlation": 0.0106,
+        "mean_off_calendar_ratio": 0.0243
+      },
+      "median_hours": 4.18,
+      "median_days": 0.17,
+      "mean_days": 0.82,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.3723568174180313,
+        "loc": 0.0,
+        "scale": 190714.27025787352
+      },
+      "top_causal_predecessors": [
+        "A_SUBMITTED",
+        "W_Assess fraud",
+        "A_PARTLYSUBMITTED"
+      ]
+    },
+    {
+      "activity": "W_Complete application",
+      "placement": "ex_ante",
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "W_Complete application",
+      "sample_count": 23728,
+      "positive_delay_ratio": 0.8804,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "clock_type": "business_shift",
+      "causal_evidence": {
+        "wip_correlation": 0.0474,
+        "mean_off_calendar_ratio": 0.2918
+      },
+      "median_hours": 3.78,
+      "median_days": 0.16,
+      "mean_days": 0.7,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.3150621227195486,
+        "loc": 0.0,
+        "scale": 191817.97258347223
+      },
+      "top_causal_predecessors": [
+        "W_Complete application",
+        "A_PREACCEPTED",
+        "W_Handle leads"
+      ]
+    },
+    {
+      "activity": "W_Call after incomplete files",
+      "placement": "ex_ante",
+      "trigger_activity": "W_Call after incomplete files",
+      "resume_activity": "W_Call after incomplete files",
+      "sample_count": 11182,
+      "positive_delay_ratio": 0.9252,
+      "classification": "Internal Worklist / Queue Delay",
+      "is_external": false,
+      "clock_type": "business_shift",
+      "causal_evidence": {
+        "wip_correlation": 0.0551,
+        "mean_off_calendar_ratio": 0.2511
+      },
+      "median_hours": 2.59,
+      "median_days": 0.11,
+      "mean_days": 0.6,
+      "best_distribution": "lognormal",
+      "distribution_params": {
+        "shape": 2.7042247812080635,
+        "loc": 0.0,
+        "scale": 6373.104385646853
+      },
+      "top_causal_predecessors": [
+        "W_Call after incomplete files",
+        "W_Validate application",
+        "O_SENT"
+      ]
+    }
+  ],
+  "causal_transition_arcs": [
+    {
+      "trigger_activity": "A_PREACCEPTED",
+      "resume_activity": "W_Complete application",
+      "sample_count": 4535,
+      "median_days": 0.08,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.3963292509345625,
+        "loc": 0.0,
+        "scale": 45204.709338204724
+      }
+    },
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "W_Call after offers",
+      "sample_count": 6808,
+      "median_days": 1.11,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.1794340339640787,
+        "loc": 0.0,
+        "scale": 1590353.6036470863
       }
     },
     {
       "trigger_activity": "W_Call after offers",
       "resume_activity": "W_Call after offers",
-      "sample_count": 13162,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0336,
-        "mean_off_calendar_ratio": 0.6301,
-        "unassigned_target_rate": 0.1407
-      },
-      "median_hours": 44.23,
-      "median_days": 1.84,
-      "mean_days": 3.03,
+      "sample_count": 17394,
+      "median_days": 1.85,
       "best_distribution": "gamma",
       "distribution_params": {
-        "shape": 0.37907494118062135,
+        "shape": 0.4016123039355795,
         "loc": 0.0,
-        "scale": 689851.087981326
+        "scale": 658585.4360956908
       }
     },
     {
       "trigger_activity": "W_Call after offers",
-      "resume_activity": "O_CANCELLED",
-      "sample_count": 1046,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.037,
-        "mean_off_calendar_ratio": 0.5658,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 25.11,
-      "median_days": 1.05,
-      "mean_days": 2.51,
+      "resume_activity": "W_Validate application",
+      "sample_count": 5216,
+      "median_days": 2.2,
+      "best_distribution": "exponential",
+      "distribution_params": {
+        "loc": 0.0,
+        "scale": 221671.70437980464
+      }
+    },
+    {
+      "trigger_activity": "W_Complete application",
+      "resume_activity": "W_Complete application",
+      "sample_count": 16144,
+      "median_days": 0.2,
       "best_distribution": "gamma",
       "distribution_params": {
-        "shape": 0.19009820297083307,
+        "shape": 0.32162669052409043,
         "loc": 0.0,
-        "scale": 1141980.4270171465
+        "scale": 245323.67395129413
+      }
+    },
+    {
+      "trigger_activity": "W_Handle leads",
+      "resume_activity": "W_Complete application",
+      "sample_count": 2597,
+      "median_days": 0.08,
+      "best_distribution": "gamma",
+      "distribution_params": {
+        "shape": 0.42625179145071745,
+        "loc": 0.0,
+        "scale": 31845.121914819636
       }
     },
     {
       "trigger_activity": "W_Call after incomplete files",
-      "resume_activity": "O_SENT_BACK",
-      "sample_count": 190,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0487,
-        "mean_off_calendar_ratio": 0.5598,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 23.95,
-      "median_days": 1.0,
-      "mean_days": 1.83,
+      "resume_activity": "W_Call after incomplete files",
+      "sample_count": 9536,
+      "median_days": 0.15,
       "best_distribution": "gamma",
       "distribution_params": {
-        "shape": 0.5345950914807476,
+        "shape": 0.34141440072573165,
         "loc": 0.0,
-        "scale": 296383.0699133726
+        "scale": 175109.71752184973
       }
     },
     {
       "trigger_activity": "A_PARTLYSUBMITTED",
       "resume_activity": "W_Assess fraud",
       "sample_count": 66,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.1103,
-        "mean_off_calendar_ratio": 0.6312,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 21.39,
-      "median_days": 0.89,
-      "mean_days": 1.51,
+      "median_days": 0.88,
       "best_distribution": "gamma",
       "distribution_params": {
-        "shape": 0.8144724501926016,
+        "shape": 0.7523705066121091,
         "loc": 0.0,
-        "scale": 160105.81902590394
+        "scale": 153184.4511378636
       }
     },
     {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "A_CANCELLED",
-      "sample_count": 689,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.0559,
-        "mean_off_calendar_ratio": 0.5477,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 19.75,
-      "median_days": 0.82,
-      "mean_days": 2.57,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 0.11939658856873632,
-        "loc": 0.0,
-        "scale": 1861524.8906098055
-      }
-    },
-    {
-      "trigger_activity": "W_Call after offers",
-      "resume_activity": "O_SELECTED",
-      "sample_count": 438,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.0316,
-        "mean_off_calendar_ratio": 0.5532,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 18.6,
-      "median_days": 0.78,
-      "mean_days": 2.11,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 0.24986153179229184,
-        "loc": 0.0,
-        "scale": 730365.805593639
-      }
-    },
-    {
-      "trigger_activity": "W_Complete application",
-      "resume_activity": "W_Complete application",
-      "sample_count": 12323,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0442,
-        "mean_off_calendar_ratio": 0.4926,
-        "unassigned_target_rate": 0.113
-      },
-      "median_hours": 5.49,
-      "median_days": 0.23,
-      "mean_days": 1.22,
+      "trigger_activity": "W_Assess fraud",
+      "resume_activity": "W_Assess fraud",
+      "sample_count": 129,
+      "median_days": 0.08,
       "best_distribution": "lognormal",
       "distribution_params": {
-        "shape": 2.439435989249026,
+        "shape": 2.7648987711151958,
         "loc": 0.0,
-        "scale": 14866.70062833447
-      }
-    },
-    {
-      "trigger_activity": "A_PREACCEPTED",
-      "resume_activity": "W_Complete application",
-      "sample_count": 2791,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.1216,
-        "mean_off_calendar_ratio": 0.5263,
-        "unassigned_target_rate": 0.1716
-      },
-      "median_hours": 3.54,
-      "median_days": 0.15,
-      "mean_days": 0.36,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 0.5612429539257344,
-        "loc": 0.0,
-        "scale": 54663.04634494847
-      }
-    },
-    {
-      "trigger_activity": "W_Call after incomplete files",
-      "resume_activity": "W_Call after incomplete files",
-      "sample_count": 8921,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.0519,
-        "mean_off_calendar_ratio": 0.4006,
-        "unassigned_target_rate": 0.0835
-      },
-      "median_hours": 3.32,
-      "median_days": 0.14,
-      "mean_days": 0.7,
-      "best_distribution": "lognormal",
-      "distribution_params": {
-        "shape": 2.4112974467627826,
-        "loc": 0.0,
-        "scale": 9603.519892748027
-      }
-    },
-    {
-      "trigger_activity": "W_Complete application",
-      "resume_activity": "A_CANCELLED",
-      "sample_count": 723,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": -0.0602,
-        "mean_off_calendar_ratio": 0.5102,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 2.11,
-      "median_days": 0.09,
-      "mean_days": 1.82,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 0.14664126325405388,
-        "loc": 0.0,
-        "scale": 1071554.7768021468
-      }
-    },
-    {
-      "trigger_activity": "W_Complete application",
-      "resume_activity": "A_DECLINED",
-      "sample_count": 685,
-      "classification": "External Uncoupled Delay (EUD)",
-      "is_external": true,
-      "causal_evidence": {
-        "wip_correlation": 0.033,
-        "mean_off_calendar_ratio": 0.4434,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 2.06,
-      "median_days": 0.09,
-      "mean_days": 0.51,
-      "best_distribution": "lognormal",
-      "distribution_params": {
-        "shape": 2.137820906257084,
-        "loc": 0.0,
-        "scale": 6564.756074774579
-      }
-    }
-  ],
-  "internal_queue_delays": [
-    {
-      "trigger_activity": "W_Call after incomplete files",
-      "resume_activity": "A_CANCELLED",
-      "sample_count": 65,
-      "classification": "Internal Worklist / Queue Delay",
-      "is_external": false,
-      "causal_evidence": {
-        "wip_correlation": 0.1022,
-        "mean_off_calendar_ratio": 0.3859,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 3.62,
-      "median_days": 0.15,
-      "mean_days": 1.02,
-      "best_distribution": "lognormal",
-      "distribution_params": {
-        "shape": 3.549723375259121,
-        "loc": 0.0,
-        "scale": 6556.362928477772
-      }
-    },
-    {
-      "trigger_activity": "W_Handle leads",
-      "resume_activity": "W_Complete application",
-      "sample_count": 1596,
-      "classification": "Internal Worklist / Queue Delay",
-      "is_external": false,
-      "causal_evidence": {
-        "wip_correlation": 0.1499,
-        "mean_off_calendar_ratio": 0.331,
-        "unassigned_target_rate": 0.1404
-      },
-      "median_hours": 2.34,
-      "median_days": 0.1,
-      "mean_days": 0.19,
-      "best_distribution": "gamma",
-      "distribution_params": {
-        "shape": 0.6294479804166689,
-        "loc": 0.0,
-        "scale": 26492.67437563351
-      }
-    },
-    {
-      "trigger_activity": "W_Handle leads",
-      "resume_activity": "A_CANCELLED",
-      "sample_count": 60,
-      "classification": "Internal Worklist / Queue Delay",
-      "is_external": false,
-      "causal_evidence": {
-        "wip_correlation": 0.0714,
-        "mean_off_calendar_ratio": 0.3289,
-        "unassigned_target_rate": 0.0
-      },
-      "median_hours": 2.12,
-      "median_days": 0.09,
-      "mean_days": 0.21,
-      "best_distribution": "lognormal",
-      "distribution_params": {
-        "shape": 1.6680311939838346,
-        "loc": 0.0,
-        "scale": 6039.156885425923
+        "scale": 5547.039667451309
       }
     }
   ],

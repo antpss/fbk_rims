@@ -164,6 +164,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
+    mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival" (time gap between case arrivals), "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest
     min_samples: 30                  # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
@@ -230,6 +231,13 @@ simulation:
   output_simulated_log: "data/processed/simulated_log.csv"
   export_xes: true                # Also export standard IEEE XES log (.xes)
   output_simulated_xes: "data/processed/simulated_log.xes"
+
+  # Extraneous Activity Delays (Chapela-Campa & Dumas)
+  extraneous_delays:
+    enabled: true                 # Simulate discovered extraneous activity delays
+    estimator: "eclaw_plus"       # Options: "eclaw_plus", "eclaw", "naive"
+    placement: "ex_ante"          # Options: "ex_ante", "ex_post", "causal_pair"
+    include_internal_queue_delays: false # If true, also simulates internal queue delays
   
   # Human Inter-Ticket Latency (Worker Refractory Cooldowns / Coffee Breaks)
   human_latency:

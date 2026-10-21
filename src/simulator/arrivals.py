@@ -194,6 +194,16 @@ class ArrivalGenerator:
                 })
                 i += 1
 
+        # Compute case inter-arrival time in seconds across sorted arrivals
+        if arrivals:
+            arrivals.sort(key=lambda x: x["arrival_time"])
+            for idx in range(len(arrivals)):
+                if idx == 0:
+                    arrivals[idx]["inter_arrival_seconds"] = 0.0
+                else:
+                    delta = (arrivals[idx]["arrival_time"] - arrivals[idx - 1]["arrival_time"]).total_seconds()
+                    arrivals[idx]["inter_arrival_seconds"] = max(0.0, float(delta))
+
         return arrivals, df_real
 
     def _prepare_prophet_arrivals(self, df_real, empirical_amounts, amt_col):

@@ -121,11 +121,11 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, window_size=10, case_attrs_cfg=None, milestone_prefixes=None, excluded_milestones=None):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, window_size=10, case_attrs_cfg=None, milestone_prefixes=None, excluded_milestones=None, routing_mode="payload"):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
     Extracts prefix history, loop counts, milestone business state, offer counts,
-    case attributes, and temporal features at each XOR split encounter.
+    case attributes (payload), inter-arrival times, and temporal features at each XOR split encounter.
     """
     print(f"Loading Petri net: {pnml_path}...")
     net, im, fm = pm4py.read_pnml(pnml_path)
@@ -143,6 +143,17 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         case_counts = df_log.groupby("case:concept:name").size()
         valid_cases = case_counts[case_counts > 0].index
         df_log = df_log[df_log["case:concept:name"].isin(valid_cases)].copy()
+
+    # Precompute case inter-arrival times across chronologically sorted traces
+    case_first_times = df_log.groupby("case:concept:name")["time:timestamp"].min().sort_values()
+    case_inter_arrivals = {}
+    prev_t = None
+    for cid, t in case_first_times.items():
+        if prev_t is None:
+            case_inter_arrivals[str(cid)] = 0.0
+        else:
+            case_inter_arrivals[str(cid)] = max(0.0, (t - prev_t).total_seconds())
+        prev_t = t
 
     log = pm4py.convert_to_event_log(df_log)
 
@@ -207,6 +218,9 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         hour = first_dt.hour if first_dt is not None else 12
         weekday = first_dt.weekday() if first_dt is not None else 0
 
+        # Inter-arrival gap for current case
+        inter_arr = case_inter_arrivals.get(str(case_id), 0.0)
+
         prefix_labels = []
         milestones_seen = set()
         offer_count = 0
@@ -242,8 +256,15 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                         "loop_count": float(dp_counts[p_id]),
                         "offer_count": float(offer_count),
                         "has_offer": 1.0 if offer_count > 0 else 0.0,
-                        **case_features,
                     }
+
+                    # Include payload features (case attributes) if requested
+                    if routing_mode in ("payload", "both"):
+                        sample.update(case_features)
+
+                    # Include case inter-arrival time if requested
+                    if routing_mode in ("inter_arrival", "both"):
+                        sample["inter_arrival_seconds"] = float(inter_arr)
 
                     # Milestone presence indicators
                     for ms in all_milestones:
@@ -283,6 +304,13 @@ def main():
     parser.add_argument("--n_estimators", type=int, default=None, help="Number of trees for Random Forest (default: from config or 5)")
     parser.add_argument("--min_samples", type=int, default=None, help="Minimum samples required at XOR place to train ML (default: 30)")
     parser.add_argument("--min_f1_threshold", type=float, default=None, help="Macro F1 threshold for ML vs probability fallback (default: 0.60)")
+    parser.add_argument(
+        "--routing_mode",
+        type=str,
+        default=None,
+        choices=["payload", "inter_arrival", "both"],
+        help="Routing feature mode: 'payload' (case attributes), 'inter_arrival' (time between arrivals), or 'both' (default: from config or payload)",
+    )
     parser.add_argument("--output_dir", type=str, default=None, help="Output directory for routing models and manifests")
     args = parser.parse_args()
 
@@ -291,6 +319,11 @@ def main():
     project_name = cfg["project"].get("name", "BPI_2012")
 
     routing_cfg = cfg.get("tasks", {}).get("routing", {})
+    routing_mode = args.routing_mode or routing_cfg.get("mode", "payload")
+    if routing_mode not in ("payload", "inter_arrival", "both"):
+        print(f"[!] Warning: Unknown routing_mode '{routing_mode}', falling back to 'payload'.")
+        routing_mode = "payload"
+
     clf_type = args.classifier or routing_cfg.get("classifier_type", "decision_tree")
     min_f1 = args.min_f1_threshold if args.min_f1_threshold is not None else routing_cfg.get("min_f1_threshold", 0.60)
     min_samples = args.min_samples if args.min_samples is not None else routing_cfg.get("min_samples", 30)
@@ -337,6 +370,7 @@ def main():
     print("  RIMS+ WHITE-BOX XOR DECISION MINING & ROUTING CLASSIFIER")
     print(f"  Petri Net:     {pnml_path}")
     print(f"  Event Log:     {log_path}")
+    print(f"  Routing Mode:  {routing_mode.upper()} ({'case payload attributes' if routing_mode == 'payload' else ('inter-arrival time' if routing_mode == 'inter_arrival' else 'payload + inter-arrival')})")
     print(f"  Classifier:    {clf_type.upper()}")
     if clf_type in ("decision_tree", "random_forest"):
         print(f"  Max Depth:     {max_depth} (White-Box Constraint)")
@@ -372,10 +406,12 @@ def main():
         case_attrs_cfg=case_attrs_cfg,
         milestone_prefixes=milestone_prefixes,
         excluded_milestones=excluded_milestones,
+        routing_mode=routing_mode,
     )
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
     dispatch_manifest = {
+        "routing_mode": routing_mode,
         "classifier_type": clf_type,
         "min_f1_threshold": min_f1,
         "max_depth": max_depth,
