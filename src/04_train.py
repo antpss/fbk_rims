@@ -191,35 +191,6 @@ class DurationTCN(nn.Module):
         x = torch.cat(tensors, dim=1)
         return F.softplus(self.fc(x).squeeze(-1))
 
-class DurationTransformer(nn.Module):
-    def __init__(self, vocab_size, embed_dim, num_acts, num_features, hidden_dim, max_seq_len, num_layers=2, nhead=4, dropout=0.2):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.pos_embedding = nn.Embedding(max_seq_len, embed_dim)
-        self.act_embedding = nn.Embedding(num_acts, embed_dim) if num_acts > 1 else None
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=nhead, dim_feedforward=hidden_dim, dropout=dropout, batch_first=True)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        in_dim = embed_dim + num_features + (embed_dim if num_acts > 1 else 0)
-        self.fc = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1)
-        )
-
-    def forward(self, prefix_seq, target_act, cont_features):
-        b_size, seq_len = prefix_seq.shape
-        pos = torch.arange(seq_len, device=prefix_seq.device).unsqueeze(0).expand(b_size, -1)
-        x = self.embedding(prefix_seq) + self.pos_embedding(pos)
-        mask = (prefix_seq == 0)
-        trans_out = self.transformer(x, src_key_padding_mask=mask)
-        pooled = trans_out[:, -1, :]
-        tensors = [pooled, cont_features]
-        if self.act_embedding is not None:
-            tensors.append(self.act_embedding(target_act))
-        x = torch.cat(tensors, dim=1)
-        return F.softplus(self.fc(x).squeeze(-1))
-
 # =====================================================================
 # Main Unified Training Engine
 # =====================================================================
@@ -228,7 +199,7 @@ def main():
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Target task to train")
     parser.add_argument("--strategy", type=str, default=None, choices=["global", "local", "hybrid"], help="Override strategy (global, local, hybrid)")
-    parser.add_argument("--model_type", "--engine", dest="model_type", type=str, default=None, choices=["xgboost", "lstm", "tcn", "transformer"], help="Override model type")
+    parser.add_argument("--model_type", "--engine", dest="model_type", type=str, default=None, choices=["xgboost", "lstm", "tcn"], help="Override model type")
     parser.add_argument("--unweighted", action="store_true", help="Disable importance sample weights")
     args = parser.parse_args()
 
@@ -471,7 +442,7 @@ def main():
             test_predictions.loc[test_df['Target_Activity'] == act, 'Source_Model'] = f'Local XGBoost'
 
     # =================================================================
-    # EXECUTION: PYTORCH DEEP LEARNING (LSTM / TCN / Transformer)
+    # EXECUTION: PYTORCH DEEP LEARNING (LSTM / TCN)
     # =================================================================
     else:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -501,8 +472,8 @@ def main():
                 return DurationLSTM(len(vocab), 32, num_acts, len(feature_cols), 128, 2, 0.2)
             elif model_type == "tcn":
                 return DurationTCN(len(vocab), 32, num_acts, len(feature_cols), 128, 3, 0.2)
-            elif model_type == "transformer":
-                return DurationTransformer(len(vocab), 32, num_acts, len(feature_cols), 128, max_seq_len, 2, 4, 0.2)
+            else:
+                raise ValueError(f"Unsupported deep learning model type: {model_type}. Expected 'lstm' or 'tcn'.")
 
         def train_nn(model, tr_data, va_data, epochs=50, patience=5, min_delta=0.01):
             model.to(device)

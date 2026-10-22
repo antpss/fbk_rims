@@ -199,7 +199,16 @@ class Token:
                     self.milestones_seen, self.offer_count, self.has_offer, role_oc,
                     prev_dur=self.prev_dur
                 )
-                w_worklist = max(0.0, w_ml - ext_delay)
+                # Damping factor on repeated loop iterations to prevent residual stacking, in details:
+
+                #Count prior executions of this specific activity in this case
+                act_occurrences = self.prefix.count(act)
+
+                #Compute exponential decay factor (1.0 for first visit, 0.5 for 2nd, 0.25 for 3rd...)
+                loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
+
+                #Apply the damped residual waiting time
+                w_worklist = max(0.0, w_ml - ext_delay) * loop_decay
                 if w_worklist > 0:
                     yield self.env.timeout(w_worklist)
             else:

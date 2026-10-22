@@ -112,7 +112,10 @@ class CalendarManager:
 
         work_left = duration_seconds
         while work_left > 0:
-            day_end = curr_dt.replace(hour=self.hour_end, minute=0, second=0, microsecond=0)
+            if self.hour_end >= 24:
+                day_end = (curr_dt + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                day_end = curr_dt.replace(hour=self.hour_end, minute=0, second=0, microsecond=0)
             window_seconds = max(0.0, (day_end - curr_dt).total_seconds())
 
             if work_left <= window_seconds:
@@ -147,7 +150,10 @@ class CalendarManager:
         while curr_d <= e_dt.date():
             if curr_d.weekday() in self.work_days:
                 shift_s = datetime(curr_d.year, curr_d.month, curr_d.day, self.hour_start, 0, 0)
-                shift_e = datetime(curr_d.year, curr_d.month, curr_d.day, self.hour_end, 0, 0)
+                if self.hour_end >= 24:
+                    shift_e = datetime(curr_d.year, curr_d.month, curr_d.day, 0, 0, 0) + timedelta(days=1)
+                else:
+                    shift_e = datetime(curr_d.year, curr_d.month, curr_d.day, self.hour_end, 0, 0)
                 win_s = max(s_dt, shift_s)
                 win_e = min(e_dt, shift_e)
                 if win_e > win_s:

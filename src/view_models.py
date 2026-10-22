@@ -1,4 +1,5 @@
 import os
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import pm4py
 from config_loader import PROJECT_ROOT
 

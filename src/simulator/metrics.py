@@ -150,10 +150,21 @@ class SimulationEvaluator:
             mae_cycle = float(abs(real_mean - sim_mean))
             red_dist = self.compute_red_distance(real_w, df_sim)
 
+            # Filter to completed tasks (excluding START lifecycle rows)
+            if "lifecycle:transition" in real_w.columns:
+                real_completed = real_w[real_w["lifecycle:transition"].str.upper() == "COMPLETE"]
+            else:
+                real_completed = real_w
+
+            real_tasks_per_case = len(real_completed) / max(1, len(real_cases))
+            sim_tasks_per_case = len(df_sim) / max(1, len(sim_cases))
+            tasks_diff = sim_tasks_per_case - real_tasks_per_case
+
             print(f"Metric                      | Real Historical | Simulated RIMS+ | Difference")
             print("-" * 75)
             print(f"Cases Evaluated             | {len(real_cases):>15,} | {len(sim_cases):>15,} | ---")
-            print(f"Total Work Events           | {len(real_w):>15,} | {len(df_sim):>15,} | ---")
+            print(f"Completed Work Tasks        | {len(real_completed):>15,} | {len(df_sim):>15,} | ---")
+            print(f"Avg Tasks / Case            | {real_tasks_per_case:>15.2f} | {sim_tasks_per_case:>15.2f} | {tasks_diff:>+14.2f}")
             print(f"Mean Case Cycle Time        | {format_dur(real_mean):>15} | {format_dur(sim_mean):>15} | {format_dur(mae_cycle)}")
             print(f"Median Case Cycle Time      | {format_dur(real_median):>15} | {format_dur(sim_median):>15} | ---")
             print(f"Cycle Time Wasserstein Dist |             --- |             --- | {format_dur(wd)}")
@@ -214,7 +225,11 @@ class SimulationEvaluator:
             f.write("| Metric | Real Historical | Simulated RIMS+ | Difference |\n")
             f.write("|---|---|---|---|\n")
             f.write(f"| **Cases Evaluated** | {len(real_cases) if real_cases is not None else 'N/A'} | {len(sim_cases):,} | --- |\n")
-            f.write(f"| **Total Work Events** | {len(real_w) if real_w is not None else 'N/A'} | {len(df_sim):,} | --- |\n")
+            if real_cases is not None:
+                f.write(f"| **Completed Work Tasks** | {len(real_completed):,} | {len(df_sim):,} | --- |\n")
+                f.write(f"| **Avg Tasks / Case** | {real_tasks_per_case:.2f} | {sim_tasks_per_case:.2f} | {tasks_diff:+.2f} |\n")
+            else:
+                f.write(f"| **Total Work Events** | N/A | {len(df_sim):,} | --- |\n")
             f.write(f"| **Mean Case Cycle Time** | {format_dur(real_mean)} | {format_dur(sim_mean)} | {format_dur(mae_cycle)} |\n")
             f.write(f"| **Median Case Cycle Time** | {format_dur(real_median)} | {format_dur(sim_median)} | --- |\n")
             f.write(f"| **Cycle Time Wasserstein Dist** | --- | --- | {format_dur(wd)} |\n")

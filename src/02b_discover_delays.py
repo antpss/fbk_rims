@@ -657,9 +657,9 @@ class ChapelaDelayDiscoveryEngine:
 def main():
     parser = argparse.ArgumentParser(description="RIMS+ Chapela-Campa Causal Delay & Human Latency Discovery Engine")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
-    parser.add_argument("--estimator", type=str, default="eclaw_plus", choices=["eclaw_plus", "eclaw", "naive"],
+    parser.add_argument("--estimator", type=str, default=None, choices=["eclaw_plus", "eclaw", "naive"],
                         help="Delay estimator: 'eclaw_plus' (extrapolated eclipse-aware), 'eclaw', or 'naive'")
-    parser.add_argument("--placement", type=str, default="ex_ante", choices=["ex_ante", "ex_post", "causal_pair"],
+    parser.add_argument("--placement", type=str, default=None, choices=["ex_ante", "ex_post", "causal_pair"],
                         help="Delay placement strategy: 'ex_ante' (before target), 'ex_post' (after source), or 'causal_pair'")
     parser.add_argument("--min_delay_hours", type=float, default=1.0, help="Minimum median delay threshold in hours")
     parser.add_argument("--min_samples", type=int, default=30, help="Minimum sample count")
@@ -668,10 +668,14 @@ def main():
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    delays_cfg = cfg.get("simulation", {}).get("extraneous_delays", {})
+    estimator = args.estimator or delays_cfg.get("estimator", "eclaw_plus")
+    placement = args.placement or delays_cfg.get("placement", "ex_ante")
+
     engine = ChapelaDelayDiscoveryEngine(
         cfg,
-        estimator=args.estimator,
-        placement=args.placement,
+        estimator=estimator,
+        placement=placement,
         min_delay_hours=args.min_delay_hours,
         min_samples=args.min_samples,
         zeta=args.zeta,

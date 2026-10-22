@@ -1,6 +1,6 @@
 # RIMS+ Pipeline: Runtime Integration of Machine Learning & Simulation
 
-This repository contains the advanced **RIMS+** (Runtime Integration of Machine Learning and Simulation) framework for Business Process Simulation, specifically tailored for scenarios with high resource contention. It combines white-box Petri net process models executed via **SimPy** with machine learning and deep learning models (**TCN**, **XGBoost**, **LSTM**, and **Transformer**) predicting activity execution durations and queue waiting times at runtime, alongside decision classifiers resolving XOR branching.
+This repository contains the advanced **RIMS+** (Runtime Integration of Machine Learning and Simulation) framework for Business Process Simulation (BPS), specifically tailored for operational scenarios characterized by high resource contention, non-linear worker behaviors, and complex uncoupled delays. It combines white-box Petri net process models executed via **SimPy** with runtime Machine Learning and Deep Learning inference engines (**XGBoost**, **TCN**, and **LSTM**), white-box XOR routing classifiers, continuous causal delay discovery, and Facebook Prophet time-series arrival forecasting.
 
 ---
 
@@ -8,47 +8,56 @@ This repository contains the advanced **RIMS+** (Runtime Integration of Machine 
 
 ```
 fbk_rims/
-├── config.yaml                        # Central configuration (tasks, features, paths, models)
-├── requirements.txt                   # Formal project dependencies (PyTorch, SimPy, Hyperopt, PM4Py)
-├── data/
-│   ├── raw/                           # Raw input event logs (BPI_Challenge_2012.xes)
-│   ├── processed/                     # Processed logs and tabular datasets
-│   │   ├── BPI_2012_filtered.xes      # Filtered event log (work items only)
-│   │   ├── BPI_2012_A_only.xes        # Filtered event log (application lifecycle for routing)
-│   │   ├── aligned_BPI_2012.xes       # Repaired & aligned event log against Petri net
-│   │   └── datasets/                  # Feature-engineered tabular datasets
-│   │       ├── dataset_duration_global.csv     # Duration dataset (0-duration filtered)
-│   │       ├── dataset_waiting_time_global.csv # Waiting time dataset (0-waiting preserved)
-│   │       └── activity_weights.json           # Smoothed importance sample weights
-│   └── generated/                     # Output logs from simulation runs
-├── models/                            # Process models and predictive ML models
+├── config.yaml                        # Central configuration (paths, tasks, features, models, simulation)
+├── requirements.txt                   # Formal project dependencies (PyTorch, SimPy, PM4Py, Prophet, XGBoost)
+├── context.md                         # Detailed project context, evolution, and architectural blueprint
+├── README.md                          # Comprehensive pipeline documentation and benchmark leaderboards
+├── docs/                              # Flowcharts and architecture documentation
+│   ├── pipeline_flowchart.md          # Comprehensive Mermaid flowchart of the end-to-end pipeline
+│   └── causal_discovery_flowchart.md  # Triple causal test flowchart for extraneous delays
+├── data/                              # Data directories
+│   ├── raw/                           # Raw event logs (e.g. BPI_Challenge_2012.xes)
+│   ├── processed/                     # Processed logs, tabular datasets, and simulation outputs
+│   │   ├── BPI_2012_filtered.xes      # Filtered event log (human work items + milestones)
+│   │   ├── BPI_2012_A_only.xes        # Application lifecycle milestone log
+│   │   ├── aligned_BPI_2012.xes       # Repaired & aligned log (100% synchronous moves)
+│   │   ├── datasets/                  # Feature-engineered tabular datasets
+│   │   │   ├── dataset_duration_global.csv     # Duration dataset (0-duration filtered)
+│   │   │   ├── dataset_waiting_time_global.csv # Waiting time dataset (0-waiting preserved)
+│   │   │   └── activity_weights.json           # Smoothed sample importance weights
+│   │   ├── simulated_log.csv          # Output simulated event log (flat CSV)
+│   │   ├── simulated_log.xes          # Output simulated event log (standard IEEE XES)
+│   │   ├── simulation_report.md       # Simulation benchmark report
+│   │   └── ablation_report.md         # Simulation ablation study leaderboard
+│   └── generated/                     # Timestamped run exports (csv / xes)
+├── models/                            # Trained model artifacts and manifests
 │   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
-│   │   ├── discovered_model_split.pnml# Split Miner workflow net (W_ activities)
-│   │   └── bpi2012_A_net.pnml         # Lifecycle Petri net for XOR decision mining (A_ activities)
-│   ├── delays/                        # Causal external delays and worker refractory latencies
-│   │   └── delay_manifest.json        # Machine-readable delay manifest with KS-fitted distributions
-│   ├── duration/                      # Activity processing duration models (XGBoost, TCN, LSTM)
-│   │   ├── global_xgboost/            # Pooled global gradient boosted trees
-│   │   ├── local_xgboost/             # Specialized local trees per activity
-│   │   ├── global_tcn/                # Pooled global sequence TCN network
-│   │   ├── local_tcn/                 # Specialized local sequence TCN networks
-│   │   ├── global_lstm/               # Pooled global sequence LSTM network
-│   │   ├── local_lstm/                # Specialized local sequence LSTM networks
-│   │   ├── hybrid_champion/           # Dynamic Champion Hybrid dispatch & scalers
+│   │   ├── discovered_model_split.pnml# Operational Split Miner workflow net (W_ activities)
+│   │   └── bpi2012_A_net.pnml         # Milestone lifecycle net (A_ activities reference)
+│   ├── delays/                        # Causal delays and worker refractory latencies
+│   │   ├── delay_manifest.json        # Machine-readable delay manifest with KS-fitted distributions
+│   │   └── delay_discovery_report.md  # Detailed delay discovery report
+│   ├── duration/                      # Activity duration models (XGBoost, TCN, LSTM)
+│   │   ├── hybrid_champion/           # Synthesized Best-of-All-Worlds Hybrid Champion dispatch
+│   │   ├── global_{xgboost|tcn|lstm}/  # Pooled global model checkpoints & scalers
+│   │   ├── local_{xgboost|tcn|lstm}/   # Activity-specialized local model checkpoints & scalers
 │   │   └── benchmark_report.md        # Duration benchmark leaderboard & activity breakdown
-│   ├── waiting_time/                  # Activity waiting time / queue models (XGBoost, TCN, LSTM)
+│   ├── waiting_time/                  # Activity waiting time models (XGBoost, TCN, LSTM)
 │   │   ├── hybrid_champion/           # Waiting time champion dispatch & scalers
+│   │   ├── global_{xgboost|tcn|lstm}/  # Pooled global model checkpoints & scalers
+│   │   ├── local_{xgboost|tcn|lstm}/   # Activity-specialized local model checkpoints & scalers
 │   │   └── benchmark_report.md        # Waiting time benchmark leaderboard
 │   └── routing/                       # White-box XOR decision classifiers & routing manifest
 │       ├── routing_decisions.json     # Dynamic decision dispatch manifest
-│       └── routing_*.joblib           # Trained decision tree classifiers per XOR place
-├── src/                               # Core pipeline scripts (Steps 00 to 06 + Benchmarking)
-│   ├── 00_filter_log.py               # Step 0: Raw event log filtering
+│       └── routing_*.joblib           # Trained decision tree / random forest classifiers per XOR place
+├── src/                               # Active RIMS+ Core Pipeline & Simulator Package
+│   ├── 00_filter_log.py               # Step 0: Raw event log filtering and activity renaming
 │   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split / Inductive)
 │   ├── view_models.py                 # Step 1b: Petri net visualization (.png)
-│   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair
+│   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair (PM4Py A*)
 │   ├── 02b_discover_delays.py         # Step 2b: Causal external delays & worker latency discovery
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
+│   ├── features.py                    # Declarative Feature Registry & context builder
 │   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
 │   ├── benchmark_models.py            # Step 4b: Automated benchmarking & champion synthesis
 │   ├── 05_train_routing.py            # Step 5: White-Box XOR decision mining & Hyperopt tuning
@@ -59,10 +68,16 @@ fbk_rims/
 │   │   ├── process.py                 # SimulationProcess & SharedWorkerPool (59 human agents)
 │   │   ├── token.py                   # Token (PM4Py Petri net marking semantics, XOR branching)
 │   │   ├── predictor.py               # ChampionPredictor (Runtime XGBoost, TCN, LSTM inference)
-│   │   ├── arrivals.py                # ArrivalGenerator (Historical replay & Generative arrivals)
+│   │   ├── arrivals.py                # ArrivalGenerator (Replay, Generative, Prophet time-series)
 │   │   └── metrics.py                 # SimulationEvaluator (IEEE XES/CSV export, Wasserstein MAE)
 │   └── config_loader.py               # Central config loader helper
+├── RIMS/                              # Cloned Reference / Legacy Repo (Meneghello et al. Keras baseline, NOT the simulator)
+└── RIMS_tool/                         # Cloned Reference / Legacy Repo (BPM 2023 demo tool, NOT the simulator)
 ```
+
+> [!NOTE]
+> **Cloned Reference / Legacy Repositories (`RIMS/` & `RIMS_tool/`)**:
+> `RIMS/` and `RIMS_tool/` are cloned reference repositories of previous research prototypes (Meneghello et al., using legacy TensorFlow 1.x / Keras `.h5` LSTM models on the `confidential_1000` dataset, and the BPM 2023 demo tool). **They are not the simulator**; they are kept strictly as reference codebases and comparison baselines. The active, production-grade RIMS+ simulator and operational pipeline live entirely in `src/`.
 
 ---
 
@@ -78,48 +93,56 @@ pip install -r requirements.txt
 Key dependencies:
 * `pm4py` : Process discovery, conformance checking, and state-equation alignments
 * `simpy` : Discrete-event simulation engine
-* `torch` : Neural network architectures (**LSTM**, **TCN**, and **Transformer**)
-* `xgboost` : Gradient-boosted regression engines
-* `scikit-learn` : DecisionTreeClassifier, feature scalers, and evaluation metrics
+* `torch` : Neural network architectures (**TCN** and **LSTM**)
+* `xgboost` : Gradient-boosted regression and classification engines
+* `scikit-learn` : DecisionTreeClassifier, RandomForestClassifier, feature scalers, and evaluation metrics
 * `hyperopt` : Bayesian Tree-structured Parzen Estimator (TPE) optimization
 * `prophet` : Time-series forecasting for case arrival intensities (DeepSimulator parity)
-* `pandas`, `numpy` : High-performance tabular manipulation and state extraction
+* `pandas`, `numpy`, `scipy` : Tabular manipulation, state extraction, and Kolmogorov-Smirnov distribution fitting
 * `pyyaml` : Centralized configuration parsing
 
 ---
 
 ## Central Configuration (`config.yaml`)
 
-The entire pipeline is driven by [`config.yaml`](config.yaml):
+The entire operational pipeline is governed by [`config.yaml`](config.yaml):
 
-* **`paths`**: Decoupled, non-conflicting paths for dual-process modeling:
-  * Duration & Waiting Time (`W_` work items): `raw_log`, `aligned_log`, `petri_net`.
-  * XOR Decision Routing (`A_` lifecycle): `routing_raw_log`, `routing_petri_net`, `routing_models_dir`.
-* **`discovery`**: Miner algorithm (`split` or `inductive`) and noise parameters.
-* **`preprocessing`**: Activity prefixes (`process_activity_prefixes`), milestone prefixes (`milestone_prefixes`), and Dutch-to-English translation mapping (`activity_mapping`).
-* **`features`**: Context features to extract (WIP, activity WIP, role occupancy, calendar time, prefix window length, domain attributes like `RequestedAmount`).
+* **`paths`**: Input and output paths for event logs, discovered models, datasets, and manifests.
+* **`discovery`**: Process miner selection (`split` or `inductive`) and noise thresholds.
+* **`features`**: Context features to extract (`wip`, `ac_wip`, `daytime`, `weekday`, `role_occupancy`, `prev_duration`, `case_attributes`, `milestones`, `resource_id`), prefix window size (10), and domain case attributes (`RequestedAmount`).
+* **`preprocessing`**: Activity prefixes (`process_activity_prefixes: ["W_"]`), milestone prefixes (`milestone_prefixes: ["A_", "O_"]`), and activity renaming mapping (`activity_mapping`).
 * **`tasks`**: Task-specific data settings:
-  * `duration`: Filters 0.0s events (automated pass-throughs) and calculates smoothed sample weights.
-  * `waiting_time`: Preserves 0.0s events (immediate resource pickups).
-  * `routing`: Decision mining settings (`classifier_type`, `max_depth: 21`, `min_samples: 30`, `min_f1_threshold: 0.60`).
+  * `duration`: Filters 0.0s events (automated pass-throughs) and calculates smoothed inverse sample weights (`activity_weights.json`).
+  * `waiting_time`: Preserves 0.0s events (physically valid immediate resource pickups).
+  * `routing`: Decision mining settings (`classifier_type: "decision_tree"`, `max_depth: 21`, `min_samples: 30`, `min_f1_threshold: 0.60`, `mode: "payload"`).
 * **`model_strategy`**:
   * `mode`: Training mode (`hybrid`, `global_tournament`, or `single_global`).
   * `single_global_engine`: Engine for single global training (`xgboost`, `tcn`, `lstm`).
-  * `dl`: PyTorch neural network hyperparameters (`epochs: 50`, `patience: 5`, `batch_size: 256`, `learning_rate: 0.001`).
-  * `candidates`: Candidate architectures evaluated for hybrid champion synthesis and global tournament.
+  * `dl`: PyTorch neural network hyperparameters (`epochs: 50`, `patience: 5`, `batch_size: 256`, `learning_rate: 0.001`, `min_delta: 0.01`).
+  * `candidates`: Candidate architectures evaluated for hybrid champion synthesis and global tournaments.
+* **`simulation`**:
+  * `mode`: Waiting time strategy (`hybrid_residual` or `pure_physics`).
+  * `extraneous_delays`: Chapela-Campa causal delay injection (`estimator: "eclaw_plus"`, `placement: "ex_ante"`).
+  * `human_latency`: Queue-aware refractory cooldowns / coffee breaks (`max_cooldown: 1800.0s`).
+  * `arrival`: Case spawning strategy (`replay`, `generative`, or `prophet`).
+  * `calendar`: Business operating hours (08:00 – 20:00 Mon–Fri) and custom `per_role` schedules.
 
 ---
 
 ## End-to-End Operational Pipeline
 
-![RIMS+ Pipeline Flowchart](docs/pipeline_flowchart.svg)
+For a detailed visual flowchart of the operational pipeline, see [docs/pipeline_flowchart.md](docs/pipeline_flowchart.md).
 
-All commands should be executed from the project root directory with your virtual environment active (`source venv/bin/activate`).
+All commands should be executed from the project root with the virtual environment active:
+
+```bash
+source venv/bin/activate
+```
 
 ### Step 0: Log Preprocessing & Filtering (`src/00_filter_log.py`)
-Filters the raw BPI Challenge 2012 log, translates historical Dutch activity names to standard English, and exports dual logs:
+Filters the raw event log, translates historical Dutch activity names to standard English, and exports dual logs:
 * Operational human work items (`W_` events) with durations and resources.
-* Application lifecycle milestones (`A_` events) for clean control-flow discovery.
+* Application lifecycle milestones (`A_` and `O_` events) for clean control-flow discovery and dynamic business state tracking.
 
 ```bash
 python src/00_filter_log.py
@@ -130,58 +153,51 @@ python src/00_filter_log.py
 ---
 
 ### Step 1: Process Discovery (`src/01_process_discovery.py`)
-Discovers a structurally sound workflow Petri net from the filtered log and verifies soundness via Woflan.
+Discovers a structurally sound workflow Petri net from the filtered log and verifies soundness via Woflan:
 
 ```bash
-# Split Miner (Recommended)
+# Split Miner (Recommended for high precision)
 python src/01_process_discovery.py --miner split
 
 # Alternatively, Inductive Miner
 python src/01_process_discovery.py --miner inductive --noise_threshold 0.2
 ```
-* **Outputs**: `models/petri_nets/discovered_model_split.pnml` (or `inductive.pnml`)
+* **Output**: `models/petri_nets/discovered_model_split.pnml` (or `inductive.pnml`)
 
-To generate visual diagram images of the discovered nets:
+To render visual diagram images of all discovered nets:
 ```bash
 python src/view_models.py
 ```
-* **Outputs**: `models/petri_nets/split_miner_visual.png`, `models/petri_nets/inductive_miner_visual.png`
+* **Outputs**: `models/petri_nets/*_visual.png`
 
 ---
 
 ### Step 2: Log Alignment & Repair (`src/02_align_and_repair_log.py`)
-Replays the event log against the discovered Petri net using A* state-space alignment to produce a repaired log containing strictly synchronous moves, guaranteeing that every trace can be replayed inside the simulation model without deadlock.
+Replays the event log against the discovered Petri net using A* state-space alignment to produce a repaired log containing strictly synchronous moves, guaranteeing that every trace can be replayed inside the simulation model without deadlock:
 
 ```bash
 python src/02_align_and_repair_log.py
 ```
 * **Output**: `data/processed/aligned_BPI_2012.xes`
 
-### Step 2b: Discover Causal Delays & Worker Cooldowns (`src/02b_discover_delays.py`)
-Discovers uncoupled external delays (postal/client response transit) and human refractory inter-ticket latencies, fitting continuous Kolmogorov-Smirnov distributions (Lognormal, Gamma, Exponential).
+---
+
+### Step 2b: Causal Delay & Worker Latency Discovery (`src/02b_discover_delays.py`)
+Discovers uncoupled external delays (postal/client response transit) and human refractory inter-ticket latencies using Chapela-Campa & Dumas estimators (EclAw+, EclAw, Naive) and RIMS+ triple causal tests, fitting continuous Kolmogorov-Smirnov distributions (Lognormal, Gamma, Exponential):
 
 ```bash
 python src/02b_discover_delays.py
 ```
 * **Input**: `data/processed/aligned_BPI_2012.xes`
-* **Output**: `models/delays/delay_manifest.json`
+* **Outputs**: `models/delays/delay_manifest.json` and `models/delays/delay_discovery_report.md`
 
 ---
 
 ### Step 3: Feature Engineering & Dataset Creation (`src/03_dataset_builder.py`)
-Sweeps the aligned log chronologically to build comprehensive state vectors without future data leakage:
-* **Universal Context Features (Tier 1)**:
-  * `Prefix`: Sequence of previous activities (history window up to 10 events).
-  * `Prev_Proc_Time`: Duration of the immediate previous activity in the case.
-  * `WIP`: Total active cases currently in the process (system-wide congestion).
-  * `AC_WIP`: Active cases performing this specific activity (activity bottleneck).
-  * `Daytime`: Normalized time of day ($0.0 \dots 1.0$).
-  * `Weekday_0` $\dots$ `Weekday_6`: One-hot binary indicators for day of the week.
-  * `Role_0_OC` $\dots$ `Role_5_OC`: Resource occupancy percentage per role pool.
-* **Domain Case Attributes (Tier 2)**:
-  * `RequestedAmount`: Loan amount requested (`case:AMOUNT_REQ`).
+Sweeps the aligned log chronologically to construct state vectors without future data leakage:
+* **Context Features**: `Prefix` (window size 10), `Prev_Proc_Time`, `WIP`, `AC_WIP`, `Daytime`, `Weekday_0` $\dots$ `Weekday_6`, `Role_0_OC` $\dots$ `Role_5_OC`, and domain case attributes (`RequestedAmount`).
 * **Task-Specific Filtering**:
-  * **Duration**: Filters out 0.0s instant events (automated pass-throughs/missing timestamps) and applies smoothed inverse sample weights (`activity_weights.json`).
+  * **Duration**: Filters out 0.0s events (automated pass-throughs/missing timestamps) and applies smoothed inverse sample weights (`activity_weights.json`).
   * **Waiting Time**: Preserves 0.0s events (representing immediate resource pickups from queue).
 
 ```bash
@@ -201,18 +217,16 @@ python src/03_dataset_builder.py --task waiting_time
 
 The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/benchmark_models.py`) support **3 Exploration Modes** across **both duration and waiting time**:
 
-1. **`hybrid`** *(Recommended)*: 
+1. **`hybrid`** *(Recommended)*:
    Trains global and local candidates across architectures (`xgboost`, `tcn`, `lstm`) and empirically synthesizes the **Best-of-All-Worlds Hybrid Champion** per activity.
-2. **`global_tournament`**: 
-   Trains competing global engines (e.g. Global XGBoost vs. Global TCN vs. Global LSTM) and crowns the single best global model across the whole process.
-3. **`single_global`**: 
-   Fast single-model baseline (e.g. Global XGBoost, Global TCN, or Global LSTM) with zero benchmark overhead.
+2. **`global_tournament`**:
+   Trains competing global engines (Global XGBoost vs. Global TCN vs. Global LSTM) and crowns the single best global model.
+3. **`single_global`**:
+   Fast single-model baseline with zero benchmark overhead.
 
 All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split** (partitioned by `Case_ID` to eliminate cross-event data leakage).
 
 #### Automated Benchmarking (`src/benchmark_models.py`)
-
-> **Note**: `src/benchmark_models.py --run_all` is the automated orchestrator. It calls `src/04_train.py` under the hood for each candidate architecture in sequence, evaluates them on held-out test cases, and synthesizes the champion.
 
 ```bash
 # 1. Full Hybrid Benchmark (Duration)
@@ -221,16 +235,17 @@ python src/benchmark_models.py --task duration --mode hybrid --run_all
 # 2. Full Hybrid Benchmark (Waiting Time)
 python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
 
-# 3. Fast Global-Only Tournament (XGBoost vs. TCN vs. LSTM)
+# 3. Global-Only Tournament
 python src/benchmark_models.py --task duration --mode global_tournament --run_all
 
 # 4. Re-compare & synthesize champion from existing trained models
 python src/benchmark_models.py --task duration --compare
+python src/benchmark_models.py --task waiting_time --compare
 ```
 
 #### Step-by-Step Training (`src/04_train.py`)
 
-You can train any specific model architecture individually for either task:
+You can train any specific model architecture individually:
 
 ```bash
 # Duration Task
@@ -258,37 +273,21 @@ python src/04_train.py --task waiting_time --strategy local --model_type lstm
 ---
 
 ### Step 5: White-Box XOR Decision Mining & Routing (`src/05_train_routing.py`)
-Discovers all XOR split places (places with $\ge 2$ outgoing branches) in the Petri net, extracts decision contexts from aligned event traces on `COMPLETE` events, and trains interpretable decision models with Hyperopt Bayesian optimization:
+Discovers all XOR split places in the Petri net, extracts decision contexts from aligned event traces on `COMPLETE` events, and trains interpretable decision models with Hyperopt Bayesian optimization:
 
-* **White-Box Interpretability**: Uses `DecisionTreeClassifier` with human-readable decision rules (`tree.export_text`) directly printed to stdout.
-* **Hyperparameter Optimization (RIMS Parity)**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 evaluations:
-  * `max_depth`: $1 \dots 21$
-  * `min_samples_split`: $2 \dots 20$
-  * `min_samples_leaf`: $1 \dots 25$
-  * `criterion`: `['gini', 'entropy', 'log_loss']`
-  * `class_weight`: `[None, 'balanced']`
-* **Fallback Strategy**:
-  * If $\text{Macro F1} \ge 0.60$: Saves trained white-box model (`models/routing/routing_{place}.joblib`).
-  * If $\text{Macro F1} < 0.60$ (or highly skewed/stochastic classes): Automatically falls back to empirical branching probabilities from the aligned log.
-* **Dual Net Targets (Merged in `routing_decisions.json`)**:
-  * **Operational Workflow Net** (`discovered_model_split.pnml`): Resolves human work item loopbacks and splits during runtime simulation.
-  * **Milestone Lifecycle Net** (`bpi2012_A_net.pnml`): Benchmarks business milestone transitions (Accepted, Declined, Cancelled).
+* **White-Box Interpretability**: Uses `DecisionTreeClassifier` with human-readable decision rules (`tree.export_text`) printed to stdout.
+* **Hyperparameter Optimization (RIMS Parity)**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 evaluations (`max_depth: 1..21`, `min_samples_split: 2..20`, `min_samples_leaf: 1..25`, `criterion`, `class_weight`).
+* **Fallback Strategy**: If $\text{Macro F1} \ge 0.60$, saves trained model (`routing_{place}.joblib`). If $\text{Macro F1} < 0.60$, automatically falls back to empirical branching probabilities.
 
 ```bash
-# 1. Operational Net (simulated by default)
+# 1. Operational Workflow Net (default)
 python src/05_train_routing.py --pnml models/petri_nets/discovered_model_split.pnml --log data/processed/aligned_BPI_2012.xes
-
-# 2. Milestone Lifecycle Net (RIMS reference net)
-python src/05_train_routing.py --pnml models/petri_nets/bpi2012_A_net.pnml --log data/processed/BPI_2012_A_only.xes
 
 # Optional: Run with Random Forest ensemble (5 trees)
 python src/05_train_routing.py --classifier random_forest --n_estimators 5
 
 # Optional: Run with XGBoost
 python src/05_train_routing.py --classifier xgboost
-
-# Override max depth ceiling or sample threshold
-python src/05_train_routing.py --max_depth 21 --min_samples 30 --min_f1_threshold 0.60
 ```
 * **Outputs**:
   * Modern dispatch manifest: `models/routing/routing_decisions.json`
@@ -296,86 +295,95 @@ python src/05_train_routing.py --max_depth 21 --min_samples 30 --min_f1_threshol
 
 ---
 
-## Offline Benchmark Results (Duration Task)
+## Offline Benchmark Results
+
+### 1. Duration Task Benchmark Leaderboard (`models/duration/benchmark_report.md`)
 
 Evaluated on held-out test cases (1,932 unseen cases, 11,609 events):
 
-### 1. Leaderboard
-
-| Configuration | Strategy | Engine | Test MAE (s) | Test SMAPE (%) | Training Time |
+| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **hybrid_champion** | `hybrid` | `champion` | **647.25s** | **80.84%** | 1077.66s |
-| local_tcn | `local` | `tcn` | 647.97s | 81.16% | 496.47s |
-| local_xgboost | `local` | `xgboost` | 648.35s | 81.27% | 4.14s |
-| global_tcn | `global` | `tcn` | 649.14s | 81.49% | 573.65s |
-| global_xgboost | `global` | `xgboost` | 649.24s | 81.90% | 3.40s |
+| **`hybrid_champion`** | `hybrid` | `champion` | **335s (5.6m)** | **84.15%** | 473.51s |
+| `global_lstm` | `global` | `lstm` | **336s (5.6m)** | 84.49% | 112.34s |
+| `local_xgboost` | `local` | `xgboost` | **336s (5.6m)** | 84.72% | 2.94s |
+| `global_xgboost` | `global` | `xgboost` | **337s (5.6m)** | 85.20% | 2.69s |
+| `global_tcn` | `global` | `tcn` | **338s (5.6m)** | 85.46% | 159.57s |
+| `local_lstm` | `local` | `lstm` | **339s (5.7m)** | 91.87% | 79.46s |
+| `local_tcn` | `local` | `tcn` | **342s (5.7m)** | 93.08% | 116.51s |
 
-### 2. Hybrid Champion Architecture Assignment
+#### Duration Hybrid Champion Architecture Assignment:
 
-The dynamic champion selects the winning foundation model per activity:
-
-| Activity | Winning Pillar | Engine | Test MAE (s) | Best SMAPE (%) |
+| Activity | Winning Model | Model Engine | Test MAE | Best SMAPE (%) |
 | :--- | :--- | :---: | :---: | :---: |
-| **W_Assess fraud** | `local_tcn` | **TCN** | **1316.23s** | 58.91% |
-| **W_Call after incomplete files** | `global_xgboost` | **XGBOOST** | **901.53s** | 98.20% |
-| **W_Call after offers** | `local_tcn` | **TCN** | **533.38s** | 69.39% |
-| **W_Complete application** | `local_xgboost` | **XGBOOST** | **458.96s** | 81.87% |
-| **W_Handle leads** | `local_tcn` | **TCN** | **1132.69s** | 76.64% |
-| **W_Validate application** | `local_tcn` | **TCN** | **866.76s** | 89.64% |
-| *Fallback (`__default__`)* | `global_tcn` | **TCN** | — | — |
-
-* **Deep Learning (TCN) dominates complex sequence activities**: Wins 4 out of 6 activities.
-* **XGBoost dominates high-volume tabular patterns**: Wins 2 activities (`W_Complete application`, `W_Call after incomplete files`).
+| **`W_Assess fraud`** | `global_tcn` | **TCN** | **382s (6.4m)** | 66.63% |
+| **`W_Call after incomplete files`** | `global_xgboost` | **XGBOOST** | **386s (6.4m)** | 99.47% |
+| **`W_Call after offers`** | `local_xgboost` | **XGBOOST** | **208s (3.5m)** | 76.35% |
+| **`W_Complete application`** | `local_xgboost` | **XGBOOST** | **316s (5.3m)** | 86.63% |
+| **`W_Handle leads`** | `global_lstm` | **LSTM** | **430s (7.2m)** | 75.58% |
+| **`W_Validate application`** | `global_lstm` | **LSTM** | **763s (12.7m)** | 80.73% |
+| *Fallback (`__default__`)* | `global_lstm` | `LSTM` | — | — |
 
 ---
 
-## Waiting Time Task
+### 2. Waiting Time Task Benchmark Leaderboard (`models/waiting_time/benchmark_report.md`)
 
-The waiting time pipeline operates symmetrically to duration, but with domain-specific physics:
-* **Preserves 0.0s waiting times**: An activity that starts immediately upon enablement experiences 0 waiting time. Dropping 0s would introduce severe upward bias.
-* **Run Waiting Time 5-Pillar Benchmark**:
-  ```bash
-  python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
-  ```
-* **Output**:
-  * Standalone models in `models/waiting_time/`
-  * Champion dispatch table in `models/waiting_time/hybrid_champion/dispatch_config.json`
-  * Leaderboard in `models/waiting_time/benchmark_report.md`
+Evaluated on held-out test cases:
+
+| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time |
+| :--- | :--- | :--- | :---: | :---: | :---: |
+| **`hybrid_champion`** | `hybrid` | `champion` | **107,043s (1.2d)** | **127.33%** | 488.38s |
+| `local_tcn` | `local` | `tcn` | **108,342s (1.3d)** | 121.01% | 186.68s |
+| `global_lstm` | `global` | `lstm` | **109,367s (1.3d)** | 129.06% | 83.36s |
+| `local_lstm` | `local` | `lstm` | **109,450s (1.3d)** | 120.22% | 76.56s |
+| `global_tcn` | `global` | `tcn` | **110,567s (1.3d)** | 130.73% | 134.84s |
+| `local_xgboost` | `local` | `xgboost` | **111,400s (1.3d)** | 134.36% | 4.10s |
+| `global_xgboost` | `global` | `xgboost` | **113,907s (1.3d)** | 137.14% | 2.84s |
+
+#### Waiting Time Hybrid Champion Architecture Assignment:
+
+| Activity | Winning Model | Model Engine | Test MAE | Best SMAPE (%) |
+| :--- | :--- | :---: | :---: | :---: |
+| **`W_Assess fraud`** | `global_tcn` | **TCN** | **40,994s (11.4h)** | 155.31% |
+| **`W_Call after incomplete files`** | `local_xgboost` | **XGBOOST** | **45,944s (12.8h)** | 118.14% |
+| **`W_Call after offers`** | `local_tcn` | **TCN** | **219,166s (2.5d)** | 122.12% |
+| **`W_Complete application`** | `local_xgboost` | **XGBOOST** | **46,821s (13.0h)** | 135.05% |
+| **`W_Handle leads`** | `global_xgboost` | **XGBOOST** | **697s (11.6m)** | 185.07% |
+| **`W_Validate application`** | `local_lstm` | **LSTM** | **86,797s (1.0d)** | 98.90% |
+| *Fallback (`__default__`)* | `global_lstm` | `LSTM` | — | — |
 
 ---
 
-## Step 6: Modern Modular Discrete-Event Simulation (`src/06_simulate.py` & `src/simulator/`)
+## Step 6: Discrete-Event Simulation Engine (`src/06_simulate.py` & `src/simulator/`)
 
-The discrete-event simulation engine is structured into the clean, modular Object-Oriented package `src/simulator/` orchestrated by the slim CLI runner `src/06_simulate.py`:
+The simulation engine is structured into the modular Object-Oriented package `src/simulator/`, executed via `src/06_simulate.py`:
 
-* **`Token` (`src/simulator/token.py`)**: Models each process case traversing the workflow using formal PM4Py token marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$), resolving XOR branching via white-box decision trees.
-* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct multi-skilled human resources (eliminating the legacy phantom worker bug) with Kolmogorov-Smirnov continuous latency cooldowns. Worker assignment strictly respects active operating hours, ensuring workers are not assigned outside shift boundaries.
-* **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and PyTorch LSTM models from `dispatch_config.json`.
+* **`Token` (`src/simulator/token.py`)**: Individual case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$), querying XOR decision trees and handling loopback damping ($0.5^{\text{loop}}$).
+* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct enterprise human resources (eliminating phantom staff). Dispatches via Longest Idle First (LIF) and models continuous Kolmogorov-Smirnov refractory cooldowns (coffee breaks).
+* **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and LSTM models from `dispatch_config.json`.
 * **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (08:00 – 20:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
-* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes`, synthetic generative distributions (exponential, uniform, constant), or time-series forecasting via **Facebook Prophet** (hourly case arrival intensity and seasonal decomposition).
-* **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`simulated_log.csv`) and IEEE XES (`simulated_log.xes`), and evaluates cycle time MAE, RMSE, and 1D Wasserstein distance against real ground truth.
-* **Hybrid Residual Waiting Strategy**: Eliminates double-waiting distortion by acquiring workers in SimPy queue contention first ($W_{\text{queue}}$) and yielding only the uncoupled residual $\max(0, W_{\text{ML}} - W_{\text{queue}})$.
+* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes`, synthetic generative distributions (exponential, uniform, constant), or time-series forecasting via **Facebook Prophet** (hourly case arrival intensity and diurnal/weekly seasonal decomposition).
+* **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`simulated_log.csv`) and standard IEEE XES (`simulated_log.xes`), and evaluates cycle time MAE, median, 1D Wasserstein distance, and Relative Event Distribution (RED / Earth Mover's Distance) against historical ground truth.
 
 ```bash
-# 1. 2-Way Comparison Study (compares Pure Physics vs. Hybrid Residual side-by-side)
-python src/06_simulate.py --compare_modes --cases 500
+# 1. Run 2-way comparison study (Pure Physics vs. Hybrid Residual side-by-side)
+python src/06_simulate.py --compare_modes --cases 1000
 
-# 2. Replay historical arrivals (Hybrid Residual mode, 1,000 cases)
-python src/06_simulate.py --cases 1000 --arrival_mode replay
-
-# 3. Purely Generative arrivals (e.g. 1,000 synthetic cases)
-python src/06_simulate.py --cases 1000 --arrival_mode generative
-
-# 4. Prophet Time-Series Forecasting arrivals (DeepSimulator parity)
+# 2. Simulate with Prophet time-series arrivals (Hybrid Residual mode, 1,000 cases)
 python src/06_simulate.py --cases 1000 --arrival_mode prophet
 
-# 4. Simulate ALL cases available in historical log
+# 3. Simulate with Historical Replay arrivals
+python src/06_simulate.py --cases 1000 --arrival_mode replay
+
+# 4. Purely Generative arrivals (statistical distribution)
+python src/06_simulate.py --cases 1000 --arrival_mode generative
+
+# 5. Simulate ALL cases in historical log
 python src/06_simulate.py --all
 
-# 5. Pure Physics mode (SimPy queue contention only)
+# 6. Pure Physics mode (SimPy queue contention only)
 python src/06_simulate.py --cases 1000 --mode pure_physics
 
-# 6. Set simulation horizon by duration (e.g. 365 days / 1 year)
+# 7. Set simulation horizon by duration (e.g. 365 days / 1 year)
 python src/06_simulate.py --duration 365 --arrival_mode generative
 ```
 
@@ -385,13 +393,16 @@ python src/06_simulate.py --duration 365 --arrival_mode generative
   * Markdown benchmark report: `data/processed/simulation_report.md`
   * Ablation study leaderboard: `data/processed/ablation_report.md`
 
-### Simulation Validation Leaderboard (Empirical vs. Real Historical Log)
+---
 
-Evaluated against the ground-truth historical log on identical test cases:
+### Simulation Validation Leaderboard (`data/processed/ablation_report.md`)
 
-| Simulation Mode | Mean Cycle Time (Sim) | Mean Cycle Time (Real) | Cycle Time MAE | Wasserstein Distance | Realism / Contention |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **`hybrid_residual`** | **13.1 days** | **11.5 days** | **1.54 days** | **5.4 days** | Captures both physical queues and unobserved backlog latency |
-| `pure_physics` | 33.4 days | 11.5 days | 22.0 days | 22.0 days | Over-estimates cycle time due to unbounded FIFO queue pile-up |
+Evaluated against the ground-truth historical log (1,000 cases, Prophet arrival intensity):
 
+| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Run Time |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **REAL HISTORICAL** | **11.3 days** | **8.3 days** | — | — | — | — |
+| **`hybrid_residual` ★ (Best)** | **10.2 days** | **4.9 days** | **1.2 days** | **3.6 days** | **191.47h** | 169.1s |
+| `pure_physics` | 9.5 days | 3.1 days | 1.9 days | 4.7 days | 266.15h | 204.3s |
 
+* **Realism & Congestion**: `hybrid_residual` captures unobserved worklist backlog, external postal/customer turnaround latency, and physical worker contention, achieving superior Wasserstein distance (3.6 days) and cycle time alignment (MAE: 1.2 days).

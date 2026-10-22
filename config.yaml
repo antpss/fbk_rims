@@ -164,7 +164,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
-    mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival" (time gap between case arrivals), "both"
+    mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival", "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest
     min_samples: 30                  # Minimum samples at an XOR place required to train an ML model (otherwise fallback to probability)
@@ -186,9 +186,9 @@ model_strategy:
   mode: "hybrid"
 
   # Used only when mode: "single_global"
-  single_global_engine: "xgboost" # Options: "xgboost", "tcn", "lstm", "transformer"
+  single_global_engine: "xgboost" # Options: "xgboost", "tcn", "lstm"
 
-  # Deep Learning Training Hyperparameters (TCN / LSTM / Transformer)
+  # Deep Learning Training Hyperparameters (TCN / LSTM)
   dl:
     epochs: 50 
     patience: 5  
@@ -275,7 +275,7 @@ simulation:
     # For example:
     # per_role:
     #   "Emergency Triage":            # Healthcare activity
-    #     work_days: [0, 1, 2, 3, 4, 5, 6, 7]
+    #     work_days: [0, 1, 2, 3, 4, 5, 6]
     #     hour_start: 0
     #     hour_end: 24                 # 24/7 ER shift
     #   "Level 1 Support":             # Helpdesk role
