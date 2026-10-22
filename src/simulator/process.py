@@ -157,7 +157,7 @@ class SimulationProcess:
     Simulation Orchestrator & Process Coordinator (Legacy Parity with checking_process.py).
     Manages SimPy environment, resources, calendar shifts, token lifecycles, and evaluation.
     """
-    def __init__(self, cfg, num_cases=None, mode=None, arrival_mode=None, export_xes=None, pnml_path=None, duration_days=None):
+    def __init__(self, cfg, num_cases=None, mode=None, arrival_mode=None, export_xes=None, pnml_path=None, duration_days=None, force_retrain_prophet=False):
         self.cfg = cfg
         seed = cfg.get("project", {}).get("random_seed", 42)
         random.seed(seed)
@@ -170,6 +170,7 @@ class SimulationProcess:
         self.target_activities = cfg.get("target_activities", [])
         self.proc_prefixes = tuple(cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
         self.ms_prefixes = tuple(cfg.get("preprocessing", {}).get("milestone_prefixes", []))
+        self.force_retrain_prophet = force_retrain_prophet
 
         # Output paths
         self.sim_log_path = os.path.join(
@@ -252,7 +253,8 @@ class SimulationProcess:
 
         # Arrival Generator
         self.arrivals_generator = ArrivalGenerator(
-            cfg, num_cases=self.num_cases, arrival_mode=self.arrival_mode, calendar=self.calendar, duration_days=self.duration_days
+            cfg, num_cases=self.num_cases, arrival_mode=self.arrival_mode, calendar=self.calendar, duration_days=self.duration_days,
+            force_retrain_prophet=self.force_retrain_prophet
         )
 
         # Evaluator

@@ -61,6 +61,8 @@ def main():
                         help="Simulation horizon duration in days")
     parser.add_argument("--compare_modes", action="store_true",
                         help="Run 2-way comparison study between pure_physics and hybrid_residual")
+    parser.add_argument("--force_retrain_prophet", action="store_true",
+                        help="Force retraining of Prophet arrival model ignoring disk cache")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -103,6 +105,7 @@ def main():
                 export_xes=export_xes,
                 pnml_path=pnml_path,
                 duration_days=args.duration,
+                force_retrain_prophet=args.force_retrain_prophet,
             )
             res = sim.run()
             results.append(res)
@@ -153,6 +156,7 @@ def main():
             export_xes=export_xes,
             pnml_path=pnml_path,
             duration_days=args.duration,
+            force_retrain_prophet=args.force_retrain_prophet,
         )
         sim.run()
 

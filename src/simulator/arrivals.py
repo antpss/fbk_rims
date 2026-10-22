@@ -13,6 +13,7 @@ Supports:
      (Camargo et al. DeepSimulator parity).
 """
 
+import json
 import os
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import random
@@ -22,13 +23,15 @@ import numpy as np
 import pandas as pd
 import pm4py
 
+PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
+
 
 class ArrivalGenerator:
     """
     Case Spawning Engine (Parity with Legacy InterTriggerTimer).
     Responsible for generating case entry schedules and payloads for the simulation.
     """
-    def __init__(self, cfg, num_cases=None, arrival_mode="replay", calendar=None, duration_days=None):
+    def __init__(self, cfg, num_cases=None, arrival_mode="replay", calendar=None, duration_days=None, force_retrain_prophet=False):
         self.cfg = cfg
         self.num_cases = num_cases
         self.duration_days = duration_days if duration_days is not None else cfg.get("simulation", {}).get("duration_simulation")
@@ -36,6 +39,7 @@ class ArrivalGenerator:
         self.arrival_mode = arrival_mode or arr_cfg.get("mode", "replay")
         self.arr_cfg = arr_cfg
         self.calendar = calendar
+        self.force_retrain_prophet = force_retrain_prophet
 
     def prepare_arrivals(self):
         """
@@ -209,8 +213,10 @@ class ArrivalGenerator:
     def _prepare_prophet_arrivals(self, df_real, empirical_amounts, amt_col):
         """
         Generates synthetic arrivals using Facebook Prophet time-series modeling (Camargo et al. DeepSimulator parity).
-        Decomposes historical hourly case arrivals into trend + daily/weekly seasonality,
-        then samples intra-hour arrival offsets using a normal or uniform distribution.
+        Supports:
+          - Bounded Logistic Growth (with dynamic capacity) or Linear Growth.
+          - Uncertainty-aware stochastic sampling (Triangular, Poisson, or Round).
+          - Smart Model Caching: Serializes fitted Prophet model to JSON for instant sub-second reuse.
         """
         import logging
         import warnings
@@ -220,6 +226,7 @@ class ArrivalGenerator:
 
         try:
             from prophet import Prophet
+            from prophet.serialize import model_to_json, model_from_json
         except ImportError:
             raise ImportError(
                 "Facebook Prophet is required for --arrival_mode prophet. "
@@ -262,24 +269,109 @@ class ArrivalGenerator:
 
         print(f"Generating synthetic case arrivals ({desc_str}) [Prophet Time-Series Arrival Mode]...")
 
-        # 2. Configure & Fit Prophet
+        # 2. Configure & Fit / Load Cached Prophet Model
         prophet_cfg = self.arr_cfg.get("prophet", {})
+        growth = prophet_cfg.get("growth", "logistic")
+        cap_multiplier = float(prophet_cfg.get("cap_multiplier", 1.25))
+        sampling_method = prophet_cfg.get("sampling_method", "triangular")
         cp_prior = float(prophet_cfg.get("changepoint_prior_scale", 0.05))
         sp_prior = float(prophet_cfg.get("seasonality_prior_scale", 10.0))
         daily_s = prophet_cfg.get("daily_seasonality", True)
         weekly_s = prophet_cfg.get("weekly_seasonality", True)
-        intra_dist = prophet_cfg.get("intra_hour_distribution", "normal")
+        intra_dist = prophet_cfg.get("intra_hour_distribution", "uniform")
         calendar_bounded = self.arr_cfg.get("calendar_bounded", True)
+        cache_model = prophet_cfg.get("cache_model", True)
+        model_cache_dir = prophet_cfg.get("model_cache_dir", "models/prophet")
         ms_prefixes = tuple(self.cfg.get("preprocessing", {}).get("milestone_prefixes", []))
 
-        print(f"  Fitting Prophet model on {len(hourly_counts):,} historical hours...")
-        model = Prophet(
-            changepoint_prior_scale=cp_prior,
-            seasonality_prior_scale=sp_prior,
-            daily_seasonality=daily_s,
-            weekly_seasonality=weekly_s,
-        )
-        model.fit(hourly_counts)
+        # Resolve cache paths
+        cache_dir = os.path.join(PROJECT_ROOT, model_cache_dir)
+        os.makedirs(cache_dir, exist_ok=True)
+        proj_name = self.cfg.get("project", {}).get("name", "BPI_2012")
+        model_cache_path = os.path.join(cache_dir, f"prophet_arrivals_{proj_name}.json")
+        meta_cache_path = os.path.join(cache_dir, f"prophet_arrivals_{proj_name}_meta.json")
+
+        aligned_log_path = self.cfg["paths"]["aligned_log"]
+        if not os.path.isabs(aligned_log_path):
+            aligned_log_path = os.path.join(PROJECT_ROOT, aligned_log_path)
+        log_mtime = os.path.getmtime(aligned_log_path) if os.path.exists(aligned_log_path) else 0.0
+        log_size = os.path.getsize(aligned_log_path) if os.path.exists(aligned_log_path) else 0
+
+        hyperparams = {
+            "growth": growth,
+            "cap_multiplier": cap_multiplier,
+            "changepoint_prior_scale": cp_prior,
+            "seasonality_prior_scale": sp_prior,
+            "daily_seasonality": daily_s,
+            "weekly_seasonality": weekly_s,
+        }
+
+        model = None
+        cap_val = None
+        cache_valid = False
+
+        if cache_model and not self.force_retrain_prophet and os.path.exists(model_cache_path) and os.path.exists(meta_cache_path):
+            try:
+                with open(meta_cache_path, "r") as mf:
+                    meta = json.load(mf)
+                if (meta.get("log_mtime") == log_mtime and
+                    meta.get("log_size") == log_size and
+                    meta.get("hyperparams") == hyperparams):
+                    with open(model_cache_path, "r") as pf:
+                        model = model_from_json(json.load(pf))
+                    cap_val = meta.get("cap_val")
+                    cache_valid = True
+                    print(f"  [✓] Loaded cached Prophet model from: {model_cache_path} (sub-second startup)")
+            except Exception as e:
+                print(f"  [!] Note: Cached Prophet model read failed ({e}), retraining...")
+                cache_valid = False
+
+        if not cache_valid:
+            if self.force_retrain_prophet:
+                print(f"  [!] Force retraining requested: fitting Prophet model on {len(hourly_counts):,} historical hours...")
+            else:
+                print(f"  Fitting Prophet model on {len(hourly_counts):,} historical hours (Growth={growth.upper()})...")
+
+            if growth == "logistic":
+                max_observed = float(hourly_counts["y"].max()) if not hourly_counts.empty else 1.0
+                cap_val = max(1.0, max_observed * cap_multiplier)
+                hourly_counts["cap"] = cap_val
+                hourly_counts["floor"] = 0.0
+                model = Prophet(
+                    growth="logistic",
+                    changepoint_prior_scale=cp_prior,
+                    seasonality_prior_scale=sp_prior,
+                    daily_seasonality=daily_s,
+                    weekly_seasonality=weekly_s,
+                )
+            else:
+                cap_val = None
+                model = Prophet(
+                    growth="linear",
+                    changepoint_prior_scale=cp_prior,
+                    seasonality_prior_scale=sp_prior,
+                    daily_seasonality=daily_s,
+                    weekly_seasonality=weekly_s,
+                )
+
+            model.fit(hourly_counts)
+
+            if cache_model:
+                try:
+                    with open(model_cache_path, "w") as pf:
+                        json.dump(model_to_json(model), pf)
+                    meta = {
+                        "log_mtime": log_mtime,
+                        "log_size": log_size,
+                        "hyperparams": hyperparams,
+                        "cap_val": cap_val,
+                        "trained_at": datetime.now().isoformat()
+                    }
+                    with open(meta_cache_path, "w") as mf:
+                        json.dump(meta, mf, indent=2)
+                    print(f"  [✓] Cached fitted Prophet model to: {model_cache_path}")
+                except Exception as e:
+                    print(f"  [!] Warning: Failed to save Prophet cache: {e}")
 
         # 3. Forecast future periods
         start_str = self.arr_cfg.get("start_timestamp", "2012-01-01 08:00:00")
@@ -304,6 +396,10 @@ class ArrivalGenerator:
         while True:
             future_dates = pd.date_range(start=cur_start, periods=hours_to_forecast, freq="1h")
             df_future = pd.DataFrame({"ds": future_dates})
+            if growth == "logistic":
+                df_future["cap"] = cap_val if cap_val is not None else float(hourly_counts["y"].max() * cap_multiplier)
+                df_future["floor"] = 0.0
+
             forecast = model.predict(df_future)
 
             for _, row in forecast.iterrows():
@@ -313,7 +409,22 @@ class ArrivalGenerator:
                     break
 
                 hour_start = row["ds"].to_pydatetime()
-                hourly_expected = max(0, int(round(row["yhat"])))
+                yhat = float(row.get("yhat", 0.0))
+
+                if sampling_method == "triangular":
+                    low = max(0.0, float(row.get("yhat_lower", 0.0)))
+                    mode = max(0.0, yhat)
+                    high = max(mode, float(row.get("yhat_upper", mode)))
+                    if high > low:
+                        raw_val = float(np.random.triangular(low, mode, high))
+                    else:
+                        raw_val = mode
+                    hourly_expected = int(np.ceil(max(0.0, raw_val)))
+                elif sampling_method == "poisson":
+                    hourly_expected = int(np.random.poisson(lam=max(0.0, yhat)))
+                else:  # "round" (deterministic baseline)
+                    hourly_expected = max(0, int(round(yhat)))
+
                 if hourly_expected == 0:
                     continue
 

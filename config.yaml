@@ -255,11 +255,16 @@ simulation:
 
     # Facebook Prophet Time-Series Forecasting Settings (used when mode: "prophet")
     prophet:
+      growth: "logistic"                  # Trend growth model: "logistic" or "linear"
+      cap_multiplier: 1.25                # Carrying capacity multiplier: cap = max_hourly_arrivals * cap_multiplier
+      sampling_method: "triangular"       # Hourly count sampling: "triangular", "poisson", "round"
       changepoint_prior_scale: 0.05       # Flexibility of trend changepoints (default: 0.05)
       seasonality_prior_scale: 10.0       # Strength of seasonality model (default: 10.0)
       daily_seasonality: true             # Model diurnal intra-day arrival variations
       weekly_seasonality: true            # Model weekly / day-of-week arrival variations
-      intra_hour_distribution: "normal"   # Intra-hour case arrival dispersion: "normal", "uniform"
+      intra_hour_distribution: "uniform"  # Intra-hour case arrival dispersion: "uniform" or "normal"
+      cache_model: true                   # Enable disk serialization and caching of fitted model
+      model_cache_dir: "models/prophet"   # Directory for cached model JSON and metadata
 
   # Business Hours & Calendar Settings
   calendar:

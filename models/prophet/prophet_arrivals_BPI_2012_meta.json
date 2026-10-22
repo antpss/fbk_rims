@@ -1,0 +1,14 @@
+{
+  "log_mtime": 1791972796.911372,
+  "log_size": 55388131,
+  "hyperparams": {
+    "growth": "logistic",
+    "cap_multiplier": 1.25,
+    "changepoint_prior_scale": 0.05,
+    "seasonality_prior_scale": 10.0,
+    "daily_seasonality": true,
+    "weekly_seasonality": true
+  },
+  "cap_val": 53.75,
+  "trained_at": "2026-10-22T11:19:23.343414"
+}
