@@ -26,6 +26,11 @@ paths:
 # Process Discovery Settings
 discovery:
   miner: "split"                  # Options: "split", "inductive"
+  split_miner:
+    epsilon: 0.1
+    eta: 0.4
+    minimize_or_joins: true
+    variant: "classic"
 
 # Feature Engineering Settings
 features:
@@ -102,9 +107,7 @@ preprocessing:
     - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED", "A_PREACCEPTED"]
       probability: 0.35
     - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
-      probability: 0.20
-    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
-      probability: 0.45
+      probability: 0.65
 
   # Terminal outcome milestones excluded from decision routing to avoid reverse causality
   excluded_milestones:

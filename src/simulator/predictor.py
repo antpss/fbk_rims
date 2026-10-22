@@ -258,7 +258,8 @@ class ChampionPredictor:
         # Ensure universal context variables are available in feats dictionary
         feats.setdefault("Offer_Count", float(offer_count))
         feats.setdefault("Has_Offer", float(has_offer))
-        feats.setdefault("RequestedAmount", float(requested_amount))
+        if self.feature_mgr.is_feature_active("case_attributes") or "RequestedAmount" in self.feature_cols:
+            feats.setdefault("RequestedAmount", float(requested_amount))
         feats["Prev_Proc_Time"] = float(prev_dur)
         if worker_id:
             feats.setdefault("Resource_ID", str(worker_id))

@@ -119,8 +119,8 @@ def main():
     seen_events = {case_id: 0 for case_id in case_event_counts}
 
     case_prefixes = {}
-    case_start_times = defaultdict(dict)
-    case_start_features = defaultdict(dict)
+    case_start_times = defaultdict(lambda: defaultdict(list))
+    case_start_features = defaultdict(lambda: defaultdict(list))
     case_milestones_seen = defaultdict(set)
     case_offer_count = defaultdict(int)
     case_prev_time = {}
@@ -190,7 +190,7 @@ def main():
 
             elif transition == "START":
                 ac_wip[activity_name] += 1
-                case_start_times[case_id][activity_name] = timestamp
+                case_start_times[case_id][activity_name].append(timestamp)
 
                 # Universal Queue Wait Calculation:
                 # START - prev_end_time (inter-activity idle wait from previous completed work item)
@@ -221,17 +221,16 @@ def main():
                 feat_dict["Wait_Time_Seconds"] = current_wait
                 feat_dict["Prev_Proc_Time"] = case_prev_time[case_id]
 
-                case_start_features[case_id][activity_name] = feat_dict
+                case_start_features[case_id][activity_name].append(feat_dict)
 
             elif transition == "COMPLETE":
                 if ac_wip[activity_name] > 0:
                     ac_wip[activity_name] -= 1
 
-                if activity_name in case_start_times[case_id]:
-                    start_ts = case_start_times[case_id][activity_name]
+                if case_start_times[case_id][activity_name]:
+                    start_ts = case_start_times[case_id][activity_name].pop(0)
                     duration = calendar.calculate_net_working_seconds(start_ts, timestamp, role_or_act=activity_name)
                     has_valid_start = True
-                    del case_start_times[case_id][activity_name]
                 else:
                     duration = 0.0
                     has_valid_start = False
@@ -243,9 +242,10 @@ def main():
                 # Only emit valid human training samples
                 if not has_valid_start:
                     missing_start_skipped += 1
-                    case_start_features[case_id].pop(activity_name, None)
+                    if case_start_features[case_id][activity_name]:
+                        case_start_features[case_id][activity_name].pop(0)
                 else:
-                    feat = case_start_features[case_id].pop(activity_name, None)
+                    feat = case_start_features[case_id][activity_name].pop(0) if case_start_features[case_id][activity_name] else None
                     if feat is not None:
                         row_dict = {
                             "Case_ID": case_id,

@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 import pm4py
 import pandas as pd
 from pm4py.objects.log.obj import EventLog, Trace, Event
@@ -70,7 +71,7 @@ def main():
         # Separate milestones vs process activity executions
         milestones = []
         work_items = []
-        pending_start = {}
+        pending_start = defaultdict(list)
 
         for _, row in grp_sorted.iterrows():
             act = row["concept:name"]
@@ -82,11 +83,12 @@ def main():
                 milestones.append(evt)
             elif act.startswith(proc_prefixes):
                 if trans == "START":
-                    pending_start[act] = evt
+                    pending_start[act].append(evt)
                 elif trans == "COMPLETE":
+                    start_evt = pending_start[act].pop(0) if pending_start[act] else None
                     wi = {
                         "act": act,
-                        "start": pending_start.pop(act, None),
+                        "start": start_evt,
                         "complete": evt
                     }
                     work_items.append(wi)

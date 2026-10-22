@@ -194,7 +194,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
         # Dynamic case attributes (e.g. RequestedAmount, ApplicationType, LoanGoal)
         case_features = {}
-        if case_attrs_cfg:
+        if case_attrs_cfg is not None:
             for attr in case_attrs_cfg:
                 col = attr["column"]
                 feat_name = attr["feature_name"]

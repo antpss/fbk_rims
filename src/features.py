@@ -124,6 +124,8 @@ class FeatureManager:
         # Priority 1: Explicit selected_features list in YAML
         if "selected_features" in feat_cfg and feat_cfg["selected_features"]:
             self.selected_features = [str(f).lower() for f in feat_cfg["selected_features"]]
+            if feat_cfg.get("case_attributes", None) == [] and "case_attributes" in self.selected_features:
+                self.selected_features.remove("case_attributes")
         else:
             # Priority 2: Backwards compatibility mapping from legacy config structure
             univ = feat_cfg.get("universal", {})
@@ -139,7 +141,9 @@ class FeatureManager:
             if univ.get("use_prev_duration", True):
                 selected.append("prev_duration")
 
-            selected.extend(["offer_count", "has_offer", "milestones", "case_attributes"])
+            selected.extend(["offer_count", "has_offer", "milestones"])
+            if feat_cfg.get("case_attributes", None) != []:
+                selected.append("case_attributes")
 
             # Check if resource is requested in event_attributes
             ev_attrs = [str(x).lower() for x in feat_cfg.get("event_attributes", [])]

@@ -13,7 +13,6 @@ fbk_rims/
 ├── context.md                         # Detailed project context, evolution, and architectural blueprint
 ├── README.md                          # Comprehensive pipeline documentation and benchmark leaderboards
 ├── docs/                              # Flowcharts and architecture documentation
-│   ├── pipeline_flowchart.md          # Comprehensive Mermaid flowchart of the end-to-end pipeline
 │   └── causal_discovery_flowchart.md  # Triple causal test flowchart for extraneous delays
 ├── data/                              # Data directories
 │   ├── raw/                           # Raw event logs (e.g. BPI_Challenge_2012.xes)
