@@ -26,13 +26,15 @@ scraped_doc.html
 # Intermediate ML artifacts
 **/catboost_info/
 
-# Datasets and large logs (track directory skeleton via .gitkeep, ignore data files)
-data/**
-!data/**/
-!data/**/*.gitkeep
+# Datasets and large logs (ignore heavy logs, datasets, and run exports)
 *.xes
 *.xes.gz
 *.csv
+data/generated/
+
+# Track documentation, benchmark reports, and configuration metadata inside data/
+!data/**/*.md
+!data/**/*.json
 
 # Generated candidate models (ignore candidate tournaments, track champion runtime models)
 models/duration/*

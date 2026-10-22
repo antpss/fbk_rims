@@ -1,0 +1,8 @@
+{
+  "W_Assess fraud": 0.9922224098968142,
+  "W_Call after incomplete files": 0.992577536039143,
+  "W_Call after offers": 1.004788677079395,
+  "W_Complete application": 1.0018879023931928,
+  "W_Handle leads": 0.992366241514573,
+  "W_Validate application": 0.9927576373437561
+}

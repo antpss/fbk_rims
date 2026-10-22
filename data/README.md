@@ -1,0 +1,24 @@
+# RIMS+ Data Directory Structure
+
+This directory organizes all raw, intermediate, and simulated process mining data used by RIMS+.
+
+## Directory Overview
+
+* **`data/raw/`**: Source event logs before processing. See [`data/raw/README.md`](raw/README.md) for download links.
+  * Expected default log: `data/raw/BPI_Challenge_2012.xes`
+* **`data/processed/`**: Cleaned, filtered, and Petri-net-aligned event logs, along with evaluation reports:
+  * `BPI_2012_filtered.xes`: Human work items (`W_` events) with durations and resources.
+  * `BPI_2012_A_only.xes`: Application lifecycle milestone log (`A_` events).
+  * `aligned_BPI_2012.xes`: Replay-repaired log aligned with discovered Petri nets (100% fitness).
+  * `simulation_report.md`: Latest SimPy simulation benchmark report against historical reality.
+  * `ablation_report.md`: Side-by-side leaderboard (Pure Physics vs. Hybrid Residual).
+* **`data/processed/datasets/`**: Feature-engineered tabular datasets produced by Step 03:
+  * `dataset_duration_global.csv`: Activity processing time features and targets.
+  * `dataset_waiting_time_global.csv`: Queue and waiting time features and targets.
+  * `activity_weights.json`: Inverse-frequency sample weights calculated for rare activity handling.
+* **`data/generated/`**: Ephemeral, timestamped run exports (CSV and IEEE XES logs).
+
+## Git Tracking Policy
+
+Large raw/intermediate logs (`*.xes`, `*.xes.gz`, `*.csv`) are excluded from version control to prevent repository bloat. Markdown evaluation reports, data manifests, and configuration weights are tracked.
+
