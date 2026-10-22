@@ -47,9 +47,12 @@ fbk_rims/
 │   │   ├── global_{xgboost|tcn|lstm}/  # Pooled global model checkpoints & scalers
 │   │   ├── local_{xgboost|tcn|lstm}/   # Activity-specialized local model checkpoints & scalers
 │   │   └── benchmark_report.md        # Waiting time benchmark leaderboard
-│   └── routing/                       # White-box XOR decision classifiers & routing manifest
-│       ├── routing_decisions.json     # Dynamic decision dispatch manifest
-│       └── routing_*.joblib           # Trained decision tree / random forest classifiers per XOR place
+│   ├── routing/                       # White-box XOR decision classifiers & routing manifest
+│   │   ├── routing_decisions.json     # Dynamic decision dispatch manifest
+│   │   └── routing_*.joblib           # Trained decision tree / random forest classifiers per XOR place
+│   └── prophet/                       # Serialized Facebook Prophet arrival models & metadata
+│       ├── prophet_arrivals_*.json    # Serialized model checkpoint for sub-second startup
+│       └── prophet_arrivals_*_meta.json # Training metadata, log timestamp, and carrying capacity
 ├── src/                               # Active RIMS+ Core Pipeline & Simulator Package
 │   ├── 00_filter_log.py               # Step 0: Raw event log filtering and activity renaming
 │   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split / Inductive)
@@ -125,13 +128,13 @@ The entire operational pipeline is governed by [`config.yaml`](config.yaml):
   * `extraneous_delays`: Chapela-Campa causal delay injection (`estimator: "eclaw_plus"`, `placement: "ex_ante"`).
   * `human_latency`: Queue-aware refractory cooldowns / coffee breaks (`max_cooldown: 1800.0s`).
   * `arrival`: Case spawning strategy (`replay`, `generative`, or `prophet`).
+    * `prophet`: Facebook Prophet time-series parameters (`growth: "logistic"` with dynamic `cap_multiplier: 1.25`, `sampling_method: "triangular"` or `"poisson"`, diurnal/weekly seasonalities, uniform/normal dispersion, and automatic model caching in `models/prophet/`).
   * `calendar`: Business operating hours (08:00 – 20:00 Mon–Fri) and custom `per_role` schedules.
 
 ---
 
 ## End-to-End Operational Pipeline
 
-For a detailed visual flowchart of the operational pipeline, see [docs/pipeline_flowchart.md](docs/pipeline_flowchart.md).
 
 All commands should be executed from the project root with the virtual environment active:
 
@@ -276,7 +279,7 @@ python src/04_train.py --task waiting_time --strategy local --model_type lstm
 Discovers all XOR split places in the Petri net, extracts decision contexts from aligned event traces on `COMPLETE` events, and trains interpretable decision models with Hyperopt Bayesian optimization:
 
 * **White-Box Interpretability**: Uses `DecisionTreeClassifier` with human-readable decision rules (`tree.export_text`) printed to stdout.
-* **Hyperparameter Optimization (RIMS Parity)**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 evaluations (`max_depth: 1..21`, `min_samples_split: 2..20`, `min_samples_leaf: 1..25`, `criterion`, `class_weight`).
+* **Hyperparameter Optimization**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 evaluations (`max_depth: 1..21`, `min_samples_split: 2..20`, `min_samples_leaf: 1..25`, `criterion`, `class_weight`).
 * **Fallback Strategy**: If $\text{Macro F1} \ge 0.60$, saves trained model (`routing_{place}.joblib`). If $\text{Macro F1} < 0.60$, automatically falls back to empirical branching probabilities.
 
 ```bash
@@ -295,81 +298,29 @@ python src/05_train_routing.py --classifier xgboost
 
 ---
 
-## Offline Benchmark Results
-
-### 1. Duration Task Benchmark Leaderboard (`models/duration/benchmark_report.md`)
-
-Evaluated on held-out test cases (1,932 unseen cases, 11,609 events):
-
-| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time |
-| :--- | :--- | :--- | :---: | :---: | :---: |
-| **`hybrid_champion`** | `hybrid` | `champion` | **335s (5.6m)** | **84.15%** | 473.51s |
-| `global_lstm` | `global` | `lstm` | **336s (5.6m)** | 84.49% | 112.34s |
-| `local_xgboost` | `local` | `xgboost` | **336s (5.6m)** | 84.72% | 2.94s |
-| `global_xgboost` | `global` | `xgboost` | **337s (5.6m)** | 85.20% | 2.69s |
-| `global_tcn` | `global` | `tcn` | **338s (5.6m)** | 85.46% | 159.57s |
-| `local_lstm` | `local` | `lstm` | **339s (5.7m)** | 91.87% | 79.46s |
-| `local_tcn` | `local` | `tcn` | **342s (5.7m)** | 93.08% | 116.51s |
-
-#### Duration Hybrid Champion Architecture Assignment:
-
-| Activity | Winning Model | Model Engine | Test MAE | Best SMAPE (%) |
-| :--- | :--- | :---: | :---: | :---: |
-| **`W_Assess fraud`** | `global_tcn` | **TCN** | **382s (6.4m)** | 66.63% |
-| **`W_Call after incomplete files`** | `global_xgboost` | **XGBOOST** | **386s (6.4m)** | 99.47% |
-| **`W_Call after offers`** | `local_xgboost` | **XGBOOST** | **208s (3.5m)** | 76.35% |
-| **`W_Complete application`** | `local_xgboost` | **XGBOOST** | **316s (5.3m)** | 86.63% |
-| **`W_Handle leads`** | `global_lstm` | **LSTM** | **430s (7.2m)** | 75.58% |
-| **`W_Validate application`** | `global_lstm` | **LSTM** | **763s (12.7m)** | 80.73% |
-| *Fallback (`__default__`)* | `global_lstm` | `LSTM` | — | — |
-
----
-
-### 2. Waiting Time Task Benchmark Leaderboard (`models/waiting_time/benchmark_report.md`)
-
-Evaluated on held-out test cases:
-
-| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time |
-| :--- | :--- | :--- | :---: | :---: | :---: |
-| **`hybrid_champion`** | `hybrid` | `champion` | **107,043s (1.2d)** | **127.33%** | 488.38s |
-| `local_tcn` | `local` | `tcn` | **108,342s (1.3d)** | 121.01% | 186.68s |
-| `global_lstm` | `global` | `lstm` | **109,367s (1.3d)** | 129.06% | 83.36s |
-| `local_lstm` | `local` | `lstm` | **109,450s (1.3d)** | 120.22% | 76.56s |
-| `global_tcn` | `global` | `tcn` | **110,567s (1.3d)** | 130.73% | 134.84s |
-| `local_xgboost` | `local` | `xgboost` | **111,400s (1.3d)** | 134.36% | 4.10s |
-| `global_xgboost` | `global` | `xgboost` | **113,907s (1.3d)** | 137.14% | 2.84s |
-
-#### Waiting Time Hybrid Champion Architecture Assignment:
-
-| Activity | Winning Model | Model Engine | Test MAE | Best SMAPE (%) |
-| :--- | :--- | :---: | :---: | :---: |
-| **`W_Assess fraud`** | `global_tcn` | **TCN** | **40,994s (11.4h)** | 155.31% |
-| **`W_Call after incomplete files`** | `local_xgboost` | **XGBOOST** | **45,944s (12.8h)** | 118.14% |
-| **`W_Call after offers`** | `local_tcn` | **TCN** | **219,166s (2.5d)** | 122.12% |
-| **`W_Complete application`** | `local_xgboost` | **XGBOOST** | **46,821s (13.0h)** | 135.05% |
-| **`W_Handle leads`** | `global_xgboost` | **XGBOOST** | **697s (11.6m)** | 185.07% |
-| **`W_Validate application`** | `local_lstm` | **LSTM** | **86,797s (1.0d)** | 98.90% |
-| *Fallback (`__default__`)* | `global_lstm` | `LSTM` | — | — |
 
 ---
 
 ## Step 6: Discrete-Event Simulation Engine (`src/06_simulate.py` & `src/simulator/`)
 
-The simulation engine is structured into the modular Object-Oriented package `src/simulator/`, executed via `src/06_simulate.py`:
+The simulation engine is structured into the package `src/simulator/`, executed via `src/06_simulate.py`:
 
 * **`Token` (`src/simulator/token.py`)**: Individual case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$), querying XOR decision trees and handling loopback damping ($0.5^{\text{loop}}$).
-* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct enterprise human resources (eliminating phantom staff). Dispatches via Longest Idle First (LIF) and models continuous Kolmogorov-Smirnov refractory cooldowns (coffee breaks).
+* **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Manages the SimPy runtime environment and the 59 distinct enterprise human resources. Dispatches via Longest Idle First (LIF) and models continuous Kolmogorov-Smirnov refractory cooldowns (e.g. coffee breaks).
 * **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and LSTM models from `dispatch_config.json`.
 * **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (08:00 – 20:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
-* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes`, synthetic generative distributions (exponential, uniform, constant), or time-series forecasting via **Facebook Prophet** (hourly case arrival intensity and diurnal/weekly seasonal decomposition).
+* **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from `aligned_BPI_2012.xes`, synthetic generative distributions (exponential, uniform, constant), or time-series forecasting via **Facebook Prophet** (bounded logistic growth, triangular/poisson uncertainty sampling, and sub-second model caching in `models/prophet/`).
 * **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`simulated_log.csv`) and standard IEEE XES (`simulated_log.xes`), and evaluates cycle time MAE, median, 1D Wasserstein distance, and Relative Event Distribution (RED / Earth Mover's Distance) against historical ground truth.
 
 ```bash
 # 1. Run 2-way comparison study (Pure Physics vs. Hybrid Residual side-by-side)
 python src/06_simulate.py --compare_modes --cases 1000
 
-# 2. Simulate with Prophet time-series arrivals (Hybrid Residual mode, 1,000 cases)
+# 2. Simulate with Prophet time-series arrivals (Hybrid Residual mode, 1,000 cases, cached model)
 python src/06_simulate.py --cases 1000 --arrival_mode prophet
+
+# Force retraining of Prophet arrival model ignoring disk cache
+python src/06_simulate.py --cases 1000 --arrival_mode prophet --force_retrain_prophet
 
 # 3. Simulate with Historical Replay arrivals
 python src/06_simulate.py --cases 1000 --arrival_mode replay
