@@ -347,6 +347,17 @@ def main():
         prefix_cat_dtype = pd.CategoricalDtype(categories=act_categories + ["NONE"], ordered=False)
         target_act_dtype = pd.CategoricalDtype(categories=act_categories, ordered=False)
 
+        # Serialize categories metadata for runtime inference parity
+        categories_meta = {
+            "activities": act_categories,
+            "prefix_categories": act_categories + ["NONE"],
+        }
+        if "Resource_ID" in feature_cols:
+            categories_meta["resources"] = sorted(df["Resource_ID"].dropna().astype(str).unique().tolist())
+        categories_path = os.path.join(models_base_dir, "categories.json")
+        with open(categories_path, "w") as f:
+            json.dump(categories_meta, f, indent=2)
+
         def build_xgb_features(data_subset):
             p_features = []
             for p_str in data_subset['Prefix']:

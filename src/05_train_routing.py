@@ -188,6 +188,28 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
     decision_data = {p_id: [] for p_id in xor_decision_points}
 
+    # Precompute empirical imputation statistics (median/mode) for case attributes
+    attr_imputation = {}
+    if case_attrs_cfg:
+        for attr in case_attrs_cfg:
+            col = attr["column"]
+            clean_col = col.replace("case:", "")
+            series = df_log[col] if col in df_log.columns else (df_log[clean_col] if clean_col in df_log.columns else pd.Series(dtype=float))
+            is_cont = (attr.get("type") == "continuous")
+            treat_zero = attr.get("treat_zero_as_missing", False)
+            if is_cont:
+                clean_s = pd.to_numeric(series, errors="coerce")
+                if treat_zero:
+                    clean_s = clean_s[clean_s != 0]
+                clean_s = clean_s.dropna()
+                val_stat = float(clean_s.median()) if not clean_s.empty else float(attr.get("fill_value", 0.0))
+            else:
+                clean_s = series.dropna()
+                val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
+            attr_imputation[attr["feature_name"]] = val_stat
+        if attr_imputation:
+            print(f"Empirical Imputation Defaults for Case Attributes: {attr_imputation}")
+
     for i, trace_res in enumerate(aligned_traces):
         trace = log[i]
         case_id = trace.attributes.get("concept:name", str(i))
@@ -198,16 +220,23 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
             for attr in case_attrs_cfg:
                 col = attr["column"]
                 feat_name = attr["feature_name"]
-                fill_val = attr.get("fill_value", 0.0)
+                default_val = attr_imputation.get(feat_name, attr.get("fill_value", 0.0))
                 clean_col = col.replace("case:", "")
-                val = trace.attributes.get(col, trace.attributes.get(clean_col, fill_val))
-                try:
-                    if attr.get("type") == "continuous":
-                        val = float(val) if val is not None else float(fill_val)
-                    else:
-                        val = str(val) if val is not None else str(fill_val)
-                except Exception:
-                    val = fill_val
+                val = trace.attributes.get(col, trace.attributes.get(clean_col, default_val))
+                if pd.isna(val):
+                    val = default_val
+
+                is_cont = (attr.get("type") == "continuous")
+                treat_zero = attr.get("treat_zero_as_missing", False)
+                if is_cont:
+                    try:
+                        val = float(val)
+                        if treat_zero and val == 0.0:
+                            val = float(default_val)
+                    except Exception:
+                        val = float(default_val)
+                else:
+                    val = str(val) if val is not None else str(default_val)
                 case_features[feat_name] = val
         else:
             amt = trace.attributes.get("case:AMOUNT_REQ", trace.attributes.get("AMOUNT_REQ", 0.0))
@@ -235,7 +264,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                 if ms_prefixes_tuple and log_label.startswith(ms_prefixes_tuple):
                     if log_label not in excluded_ms:
                         milestones_seen.add(log_label)
-                if log_label.startswith("O_") or "offer" in log_label.lower():
+                if log_label.startswith("O_"):
                     offer_count += 1
 
             # 2. Skip if transition did not fire in Petri net
@@ -254,9 +283,10 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                         "weekday": weekday,
                         "prev_activity": prefix_labels[-1] if prefix_labels else "<START>",
                         "loop_count": float(dp_counts[p_id]),
-                        "offer_count": float(offer_count),
-                        "has_offer": 1.0 if offer_count > 0 else 0.0,
                     }
+                    if any(p.startswith("O_") for p in ms_prefixes_tuple):
+                        sample["offer_count"] = float(offer_count)
+                        sample["has_offer"] = 1.0 if offer_count > 0 else 0.0
 
                     # Include payload features (case attributes) if requested
                     if routing_mode in ("payload", "both"):
@@ -391,11 +421,8 @@ def main():
         print(f"  - Place [{p_id}]: {len(branch_labels)} branches -> {branch_labels}")
 
     prep_cfg = cfg.get("preprocessing", {})
-    milestone_prefixes = prep_cfg.get("milestone_prefixes", ["A_", "O_"])
-    excluded_milestones = prep_cfg.get("excluded_milestones", [
-        "O_ACCEPTED", "A_DECLINED", "A_CANCELLED", "A_ACTIVATED",
-        "A_APPROVED", "A_REGISTERED", "O_DECLINED", "O_CANCELLED"
-    ])
+    milestone_prefixes = prep_cfg.get("milestone_prefixes", [])
+    excluded_milestones = prep_cfg.get("excluded_milestones", [])
 
     # 2. Align Log & Extract Decision Samples
     decision_dfs = extract_decision_samples_via_alignment(

@@ -7,7 +7,7 @@ Encapsulates individual process instance lifecycle, including:
   1. Formal PM4Py Petri net marking semantics: M' = M - Preset(t) + Postset(t)
   2. XOR routing decision-point queries via ChampionPredictor
   3. Shared worker acquisition and release
-  4. Hybrid residual waiting time calculation: max(0, W_ML - W_queue)
+  4. Chapela-Campa Eclipse-Aware residual waiting time: max(0, W_ML - ext_delay) * loop_decay
   5. Calendar-bounded working duration shift calculation
   6. Contextual milestone and attribute progression tracking
 """
@@ -22,13 +22,17 @@ class Token:
     Case Instance (Parity with Legacy token_LSTM.py / event_trace.py).
     Represents an active case token flowing through the Petri net process model.
     """
-    def __init__(self, case_id, arrival_offset, requested_amount, process, init_ms=None, ms_states=None, inter_arrival_seconds=0.0):
+    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, init_ms=None, ms_states=None, inter_arrival_seconds=0.0, case_attrs=None):
         self.case_id = str(case_id)
         self.arrival_offset = arrival_offset
-        self.requested_amount = float(requested_amount)
-        self.inter_arrival_seconds = float(inter_arrival_seconds)
         self.process = process
         self.env = process.env
+        self.case_attrs = dict(case_attrs or {})
+        if requested_amount and "RequestedAmount" not in self.case_attrs:
+            self.case_attrs["RequestedAmount"] = float(requested_amount)
+        self.requested_amount = float(self.case_attrs.get("RequestedAmount", requested_amount))
+        self.inter_arrival_seconds = float(inter_arrival_seconds)
+        self.arrival_dt = self.process.calendar.to_datetime(self.arrival_offset)
 
         # Prefix and milestone state tracking
         self.prefix = []
@@ -43,12 +47,12 @@ class Token:
         else:
             self.milestones_seen = set()
 
-        self.offer_count = (
+        self.offer_count = float(
             sum(1 for m in self.milestones_seen if m.startswith("O_"))
-            if ("Offer_Count" in self.process.predictor.feature_cols or "O_" in ms_prefixes)
-            else 0
+            if (any(m.startswith("O_") for m in self.milestones_seen) or any(p.startswith("O_") for p in ms_prefixes))
+            else 0.0
         )
-        self.has_offer = 1 if self.offer_count > 0 else 0
+        self.has_offer = 1.0 if self.offer_count > 0 else 0.0
 
         self.ms_states = ms_states or []
         self.events_done = 0
@@ -74,15 +78,6 @@ class Token:
                         self.milestones_seen.add(m)
             elif isinstance(item, (list, tuple, set)):
                 self.milestones_seen.update(item)
-        elif not prog and any(m.startswith("A_") for m in ms_prefixes):
-            if act == "W_Complete application":
-                self.milestones_seen.update(["A_ACCEPTED", "O_SELECTED", "A_FINALIZED", "O_CREATED", "O_SENT"])
-            elif act == "W_Call after offers":
-                self.milestones_seen.add("O_SENT_BACK")
-            elif act == "W_Validate application":
-                self.milestones_seen.update(["A_APPROVED", "A_REGISTERED", "A_ACTIVATED", "O_ACCEPTED"])
-            elif act == "W_Handle leads":
-                self.milestones_seen.add("A_PREACCEPTED")
 
     def run(self):
         """
@@ -119,9 +114,10 @@ class Token:
                     predicted_target = self.process.predictor.predict_routing(
                         dp, self.prefix, self.requested_amount, self.milestones_seen,
                         self.offer_count, self.has_offer,
-                        curr_dt=self.process.calendar.to_datetime(self.env.now),
+                        curr_dt=self.arrival_dt,
                         loop_count=loop_count,
-                        inter_arrival_seconds=self.inter_arrival_seconds
+                        inter_arrival_seconds=self.inter_arrival_seconds,
+                        case_attrs=self.case_attrs
                     )
                     # Match predicted target to an enabled transition
                     matched_t = None
@@ -131,7 +127,18 @@ class Token:
                             if tgt == predicted_target or cand_t.name == predicted_target or (cand_t.label is not None and cand_t.label == predicted_target):
                                 matched_t = cand_t
                                 break
-                    chosen_t = matched_t if matched_t else random.choice(enabled)
+                    if matched_t:
+                        chosen_t = matched_t
+                    else:
+                        # Fallback using empirical probabilities of enabled transitions
+                        dp_manifest = self.process.predictor.routing_manifest.get(dp, {})
+                        emp_probs = dp_manifest.get("probabilities", {})
+                        weights = []
+                        for cand_t in enabled:
+                            cand_tgt = self.process.branch_target_map.get((dp, cand_t.name), cand_t.name)
+                            w = emp_probs.get(cand_tgt, emp_probs.get(cand_t.name, 1.0))
+                            weights.append(max(0.01, float(w)))
+                        chosen_t = random.choices(enabled, weights=weights, k=1)[0]
                 else:
                     chosen_t = random.choice(enabled)
 
@@ -197,7 +204,8 @@ class Token:
                     act, self.prefix, self.process.active_cases_count,
                     self.process.ac_wip, curr_dt, self.requested_amount,
                     self.milestones_seen, self.offer_count, self.has_offer, role_oc,
-                    prev_dur=self.prev_dur
+                    prev_dur=self.prev_dur,
+                    case_attrs=self.case_attrs
                 )
                 # Damping factor on repeated loop iterations to prevent residual stacking, in details:
 
@@ -239,7 +247,8 @@ class Token:
                 self.process.ac_wip, curr_dt, self.requested_amount,
                 self.milestones_seen, self.offer_count, self.has_offer, role_oc,
                 worker_id=worker_id,
-                prev_dur=self.prev_dur
+                prev_dur=self.prev_dur,
+                case_attrs=self.case_attrs
             )
 
             actual_dur = self.process.calendar.calculate_calendar_duration(
@@ -274,22 +283,12 @@ class Token:
             self.prev_act = act
             self.prev_dur = dur_pred
 
-            # Advance milestone state only if milestone features are active
-            if self.process.predictor.feature_mgr.is_feature_active("milestones"):
-                if self.events_done < len(self.ms_states):
-                    self.milestones_seen = set(self.ms_states[self.events_done])
-                else:
-                    self.update_milestones(act)
+            # Advance milestone state dynamically based on actual executed activity
+            self.update_milestones(act)
 
-            if self.process.predictor.feature_mgr.is_feature_active("offer_count"):
-                self.offer_count = sum(1 for m in self.milestones_seen if m.startswith("O_"))
-            else:
-                self.offer_count = 0.0
-
-            if self.process.predictor.feature_mgr.is_feature_active("has_offer"):
+            if any(p.startswith("O_") for p in ms_prefixes) or self.offer_count > 0:
+                self.offer_count = float(sum(1 for m in self.milestones_seen if m.startswith("O_")))
                 self.has_offer = 1.0 if self.offer_count > 0 else 0.0
-            else:
-                self.has_offer = 0.0
 
         self.process.active_cases_count = max(0, self.process.active_cases_count - 1)
 

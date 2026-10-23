@@ -45,12 +45,12 @@ class SimulationEvaluator:
         self.export_xes = export_xes
         self.sim_log_path = sim_log_path or os.path.join(
             PROJECT_ROOT,
-            f"data/processed/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_log", "data/processed/simulated_log.csv")
+            f"data/generated/csv/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
+            cfg.get("simulation", {}).get("output_simulated_log", "data/generated/csv/simulated_log.csv")
         )
         self.output_simulated_xes = output_simulated_xes or os.path.join(
             PROJECT_ROOT,
-            cfg.get("simulation", {}).get("output_simulated_xes", "data/processed/simulated_log.xes")
+            cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
         )
         self.workers_count = workers_count
         self.calendar = calendar

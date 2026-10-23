@@ -17,8 +17,8 @@ def main():
     os.makedirs(os.path.dirname(output_log_path), exist_ok=True)
 
     prep_cfg = cfg.get("preprocessing", {})
-    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", ["W_"]))
-    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", ["A_", "O_"]))
+    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", []))
+    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", []))
 
     print(f"Loading log: {input_log_path}")
     df = pm4py.read_xes(input_log_path)
@@ -30,7 +30,10 @@ def main():
     #isolate process activity COMPLETE events for alignment
     #PM4Py Petri net transitions correspond to process activity completions.
     print(f"Preparing control-flow log on COMPLETE events of process activities ({proc_prefixes})...")
-    df_proc_comp = df[(df["concept:name"].str.startswith(proc_prefixes)) & (df["lifecycle:transition"] == "COMPLETE")].copy()
+    if proc_prefixes:
+        df_proc_comp = df[(df["concept:name"].str.startswith(proc_prefixes)) & (df["lifecycle:transition"] == "COMPLETE")].copy()
+    else:
+        df_proc_comp = df[df["lifecycle:transition"] == "COMPLETE"].copy()
     
     # Build alignment event log with case:concept:name as trace concept:name
     log_for_align = EventLog()
@@ -79,9 +82,12 @@ def main():
             row_dict = {k: v for k, v in row.dropna().to_dict().items() if not k.startswith("case:")}
             evt = Event(row_dict)
 
-            if act.startswith(milestone_prefixes):
+            is_ms = bool(milestone_prefixes) and act.startswith(milestone_prefixes)
+            is_wi = (act.startswith(proc_prefixes)) if proc_prefixes else (not is_ms)
+
+            if is_ms:
                 milestones.append(evt)
-            elif act.startswith(proc_prefixes):
+            elif is_wi:
                 if trans == "START":
                     pending_start[act].append(evt)
                 elif trans == "COMPLETE":

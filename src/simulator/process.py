@@ -40,9 +40,10 @@ class SharedWorkerPool:
     perform one task at a time across all business activities.
     Supports Kolmogorov-Smirnov fitted refractory latency cooldowns.
     """
-    def __init__(self, env, role_mapping_path, latency_cfg=None):
+    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None):
         self.env = env
         self.latency_cfg = latency_cfg or {}
+        self.calendar = calendar
         with open(role_mapping_path, "r") as f:
             data = json.load(f)
 
@@ -51,10 +52,69 @@ class SharedWorkerPool:
             self.all_workers = sorted(list(set.union(*[set(data[k]) for k in data if not k.startswith("__")])))
 
         self.activity_pools = {k: data[k] for k in data if not k.startswith("__")}
+        self.resource_capacities = data.get("__resource_capacities__", {})
+        self.worker_active_count = {w: 0 for w in self.all_workers}
         self.worker_busy = {w: False for w in self.all_workers}
         self.worker_activity = {w: None for w in self.all_workers}
         self.worker_idle_since = {w: 0.0 for w in self.all_workers}
         self.pending_requests = []
+        self._shift_alarm_active = False
+
+    def _get_capacity(self, worker_id):
+        return int(self.resource_capacities.get(worker_id, 1))
+
+    def _is_worker_free(self, worker_id):
+        return self.worker_active_count[worker_id] < self._get_capacity(worker_id)
+
+    def _is_working_now(self):
+        if not self.calendar or not getattr(self.calendar, "enabled", False):
+            return True
+        curr_dt = self.calendar.to_datetime(self.env.now)
+        return self.calendar.is_working_hour(curr_dt)
+
+    def _ensure_shift_alarm(self):
+        if not self.calendar or not getattr(self.calendar, "enabled", False):
+            return
+        if self._shift_alarm_active:
+            return
+        curr_dt = self.calendar.to_datetime(self.env.now)
+        if self.calendar.is_working_hour(curr_dt):
+            return
+        gap = self.calendar.get_gap_to_next_work_window(curr_dt)
+        if gap > 0:
+            self._shift_alarm_active = True
+            self.env.process(self._shift_alarm_worker(gap))
+
+    def _shift_alarm_worker(self, gap):
+        yield self.env.timeout(gap)
+        self._shift_alarm_active = False
+        self._dispatch_all_pending()
+
+    def _dispatch_all_pending(self):
+        if not self._is_working_now():
+            self._ensure_shift_alarm()
+            return
+
+        i = 0
+        while i < len(self.pending_requests):
+            req = self.pending_requests[i]
+            if req["event"].triggered:
+                self.pending_requests.pop(i)
+                continue
+
+            free_workers = [w for w in req["eligible"] if self._is_worker_free(w)]
+            if free_workers:
+                min_idle = min(self.worker_idle_since[w] for w in free_workers)
+                candidates = [w for w in free_workers if self.worker_idle_since[w] == min_idle]
+                chosen = random.choice(candidates) if len(candidates) > 1 else candidates[0]
+
+                self.pending_requests.pop(i)
+                self.worker_active_count[chosen] += 1
+                self.worker_busy[chosen] = not self._is_worker_free(chosen)
+                self.worker_activity[chosen] = req["activity"]
+                req["event"].succeed(value=chosen)
+            else:
+                i += 1
 
     def get_role_occupancy(self, activities_list):
         """Returns concurrent activity utilization vector matching Role_*_OC."""
@@ -68,15 +128,17 @@ class SharedWorkerPool:
     def request_worker(self, activity):
         """Requests an available worker from the activity's eligible skill pool using Longest Idle First."""
         eligible = self.activity_pools.get(activity, self.all_workers)
-        free_workers = [w for w in eligible if not self.worker_busy[w]]
+        free_workers = [w for w in eligible if self._is_worker_free(w)]
+        is_working = self._is_working_now()
 
-        if free_workers:
+        if is_working and free_workers:
             # Longest Idle First: select the worker who has been waiting idle the longest
             min_idle = min(self.worker_idle_since[w] for w in free_workers)
             candidates = [w for w in free_workers if self.worker_idle_since[w] == min_idle]
             chosen = random.choice(candidates) if len(candidates) > 1 else candidates[0]
 
-            self.worker_busy[chosen] = True
+            self.worker_active_count[chosen] += 1
+            self.worker_busy[chosen] = not self._is_worker_free(chosen)
             self.worker_activity[chosen] = activity
             ev = self.env.event()
             ev.succeed(value=chosen)
@@ -89,6 +151,8 @@ class SharedWorkerPool:
                 "event": ev,
                 "req_time": self.env.now
             })
+            if not is_working:
+                self._ensure_shift_alarm()
             return ev
 
     def release_worker(self, worker_id):
@@ -119,6 +183,7 @@ class SharedWorkerPool:
         prof = profiles.get(worker_id) or self.latency_cfg
         dist = prof.get("best_distribution") or prof.get("global_distribution", "lognormal")
         params = prof.get("distribution_params") or prof.get("global_params", {})
+        max_cd = float(self.latency_cfg.get("max_cooldown_seconds", 1800.0))
 
         try:
             if dist == "lognormal":
@@ -128,7 +193,7 @@ class SharedWorkerPool:
             else:
                 mean_s = float(prof.get("mean_seconds", prof.get("global_mean_seconds", 300.0)))
                 val = float(random.expovariate(1.0 / max(1.0, mean_s)))
-            return min(max(5.0, val), 1800.0)  # Clamp between 5s and 30 mins
+            return min(max(5.0, val), max_cd)
         except Exception:
             return float(random.expovariate(1.0 / 300.0))
 
@@ -137,12 +202,20 @@ class SharedWorkerPool:
         self._complete_release(worker_id)
 
     def _complete_release(self, worker_id):
-        self.worker_busy[worker_id] = False
-        self.worker_idle_since[worker_id] = self.env.now
+        self.worker_active_count[worker_id] = max(0, self.worker_active_count[worker_id] - 1)
+        self.worker_busy[worker_id] = not self._is_worker_free(worker_id)
+        if self._is_worker_free(worker_id):
+            self.worker_idle_since[worker_id] = self.env.now
+
+        if not self._is_working_now():
+            self._ensure_shift_alarm()
+            return
+
         for i, req in enumerate(self.pending_requests):
             if worker_id in req["eligible"] and not req["event"].triggered:
                 self.pending_requests.pop(i)
-                self.worker_busy[worker_id] = True
+                self.worker_active_count[worker_id] += 1
+                self.worker_busy[worker_id] = not self._is_worker_free(worker_id)
                 self.worker_activity[worker_id] = req["activity"]
                 req["event"].succeed(value=worker_id)
                 return
@@ -175,13 +248,13 @@ class SimulationProcess:
         # Output paths
         self.sim_log_path = os.path.join(
             PROJECT_ROOT,
-            f"data/processed/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_log", "data/processed/simulated_log.csv")
+            f"data/generated/csv/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
+            cfg.get("simulation", {}).get("output_simulated_log", "data/generated/csv/simulated_log.csv")
         )
         self.export_xes = export_xes if export_xes is not None else cfg.get("simulation", {}).get("export_xes", True)
         self.output_simulated_xes = os.path.join(
             PROJECT_ROOT,
-            cfg.get("simulation", {}).get("output_simulated_xes", "data/processed/simulated_log.xes")
+            cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
         )
 
         # Arrival Mode
@@ -196,6 +269,12 @@ class SimulationProcess:
         self.net, self.im, self.fm = pm4py.read_pnml(target_pnml)
         self.pnml_path = target_pnml
         self.branch_target_map = self._build_branch_target_map()
+
+        if not self.target_activities:
+            self.target_activities = sorted(list(set(
+                t.label for t in self.net.transitions if t.label is not None
+            )))
+            print(f"Target activities: [Auto-discovered {len(self.target_activities)} activities from Petri Net]: {self.target_activities}")
 
         # Calendar Manager
         self.calendar = CalendarManager.from_config(cfg)
@@ -246,7 +325,7 @@ class SimulationProcess:
         user_hl = cfg.get("simulation", {}).get("human_latency", {})
         if isinstance(user_hl, dict):
             latency_cfg.update(user_hl)
-        self.workers = SharedWorkerPool(self.env, role_mapping_path, latency_cfg=latency_cfg)
+        self.workers = SharedWorkerPool(self.env, role_mapping_path, latency_cfg=latency_cfg, calendar=self.calendar)
 
         # Runtime Champion Predictor
         self.predictor = ChampionPredictor(cfg)
@@ -379,11 +458,12 @@ class SimulationProcess:
             token = Token(
                 case_id=arr["case_id"],
                 arrival_offset=offset_seconds,
-                requested_amount=arr["requested_amount"],
+                requested_amount=arr.get("requested_amount", 0.0),
                 process=self,
-                init_ms=arr["init_ms"],
-                ms_states=arr["ms_states"],
-                inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0)
+                init_ms=arr.get("init_ms"),
+                ms_states=arr.get("ms_states"),
+                inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0),
+                case_attrs=arr.get("case_attrs", {})
             )
             self.env.process(token.run())
 

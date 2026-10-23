@@ -145,6 +145,32 @@ class ChampionPredictor:
         suite["scalers"] = scalers
         suite["models"] = {}
 
+        # Reconstruct CategoricalDtypes for XGBoost runtime inference parity
+        act_categories = []
+        cat_file = os.path.join(base_dir, "categories.json")
+        if os.path.exists(cat_file):
+            try:
+                with open(cat_file) as f:
+                    cat_meta = json.load(f)
+                    act_categories = cat_meta.get("activities", [])
+            except Exception:
+                pass
+
+        if not act_categories:
+            if act_to_idx:
+                act_categories = sorted(list(act_to_idx.keys()))
+            elif vocab:
+                act_categories = sorted([k for k in vocab.keys() if not k.startswith("<")])
+            elif hasattr(self, "cfg") and self.cfg.get("target_activities"):
+                act_categories = sorted(list(self.cfg.get("target_activities")))
+
+        if act_categories:
+            suite["prefix_cat_dtype"] = pd.CategoricalDtype(categories=act_categories + ["NONE"], ordered=False)
+            suite["target_act_dtype"] = pd.CategoricalDtype(categories=act_categories, ordered=False)
+        else:
+            suite["prefix_cat_dtype"] = None
+            suite["target_act_dtype"] = None
+
         def _resolve_scaler(s_dir, num_feats):
             cand_scalers = []
             if s_dir:
@@ -237,7 +263,8 @@ class ChampionPredictor:
         return suite
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
-                            milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0):
+                            milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0,
+                            case_attrs=None):
         ctx = FeatureContext(
             target_act=target_act,
             prefix=prefix,
@@ -252,8 +279,17 @@ class ChampionPredictor:
             worker_id=worker_id or "UNKNOWN",
             all_milestones=self.all_milestones,
             prev_dur=float(prev_dur),
+            case_attrs=case_attrs or {},
         )
         feats = self.feature_mgr.build_features(ctx)
+
+        # Merge dynamic domain case attributes if passed
+        if case_attrs:
+            for k, v in case_attrs.items():
+                try:
+                    feats[k] = float(v)
+                except (ValueError, TypeError):
+                    feats[k] = v
 
         # Ensure universal context variables are available in feats dictionary
         feats.setdefault("Offer_Count", float(offer_count))
@@ -277,25 +313,27 @@ class ChampionPredictor:
                     feats[col] = 0.0
         return feats
 
-    def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount,
-                         milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0):
+    def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
+                         milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
+                         case_attrs=None):
         """Predicts activity execution duration in seconds using champion model."""
         return self._predict_time(self.dur_models, self.dur_dispatch, activity, prefix,
-                                  wip, ac_wip, dt, requested_amount, milestones_seen,
-                                  offer_count, has_offer, role_oc_array, default_fallback=600.0,
-                                  worker_id=worker_id, prev_dur=prev_dur)
+                                  wip, ac_wip, dt, requested_amount, milestones_seen or set(),
+                                  offer_count, has_offer, role_oc_array or [], default_fallback=600.0,
+                                  worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
 
-    def predict_waiting(self, activity, prefix, wip, ac_wip, dt, requested_amount,
-                        milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0):
+    def predict_waiting(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
+                        milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
+                        case_attrs=None):
         """Predicts activity waiting time in seconds using champion model."""
         return self._predict_time(self.wait_models, self.wait_dispatch, activity, prefix,
-                                  wip, ac_wip, dt, requested_amount, milestones_seen,
-                                  offer_count, has_offer, role_oc_array, default_fallback=3600.0,
-                                  worker_id=worker_id, prev_dur=prev_dur)
+                                  wip, ac_wip, dt, requested_amount, milestones_seen or set(),
+                                  offer_count, has_offer, role_oc_array or [], default_fallback=3600.0,
+                                  worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
 
     def _predict_time(self, suite, dispatch_table, activity, prefix, wip, ac_wip, dt,
                       requested_amount, milestones_seen, offer_count, has_offer,
-                      role_oc_array, default_fallback, worker_id=None, prev_dur=0.0):
+                      role_oc_array, default_fallback, worker_id=None, prev_dur=0.0, case_attrs=None):
         entry = suite["models"].get(activity) or suite["models"].get("__default__")
         if not entry:
             return default_fallback
@@ -304,7 +342,7 @@ class ChampionPredictor:
         model = entry["model"]
         f_dict = self._build_feature_dict(activity, prefix, wip, ac_wip, dt, requested_amount,
                                           milestones_seen, offer_count, has_offer, role_oc_array,
-                                          worker_id=worker_id, prev_dur=prev_dur)
+                                          worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
 
         if m_type == "xgboost":
             p_features = prefix[-self.max_seq_len:] if len(prefix) > self.max_seq_len else prefix + ["NONE"] * (self.max_seq_len - len(prefix))
@@ -360,8 +398,14 @@ class ChampionPredictor:
                 cols_to_use = [c for c in row_dict.keys() if c in self.feature_cols or c.startswith("Act_Minus_") or c == "Target_Activity"]
 
             row_df = pd.DataFrame([{c: row_dict.get(c, 0.0) for c in cols_to_use}])[cols_to_use]
+            prefix_dtype = suite.get("prefix_cat_dtype")
+            target_dtype = suite.get("target_act_dtype")
             for col in row_df.columns:
-                if col.startswith("Act_Minus_") or col in ["Target_Activity", "Resource_ID"]:
+                if col.startswith("Act_Minus_"):
+                    row_df[col] = pd.Categorical(row_df[col], dtype=prefix_dtype) if prefix_dtype is not None else row_df[col].astype("category")
+                elif col == "Target_Activity":
+                    row_df[col] = pd.Categorical(row_df[col], dtype=target_dtype) if target_dtype is not None else row_df[col].astype("category")
+                elif col == "Resource_ID":
                     row_df[col] = row_df[col].astype("category")
 
             pred_log1p = model.predict(row_df)[0]
@@ -440,7 +484,9 @@ class ChampionPredictor:
 
         return default_fallback
 
-    def predict_routing(self, place_id, prefix, requested_amount, milestones_seen, offer_count, has_offer, curr_dt=None, loop_count=0.0, inter_arrival_seconds=0.0):
+    def predict_routing(self, place_id, prefix, requested_amount=0.0, milestones_seen=None,
+                        offer_count=0.0, has_offer=0.0, curr_dt=None, loop_count=0.0,
+                        inter_arrival_seconds=0.0, case_attrs=None):
         """Predicts outgoing transition branch at an XOR split place."""
         p_info = self.routing_manifest.get(place_id)
         if not p_info:
@@ -466,13 +512,20 @@ class ChampionPredictor:
             row["weekday"] = curr_dt.weekday() if curr_dt is not None else 0
             row["inter_arrival_seconds"] = float(inter_arrival_seconds)
 
+            if case_attrs:
+                for k, v in case_attrs.items():
+                    row[k] = v
+
             for col in feat_cols:
                 if col.startswith("Milestone_"):
                     m_name = col.replace("Milestone_", "")
-                    row[col] = 1.0 if m_name in milestones_seen else 0.0
+                    row[col] = 1.0 if (milestones_seen and m_name in milestones_seen) else 0.0
                 elif col.startswith("has_"):
                     act_name = col.replace("has_", "")
-                    row[col] = 1.0 if (act_name in prefix or act_name in milestones_seen) else 0.0
+                    row[col] = 1.0 if (act_name in prefix or (milestones_seen and act_name in milestones_seen)) else 0.0
+                elif col not in row:
+                    row[col] = 0.0
+
             cat_map = p_info.get("cat_mappings", {})
             for c in feat_cols:
                 if c in cat_map:
@@ -480,15 +533,15 @@ class ChampionPredictor:
                     val = row.get(c, "<UNKNOWN>")
                     row[c] = cats.index(val) if val in cats else -1
 
-            row_df = pd.DataFrame([row])[feat_cols]
-            for c in row_df.columns:
-                if (c.startswith("prefix_") or c == "prev_activity") and c not in cat_map:
-                    row_df[c] = row_df[c].astype("category")
-
-            label_enc = p_info["label_encoding"]
-            idx_to_label = {v: k for k, v in label_enc.items()}
-
             try:
+                row_df = pd.DataFrame([row])[feat_cols]
+                for c in row_df.columns:
+                    if (c.startswith("prefix_") or c == "prev_activity") and c not in cat_map:
+                        row_df[c] = row_df[c].astype("category")
+
+                label_enc = p_info["label_encoding"]
+                idx_to_label = {v: k for k, v in label_enc.items()}
+
                 if hasattr(clf, "predict_proba"):
                     probas = clf.predict_proba(row_df)[0]
                     p_sum = probas.sum()

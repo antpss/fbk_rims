@@ -1,6 +1,6 @@
 # Raw Event Logs Directory
 
-This directory stores original benchmark event logs prior to RIMS+ preprocessing and filtering.
+This directory stores original benchmark and domain event logs prior to RIMS+ preprocessing and filtering.
 
 ## Default Dataset: BPI Challenge 2012
 
@@ -26,4 +26,17 @@ Once `BPI_Challenge_2012.xes` is in this folder, execute the pipeline starting w
 ```bash
 python src/00_filter_log.py
 ```
+
+## Using Other Event Logs (Domain Agnostic)
+
+To use other XES event logs (e.g. BAC, Sepsis, Road Traffic Fines, or custom internal logs):
+
+1. Place your raw `.xes` or `.xes.gz` file in this directory (e.g. `data/raw/my_log.xes`).
+2. Update the input path in [`config.yaml`](../../config.yaml):
+   ```yaml
+   preprocessing:
+     input_log: "data/raw/my_log.xes"
+   ```
+3. Configure your activity and milestone prefixes (or set `process_activity_prefixes: []` and `milestone_prefixes: []` to model all activities with zero prefix filtering).
+4. Run the pipeline starting with `python src/00_filter_log.py`.
 

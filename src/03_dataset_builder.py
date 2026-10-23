@@ -43,8 +43,8 @@ def main():
     df = pm4py.convert_to_dataframe(log)
 
     prep_cfg = cfg.get("preprocessing", {})
-    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", ["W_"]))
-    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", ["A_", "O_"]))
+    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", []))
+    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", []))
 
     activities = cfg.get("target_activities", [])
     if not activities:
@@ -69,6 +69,27 @@ def main():
     case_attrs = feat_cfg.get("case_attributes", [])
     event_attrs = feat_cfg.get("event_attributes", [])
 
+    # Precompute empirical imputation statistics (median/mode) for case attributes
+    attr_imputation = {}
+    for attr in case_attrs:
+        col = attr["column"]
+        clean_col = col.replace("case:", "")
+        series = df[col] if col in df.columns else (df[clean_col] if clean_col in df.columns else pd.Series(dtype=float))
+        is_cont = (attr.get("type") == "continuous")
+        treat_zero = attr.get("treat_zero_as_missing", False)
+        if is_cont:
+            clean_s = pd.to_numeric(series, errors="coerce")
+            if treat_zero:
+                clean_s = clean_s[clean_s != 0]
+            clean_s = clean_s.dropna()
+            val_stat = float(clean_s.median()) if not clean_s.empty else float(attr.get("fill_value", 0.0))
+        else:
+            clean_s = series.dropna()
+            val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
+        attr_imputation[attr["feature_name"]] = val_stat
+    if attr_imputation:
+        print(f"Empirical Imputation Defaults for Case Attributes: {attr_imputation}")
+
     feature_mgr = FeatureManager(cfg)
     calendar = CalendarManager.from_config(cfg)
     print(f"Prefix Window: {prefix_window}")
@@ -91,8 +112,10 @@ def main():
     orig_activity_counts = completes_df['concept:name'].value_counts().to_dict()
     total_orig_completes = max(1, len(completes_df))
 
-    print("Sorting log chronologically...")
-    df = df.sort_values(by="time:timestamp").reset_index(drop=True)
+    print("Sorting log chronologically (START before COMPLETE for equal timestamps)...")
+    trans_order = {"START": 0, "COMPLETE": 1}
+    df["_trans_rank"] = df["lifecycle:transition"].astype(str).str.upper().map(trans_order).fillna(2)
+    df = df.sort_values(by=["time:timestamp", "_trans_rank"]).drop(columns=["_trans_rank"]).reset_index(drop=True)
 
     active_cases = set()
     models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
@@ -143,14 +166,25 @@ def main():
         extracted_case_attrs = {}
         for attr in case_attrs:
             col = attr["column"]
-            val = row.get(col, attr.get("fill_value", 0.0))
-            if pd.isna(val) and col.replace("case:", "") in row:
-                val = row.get(col.replace("case:", ""), attr.get("fill_value", 0.0))
-            try:
-                val = float(val) if attr.get("type") == "continuous" else val
-            except Exception:
-                val = attr.get("fill_value", 0.0)
-            extracted_case_attrs[attr["feature_name"]] = val
+            clean_col = col.replace("case:", "")
+            feat_name = attr["feature_name"]
+            default_val = attr_imputation.get(feat_name, attr.get("fill_value", 0.0))
+            val = row.get(col, row.get(clean_col, default_val))
+            if pd.isna(val):
+                val = default_val
+
+            is_cont = (attr.get("type") == "continuous")
+            treat_zero = attr.get("treat_zero_as_missing", False)
+            if is_cont:
+                try:
+                    val = float(val)
+                    if treat_zero and val == 0.0:
+                        val = float(default_val)
+                except Exception:
+                    val = float(default_val)
+            else:
+                val = str(val) if val is not None else str(default_val)
+            extracted_case_attrs[feat_name] = val
 
         # Dynamic extraction of Tier 2 event attributes
         extracted_event_attrs = {}
@@ -177,7 +211,7 @@ def main():
         # -------------------------------------------------------------
         if milestone_prefixes and activity_name.startswith(milestone_prefixes):
             case_milestones_seen[case_id].add(activity_name)
-            if activity_name.startswith("O_"):
+            if any(p.startswith("O_") for p in milestone_prefixes) and activity_name.startswith("O_"):
                 case_offer_count[case_id] += 1
 
         # -------------------------------------------------------------

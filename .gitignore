@@ -22,6 +22,7 @@ context.md
 original_rims_source
 scraped_rims_docs
 scraped_doc.html
+tests/
 
 # Intermediate ML artifacts
 **/catboost_info/

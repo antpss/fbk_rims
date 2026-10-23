@@ -1,0 +1,19 @@
+{
+  "activities": [
+    "W_Assess fraud",
+    "W_Call after incomplete files",
+    "W_Call after offers",
+    "W_Complete application",
+    "W_Handle leads",
+    "W_Validate application"
+  ],
+  "prefix_categories": [
+    "W_Assess fraud",
+    "W_Call after incomplete files",
+    "W_Call after offers",
+    "W_Complete application",
+    "W_Handle leads",
+    "W_Validate application",
+    "NONE"
+  ]
+}

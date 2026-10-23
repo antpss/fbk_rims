@@ -56,11 +56,56 @@ class ArrivalGenerator:
         case_attrs = self.cfg.get("features", {}).get("case_attributes", [])
         amt_col = case_attrs[0]["column"] if (case_attrs and "column" in case_attrs[0]) else None
 
+        attr_imputation = {}
+        case_payload_records = []
         if os.path.exists(aligned_log_path):
             try:
                 df_real = pm4py.read_xes(aligned_log_path)
                 if amt_col and amt_col in df_real.columns:
                     empirical_amounts = df_real[amt_col].dropna().astype(float).tolist()
+
+                for attr in case_attrs:
+                    col = attr["column"]
+                    clean_col = col.replace("case:", "")
+                    series = df_real[col] if col in df_real.columns else (df_real[clean_col] if clean_col in df_real.columns else pd.Series(dtype=float))
+                    is_cont = (attr.get("type") == "continuous")
+                    treat_zero = attr.get("treat_zero_as_missing", False)
+                    if is_cont:
+                        clean_s = pd.to_numeric(series, errors="coerce")
+                        if treat_zero:
+                            clean_s = clean_s[clean_s != 0]
+                        clean_s = clean_s.dropna()
+                        val_stat = float(clean_s.median()) if not clean_s.empty else float(attr.get("fill_value", 0.0))
+                    else:
+                        clean_s = series.dropna()
+                        val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
+                    attr_imputation[attr["feature_name"]] = val_stat
+
+                case_first_rows = df_real.groupby("case:concept:name", sort=False).first().reset_index()
+                for _, r in case_first_rows.iterrows():
+                    rec = {}
+                    for attr in case_attrs:
+                        col = attr["column"]
+                        clean_col = col.replace("case:", "")
+                        feat_name = attr["feature_name"]
+                        default_val = attr_imputation.get(feat_name, attr.get("fill_value", 0.0))
+                        val = r.get(col, r.get(clean_col, default_val))
+                        if pd.isna(val):
+                            val = default_val
+                        is_cont = (attr.get("type") == "continuous")
+                        treat_zero = attr.get("treat_zero_as_missing", False)
+                        if is_cont:
+                            try:
+                                val = float(val)
+                                if treat_zero and val == 0.0:
+                                    val = float(default_val)
+                            except Exception:
+                                val = float(default_val)
+                        else:
+                            val = str(val) if val is not None else str(default_val)
+                        rec[feat_name] = val
+                    if rec:
+                        case_payload_records.append(rec)
             except Exception as e:
                 print(f"[!] Warning: Could not read aligned log: {e}")
 
@@ -120,10 +165,36 @@ class ArrivalGenerator:
                         if act.startswith(ms_prefixes):
                             init_ms.add(act)
 
+                extracted_case_attrs = {}
+                for attr_def in case_attrs:
+                    c_col = attr_def.get("column")
+                    feat_name = attr_def.get("feature_name", c_col)
+                    default_val = attr_imputation.get(feat_name, attr_def.get("fill_value", 0.0))
+                    clean_col = c_col.replace("case:", "")
+                    val = grp_sorted[c_col].iloc[0] if (c_col and c_col in grp_sorted.columns) else (grp_sorted[clean_col].iloc[0] if clean_col in grp_sorted.columns else default_val)
+                    if pd.isna(val):
+                        val = default_val
+
+                    is_cont = (attr_def.get("type") == "continuous")
+                    treat_zero = attr_def.get("treat_zero_as_missing", False)
+                    if is_cont:
+                        try:
+                            val = float(val)
+                            if treat_zero and val == 0.0:
+                                val = float(default_val)
+                        except Exception:
+                            val = float(default_val)
+                    else:
+                        val = str(val) if val is not None else str(default_val)
+                    extracted_case_attrs[feat_name] = val
+
+                amt = float(extracted_case_attrs.get("RequestedAmount", amt))
+
                 arrivals.append({
                     "case_id": str(cid),
                     "arrival_time": t_first,
                     "requested_amount": float(amt) if pd.notna(amt) else 0.0,
+                    "case_attrs": extracted_case_attrs,
                     "init_ms": init_ms,
                     "ms_states": ms_states
                 })
@@ -131,7 +202,7 @@ class ArrivalGenerator:
             arrivals.sort(key=lambda x: x["arrival_time"])
 
         elif self.arrival_mode == "prophet":
-            arrivals = self._prepare_prophet_arrivals(df_real, empirical_amounts, amt_col)
+            arrivals = self._prepare_prophet_arrivals(df_real, empirical_amounts, amt_col, case_payload_records=case_payload_records)
 
         else:
             # Generative Arrival Mode (RIMS InterTriggerTimer Standard)
@@ -180,7 +251,13 @@ class ArrivalGenerator:
                     if gap > 0:
                         cur_time += timedelta(seconds=gap)
 
-                amt = float(random.choice(empirical_amounts)) if empirical_amounts else (float(random.randint(5000, 35000)) if amt_col else 0.0)
+                if case_payload_records:
+                    sampled_payload = dict(random.choice(case_payload_records))
+                    amt = float(sampled_payload.get("RequestedAmount", 0.0))
+                else:
+                    amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
+                    sampled_payload = {"RequestedAmount": amt} if amt_col else {}
+
                 init_dist = self.cfg.get("preprocessing", {}).get("initial_milestones_distribution", [])
                 if init_dist:
                     cand_sets = [set(entry["milestones"]) for entry in init_dist]
@@ -193,6 +270,7 @@ class ArrivalGenerator:
                     "case_id": cid,
                     "arrival_time": cur_time,
                     "requested_amount": amt,
+                    "case_attrs": sampled_payload,
                     "init_ms": init_ms,
                     "ms_states": []
                 })
@@ -210,7 +288,7 @@ class ArrivalGenerator:
 
         return arrivals, df_real
 
-    def _prepare_prophet_arrivals(self, df_real, empirical_amounts, amt_col):
+    def _prepare_prophet_arrivals(self, df_real, empirical_amounts, amt_col, case_payload_records=None):
         """
         Generates synthetic arrivals using Facebook Prophet time-series modeling (Camargo et al. DeepSimulator parity).
         Supports:
@@ -449,7 +527,12 @@ class ArrivalGenerator:
                         break
 
                     cid = f"prophet_case_{case_idx:05d}"
-                    amt = float(random.choice(empirical_amounts)) if empirical_amounts else (float(random.randint(5000, 35000)) if amt_col else 0.0)
+                    if case_payload_records:
+                        sampled_payload = dict(random.choice(case_payload_records))
+                        amt = float(sampled_payload.get("RequestedAmount", 0.0))
+                    else:
+                        amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
+                        sampled_payload = {"RequestedAmount": amt} if amt_col else {}
 
                     init_dist = self.cfg.get("preprocessing", {}).get("initial_milestones_distribution", [])
                     if init_dist:
@@ -464,6 +547,7 @@ class ArrivalGenerator:
                         "case_id": cid,
                         "arrival_time": t_arr,
                         "requested_amount": amt,
+                        "case_attrs": sampled_payload,
                         "init_ms": init_ms,
                         "ms_states": []
                     })
