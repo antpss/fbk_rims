@@ -355,5 +355,3 @@ Evaluated against the ground-truth historical log (1,000 cases, Prophet arrival 
 | **REAL HISTORICAL** | **11.3 days** | **8.3 days** | — | — | — | — |
 | **`hybrid_residual` ★ (Best)** | **10.2 days** | **4.9 days** | **1.2 days** | **3.6 days** | **191.47h** | 169.1s |
 | `pure_physics` | 9.5 days | 3.1 days | 1.9 days | 4.7 days | 266.15h | 204.3s |
-
-* **Realism & Congestion**: `hybrid_residual` captures unobserved worklist backlog, external postal/customer turnaround latency, and physical worker contention, achieving superior Wasserstein distance (3.6 days) and cycle time alignment (MAE: 1.2 days).
