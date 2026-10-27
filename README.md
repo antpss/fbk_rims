@@ -101,7 +101,7 @@ Key dependencies:
 * `hyperopt` : Bayesian Tree-structured Parzen Estimator (TPE) optimization
 * `prophet` : Time-series forecasting for case arrival intensities (DeepSimulator parity)
 * `pandas`, `numpy`, `scipy` : Tabular manipulation, state extraction, and Kolmogorov-Smirnov distribution fitting
-* `pyyaml` : Centralized configuration parsing
+* `pyyaml` : Configuration parsing
 
 ---
 

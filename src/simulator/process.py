@@ -55,6 +55,7 @@ class SharedWorkerPool:
         self.resource_capacities = data.get("__resource_capacities__", {})
         self.worker_active_count = {w: 0 for w in self.all_workers}
         self.worker_busy = {w: False for w in self.all_workers}
+        self.worker_activities = {w: [] for w in self.all_workers}
         self.worker_activity = {w: None for w in self.all_workers}
         self.worker_idle_since = {w: 0.0 for w in self.all_workers}
         self.pending_requests = []
@@ -111,6 +112,7 @@ class SharedWorkerPool:
                 self.pending_requests.pop(i)
                 self.worker_active_count[chosen] += 1
                 self.worker_busy[chosen] = not self._is_worker_free(chosen)
+                self.worker_activities[chosen].append(req["activity"])
                 self.worker_activity[chosen] = req["activity"]
                 req["event"].succeed(value=chosen)
             else:
@@ -121,7 +123,7 @@ class SharedWorkerPool:
         oc = []
         for act in activities_list:
             eligible = self.activity_pools.get(act, self.all_workers)
-            busy_on_act = sum(1 for w in eligible if self.worker_busy[w] and self.worker_activity[w] == act)
+            busy_on_act = sum(1 for w in eligible if act in self.worker_activities[w])
             oc.append(busy_on_act / max(1, len(eligible)))
         return oc
 
@@ -139,6 +141,7 @@ class SharedWorkerPool:
 
             self.worker_active_count[chosen] += 1
             self.worker_busy[chosen] = not self._is_worker_free(chosen)
+            self.worker_activities[chosen].append(activity)
             self.worker_activity[chosen] = activity
             ev = self.env.event()
             ev.succeed(value=chosen)
@@ -155,9 +158,13 @@ class SharedWorkerPool:
                 self._ensure_shift_alarm()
             return ev
 
-    def release_worker(self, worker_id):
+    def release_worker(self, worker_id, activity=None):
         """Releases worker; if human latency modeling is active and queue is calm, worker enters refractory buffer."""
-        self.worker_activity[worker_id] = None
+        if activity and activity in self.worker_activities[worker_id]:
+            self.worker_activities[worker_id].remove(activity)
+        elif self.worker_activities[worker_id]:
+            self.worker_activities[worker_id].pop()
+        self.worker_activity[worker_id] = self.worker_activities[worker_id][-1] if self.worker_activities[worker_id] else None
 
         cooldown_enabled = self.latency_cfg.get("enabled", True) if self.latency_cfg else False
         queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
@@ -211,14 +218,7 @@ class SharedWorkerPool:
             self._ensure_shift_alarm()
             return
 
-        for i, req in enumerate(self.pending_requests):
-            if worker_id in req["eligible"] and not req["event"].triggered:
-                self.pending_requests.pop(i)
-                self.worker_active_count[worker_id] += 1
-                self.worker_busy[worker_id] = not self._is_worker_free(worker_id)
-                self.worker_activity[worker_id] = req["activity"]
-                req["event"].succeed(value=worker_id)
-                return
+        self._dispatch_all_pending()
 
 
 # Backward compatibility alias

@@ -259,7 +259,7 @@ class Token:
 
             # 8. Release Worker
             self.process.ac_wip[act] = max(0, self.process.ac_wip[act] - 1)
-            self.process.workers.release_worker(worker_id)
+            self.process.workers.release_worker(worker_id, act)
 
             # 8. Fire Transition in Petri Net Marking
             self.marking = semantics.execute(chosen_t, self.process.net, self.marking)

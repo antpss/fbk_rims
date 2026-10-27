@@ -98,11 +98,6 @@ preprocessing:
   milestone_prefixes:
     - "A_"
     - "O_"
-  # Initial milestone activities present at the start of a case (e.g. for generative arrivals)
-  # DEFAULT: Set to [] or omit if the log has no initial milestones.
-  initial_milestones:
-    - "A_SUBMITTED"
-    - "A_PARTLYSUBMITTED"
 
   # Empirical distribution of initial milestone profiles observed upon case submission
   initial_milestones_distribution:
@@ -111,7 +106,14 @@ preprocessing:
     - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
       probability: 0.65
 
-  # Terminal outcome milestones excluded from decision routing to avoid reverse causality
+  # Dynamic progression: milestones achieved when human tasks complete
+  milestone_progression:
+    "W_Complete application": ["A_ACCEPTED", "O_SELECTED", "A_FINALIZED", "O_CREATED", "O_SENT"]
+    "W_Call after offers": ["O_SENT_BACK"]
+    "W_Validate application": ["A_APPROVED", "A_REGISTERED", "A_ACTIVATED", "O_ACCEPTED"]
+    "W_Handle leads": ["A_PREACCEPTED"]
+
+  # Terminal outcome milestones excluded from decision routing to avoid target leakage
   excluded_milestones:
     - "O_ACCEPTED"
     - "A_DECLINED"
@@ -134,13 +136,7 @@ preprocessing:
 
 # Activities to model (Duration, Waiting Time, Routing)
 # If empty list [] or omitted, RIMS+ automatically discovers and models all activities in the log.
-target_activities:
-  - "W_Assess fraud"
-  - "W_Call after incomplete files"
-  - "W_Call after offers"
-  - "W_Complete application"
-  - "W_Handle leads"
-  - "W_Validate application"
+target_activities: []
 
 # ===================================================================
 # Config-Driven Task Specifications
