@@ -337,14 +337,14 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
     metrics_list = sorted(metrics_list, key=lambda x: x.get("weighted_mae", float("inf")))
 
     print("\n" + "=" * 105)
-    print(f"                     RIMS+ {task_title.upper()} MODEL BENCHMARK RESULTS")
+    print(f"                     RIMS++ {task_title.upper()} MODEL BENCHMARK RESULTS")
     print("=" * 105)
     header = f"{'Configuration':<26} | {'Strategy':<8} | {'Engine':<12} | {'MAE':>18} | {'SMAPE (%)':>9} | {'Train (s)':>9}"
     print(header)
     print("-" * 105)
 
     md_lines = [
-        f"# RIMS+ {task_title} Model Benchmark Report\n",
+        f"# RIMS++ {task_title} Model Benchmark Report\n",
         "| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time (s) |",
         "| :--- | :--- | :--- | :---: | :---: | :---: |"
     ]
@@ -481,7 +481,7 @@ def run_training_experiment(strategy, model_type, task="duration"):
     subprocess.run(cmd, check=True)
 
 def main():
-    parser = argparse.ArgumentParser(description="RIMS+ Model Benchmarking & Comparison Suite")
+    parser = argparse.ArgumentParser(description="RIMS++ Model Benchmarking & Comparison Suite")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Task to benchmark")
     parser.add_argument("--mode", type=str, default=None, choices=["hybrid", "global_tournament", "single_global"],
                         help="Exploration mode (hybrid, global_tournament, single_global). Defaults to config.yaml")
@@ -498,7 +498,7 @@ def main():
 
     if args.run_all:
         print("\n" + "=" * 80)
-        print(f"      LAUNCHING RIMS+ [{args.task.upper()}] BENCHMARK SUITE")
+        print(f"      LAUNCHING RIMS++ [{args.task.upper()}] BENCHMARK SUITE")
         print(f"      Mode: [{mode.upper()}]")
         print("=" * 80)
 

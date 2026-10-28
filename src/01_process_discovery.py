@@ -5,19 +5,12 @@ from pm4py.algo.analysis.woflan import algorithm as woflan
 from config_loader import load_config, PROJECT_ROOT
 
 def main():
-    parser = argparse.ArgumentParser(description="Petri net discovery using Split Miner or Inductive Miner.")
+    parser = argparse.ArgumentParser(description="Petri net discovery using Split Miner.")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
-    parser.add_argument("--miner", choices=["split", "inductive"], default=None,
-                        help="Miner choice (defaults to config.yaml discovery.miner)")
-    parser.add_argument("--noise_threshold", type=float, default=None,
-                        help="Optional override for inductive noise threshold (defaults to config.yaml)")
     args = parser.parse_args()
 
     cfg = load_config(args.config) if args.config else load_config()
     disc_cfg = cfg.get("discovery", {})
-
-    chosen_miner = args.miner if args.miner is not None else disc_cfg.get("miner", "split")
-    noise_threshold = args.noise_threshold if args.noise_threshold is not None else disc_cfg.get("inductive_noise_threshold", 0.2)
 
     # Standard optimal Split Miner parameters
     split_cfg = disc_cfg.get("split_miner", {})
@@ -33,13 +26,13 @@ def main():
         raise FileNotFoundError(f"Input log not found at: {input_log_path}")
     petri_nets_dir = os.path.join(PROJECT_ROOT, cfg["paths"].get("petri_nets_dir", "models/petri_nets"))
     os.makedirs(petri_nets_dir, exist_ok=True)
-    output_pnml_path = os.path.join(petri_nets_dir, f"discovered_model_{chosen_miner}.pnml")
+    output_pnml_path = os.path.join(petri_nets_dir, "discovered_model_split.pnml")
 
     print(f"Loading event log from: {input_log_path}...")
     log = pm4py.read_xes(input_log_path)
     print(f"Log loaded successfully. Number of traces: {len(log)}")
 
-    #filter strictly to process activities and COMPLETE events
+    # Filter strictly to process activities and COMPLETE events
     prep_cfg = cfg.get("preprocessing", {})
     proc_prefixes = prep_cfg.get("process_activity_prefixes", [])
     
@@ -57,23 +50,17 @@ def main():
     print(f"Discovery log filtered to COMPLETE events: {len(df_disc)} events across {df_disc['concept:name'].nunique()} process activities.")
     discovery_log = pm4py.convert_to_event_log(df_disc)
 
-    if chosen_miner == "split":
-        # Discover BPMN model using Split Miner and convert to Petri Net
-        print("Discovering BPMN model using Split Miner...")
-        bpmn_model = pm4py.discover_bpmn_split_miner(
-            discovery_log,
-            epsilon=epsilon,
-            eta=eta,
-            variant=variant,
-            minimize_or_joins=minimize_or_joins
-        )
-        print("Converting BPMN to Petri Net...")
-        net, initial_marking, final_marking = pm4py.convert_to_petri_net(bpmn_model)
-
-    elif chosen_miner == "inductive":
-        # Discover Petri Net directly using Inductive Miner (with noise filtering)
-        print(f"Discovering Petri Net using Inductive Miner (noise_threshold={noise_threshold})...")
-        net, initial_marking, final_marking = pm4py.discover_petri_net_inductive(discovery_log, noise_threshold=noise_threshold)
+    # Discover BPMN model using Split Miner and convert to Petri Net
+    print("Discovering BPMN model using Split Miner...")
+    bpmn_model = pm4py.discover_bpmn_split_miner(
+        discovery_log,
+        epsilon=epsilon,
+        eta=eta,
+        variant=variant,
+        minimize_or_joins=minimize_or_joins
+    )
+    print("Converting BPMN to Petri Net...")
+    net, initial_marking, final_marking = pm4py.convert_to_petri_net(bpmn_model)
 
     print(f"Petri Net created with {len(net.places)} places and {len(net.transitions)} transitions.")
 

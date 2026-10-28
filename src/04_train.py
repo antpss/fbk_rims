@@ -195,7 +195,7 @@ class DurationTCN(nn.Module):
 # Main Unified Training Engine
 # =====================================================================
 def main():
-    parser = argparse.ArgumentParser(description="Unified RIMS+ Model Training Engine")
+    parser = argparse.ArgumentParser(description="Unified RIMS++ Model Training Engine")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Target task to train")
     parser.add_argument("--strategy", type=str, default=None, choices=["global", "local", "hybrid"], help="Override strategy (global, local, hybrid)")
@@ -230,7 +230,7 @@ def main():
     os.makedirs(models_base_dir, exist_ok=True)
 
     print(f"============================================================")
-    print(f"  RIMS+ UNIFIED TRAINING ENGINE")
+    print(f"  RIMS++ UNIFIED TRAINING ENGINE")
     print(f"  Task:        [{task_name.upper()}] (Target: {target_col})")
     print(f"  Strategy:    [{strategy.upper()}]")
     print(f"  Model:       [{model_type.upper()}]")
@@ -614,7 +614,7 @@ def main():
     # EVALUATION RESULTS & BENCHMARK TABLE
     # =================================================================
     print("\n" + "=" * 88)
-    print(f"  RIMS+ [{strategy.upper()}] STRATEGY EVALUATION ({model_type.upper()})")
+    print(f"  RIMS++ [{strategy.upper()}] STRATEGY EVALUATION ({model_type.upper()})")
     print(f"  Total Training Time: {total_training_time:.2f} seconds")
     print("=" * 88)
     print(f"{'Activity':<32} | {'Count':>5} | {'Model Source':<15} | {'MAE':>18} | {'SMAPE (%)':>9}")

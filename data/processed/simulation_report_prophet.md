@@ -1,4 +1,4 @@
-# RIMS+ Simulation Benchmark Report
+# RIMS++ Simulation Benchmark Report
 
 - **Simulation Mode:** `hybrid_residual`
 - **Arrival Mode:** `prophet`
@@ -11,7 +11,7 @@
 
 ## Overall Cycle Time Benchmark
 
-| Metric | Real Historical | Simulated RIMS+ | Difference |
+| Metric | Real Historical | Simulated RIMS++ | Difference |
 |---|---|---|---|
 | **Cases Evaluated** | 9658 | 9,000 | --- |
 | **Total Work Events** | 141567 | 46,152 | --- |

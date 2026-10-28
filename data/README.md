@@ -1,6 +1,6 @@
-# RIMS+ Data Directory Structure
+# RIMS++ Data Directory Structure
 
-This directory organizes all raw, intermediate, and simulated process mining data used by RIMS+.
+This directory organizes all raw, intermediate, and simulated process mining data used by RIMS++.
 
 ## Directory Overview
 

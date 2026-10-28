@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 ================================================================================
-RIMS+ AGNOSTIC CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE
+RIMS++ AGNOSTIC CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE
 File: src/02b_discover_delays.py
 
-Combines Chapela-Campa & Dumas algorithms with RIMS+:
+Combines Chapela-Campa & Dumas algorithms with RIMS++:
   1. Activity Instance Log Builder: Pairs START & COMPLETE lifecycle transitions.
   2. Concurrency Oracle: Detects true concurrency (overlap ratio >= ζ) to avoid
      false delays between parallel branches.
@@ -14,7 +14,7 @@ Combines Chapela-Campa & Dumas algorithms with RIMS+:
      and non-working calendar intervals NW(ρ).
   5. Eclipse-Aware Estimators (Naive, EclAw, EclAw+): Computes extraneous delays
      un-eclipsed by worker busy tasks or off-duty shifts using midpoint extrapolation.
-  6. RIMS+ Causal Orthogonality Tests:
+  6. RIMS++ Causal Orthogonality Tests:
      - WIP Independence Test: r(delay, WIP) < 0.30 confirms external uncoupled nature.
      - Calendar Invariance Test: Off-hours ratio >= 40% confirms 24/7 clock.
   7. Human Inter-Ticket Latency: Mines worker refractory cooldowns (5s - 2h).
@@ -186,9 +186,9 @@ class ConcurrencyOracle:
 # =====================================================================
 class ChapelaDelayDiscoveryEngine:
     """
-    RIMS+ Agnostic Causal Delay & Human Latency Discovery Engine.
+    RIMS++ Agnostic Causal Delay & Human Latency Discovery Engine.
     Fuses Chapela-Campa Concurrency Oracle & EclAw+ Estimators with
-    RIMS+ WIP Orthogonality and Worker Refractory Cooldown Mining.
+    RIMS++ WIP Orthogonality and Worker Refractory Cooldown Mining.
     """
     def __init__(self, cfg, estimator="eclaw_plus", placement="ex_ante",
                  min_delay_hours=1.0, min_samples=30, zeta=0.20, delta=0.05,
@@ -209,7 +209,7 @@ class ChapelaDelayDiscoveryEngine:
 
     def run(self):
         print("\n" + "=" * 85)
-        print("     RIMS+ CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE")
+        print("     RIMS++ CAUSAL DELAY & HUMAN LATENCY DISCOVERY ENGINE")
         print(f"     Algorithm: [{self.estimator.upper()}] | Placement: [{self.placement.upper()}] | ζ={self.zeta} | δ={self.delta}")
         print("=" * 85)
 
@@ -475,13 +475,13 @@ class ChapelaDelayDiscoveryEngine:
             wips = np.array([s["wip"] for s in samples])
             off_ratios = np.array([s["off_calendar_ratio"] for s in samples])
 
-            # RIMS+ WIP Orthogonality Test
+            # RIMS++ WIP Orthogonality Test
             if np.std(wips) > 0 and np.std(delays) > 0:
                 corr, _ = stats.pearsonr(wips, delays)
             else:
                 corr = 0.0
 
-            # RIMS+ Calendar Invariance Test (24/7 Clock Test)
+            # RIMS++ Calendar Invariance Test (24/7 Clock Test)
             mean_off_ratio = float(np.mean(off_ratios))
             is_eud = (abs(corr) < 0.30) and (mean_off_ratio >= 0.40)
             clock_type = "24_7" if mean_off_ratio >= 0.40 else "business_shift"
@@ -591,7 +591,7 @@ class ChapelaDelayDiscoveryEngine:
         manifest = {
             "source_log": self.log_path,
             "discovery_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "engine": "RIMS+ & Chapela-Campa Causal Delay",
+            "engine": "RIMS++ & Chapela-Campa Causal Delay",
             "estimator": self.estimator,
             "placement": self.placement,
             "concurrency_zeta": self.zeta,
@@ -626,7 +626,7 @@ class ChapelaDelayDiscoveryEngine:
     def _write_report(self, path, manifest, delays, all_gaps):
         """Generates comprehensive Markdown report."""
         with open(path, "w") as f:
-            f.write("# RIMS+ Chapela-Campa Extraneous Delay & Human Latency Discovery Report\n\n")
+            f.write("# RIMS++ Chapela-Campa Extraneous Delay & Human Latency Discovery Report\n\n")
             f.write(f"- **Source Log:** `{manifest['source_log']}`\n")
             f.write(f"- **Algorithm:** `{manifest['estimator'].upper()}` (Eclipse-Aware Extrapolation)\n")
             f.write(f"- **Placement:** `{manifest['placement'].upper()}`\n")
@@ -635,7 +635,7 @@ class ChapelaDelayDiscoveryEngine:
             f.write(f"- **Generated:** `{manifest['discovery_timestamp']}`\n\n")
 
             f.write("## 1. Discovered External Uncoupled Delays (EUD)\n\n")
-            f.write("These activity delays passed both the Chapela-Campa un-eclipsed availability test and RIMS+ WIP orthogonality ($|r| < 0.30$):\n\n")
+            f.write("These activity delays passed both the Chapela-Campa un-eclipsed availability test and RIMS++ WIP orthogonality ($|r| < 0.30$):\n\n")
 
             f.write("| Activity | Placement | Positive Ratio | Samples | Median Delay | WIP Corr ($r$) | Clock Type | Best Fit Distribution |\n")
             f.write("|---|---|---|---|---|---|---|---|\n")
@@ -655,7 +655,7 @@ class ChapelaDelayDiscoveryEngine:
 # CLI Entry Point
 # =====================================================================
 def main():
-    parser = argparse.ArgumentParser(description="RIMS+ Chapela-Campa Causal Delay & Human Latency Discovery Engine")
+    parser = argparse.ArgumentParser(description="RIMS++ Chapela-Campa Causal Delay & Human Latency Discovery Engine")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--estimator", type=str, default=None, choices=["eclaw_plus", "eclaw", "naive"],
                         help="Delay estimator: 'eclaw_plus' (extrapolated eclipse-aware), 'eclaw', or 'naive'")

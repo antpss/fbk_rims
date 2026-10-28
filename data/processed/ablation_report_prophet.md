@@ -1,4 +1,4 @@
-# RIMS+ Simulation Ablation Benchmark Report (PROPHET ARRIVAL)
+# RIMS++ Simulation Ablation Benchmark Report (PROPHET ARRIVAL)
 
 - **Arrival Mode:** `prophet`
 - **Evaluated Cases per Mode:** ALL

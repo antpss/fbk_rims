@@ -2,7 +2,7 @@
 """
 src/06_simulate.py
 
-CLI Entrypoint for RIMS+ Discrete-Event Simulation Engine.
+CLI Entrypoint for RIMS++ Discrete-Event Simulation Engine.
 Orchestrates discrete-event simulation via the modular OOP package `src.simulator`:
   - SimulationProcess & SharedWorkerPool (Multi-skilled resource engine)
   - Token (PM4Py Petri net token semantics & XOR Hyperopt decision routing)
@@ -43,7 +43,7 @@ from simulator import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="RIMS+ Modern Discrete-Event Simulator")
+    parser = argparse.ArgumentParser(description="RIMS++ Modern Discrete-Event Simulator")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--cases", type=str, default=None,
                         help="Number of cases to simulate (e.g. 1000, 2500, or 'all')")
@@ -91,7 +91,7 @@ def main():
         results = []
         case_label = f"{num_cases:,}" if num_cases else "ALL"
         print("\n" + "=" * 105)
-        print("                        RIMS+ 2-WAY SIMULATION BENCHMARK SUITE")
+        print("                        RIMS++ 2-WAY SIMULATION BENCHMARK SUITE")
         print(f"                        Evaluating {case_label} cases (Pure Physics vs. Hybrid Residual)")
         print("=" * 105)
 
@@ -111,7 +111,7 @@ def main():
             results.append(res)
 
         print("\n" + "=" * 120)
-        print("                           RIMS+ SIMULATION ABLATION LEADERBOARD")
+        print("                           RIMS++ SIMULATION ABLATION LEADERBOARD")
         print("=" * 120)
         print(f"{'Simulation Mode':<18} | {'Mean Cycle':>14} | {'Median Cycle':>14} | {'Cycle Time MAE':>16} | {'Wasserstein':>14} | {'RED Dist':>12} | {'Run Time':>10}")
         print("-" * 120)
@@ -133,7 +133,7 @@ def main():
         for rep_name in ["ablation_report.md", f"ablation_report_{arrival_mode}.md"]:
             abl_path = os.path.join(PROJECT_ROOT, "data/processed", rep_name)
             with open(abl_path, "w") as f:
-                f.write(f"# RIMS+ Simulation Ablation Benchmark Report ({arrival_mode.upper()} ARRIVAL)\n\n")
+                f.write(f"# RIMS++ Simulation Ablation Benchmark Report ({arrival_mode.upper()} ARRIVAL)\n\n")
                 f.write(f"- **Arrival Mode:** `{arrival_mode}`\n")
                 f.write(f"- **Evaluated Cases per Mode:** {case_label}\n")
                 f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n\n")

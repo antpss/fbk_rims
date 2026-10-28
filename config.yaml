@@ -1,5 +1,5 @@
 # ===================================================================
-# RIMS+ Central Configuration File
+# RIMS++ Central Configuration File
 # ===================================================================
 
 project:
@@ -23,9 +23,8 @@ paths:
   routing_petri_net: "models/petri_nets/discovered_model_split.pnml"
   routing_models_dir: "models/routing"
 
-# Process Discovery Settings
+# Process Discovery Settings (Split Miner)
 discovery:
-  miner: "split"                  # Options: "split", "inductive"
   split_miner:
     epsilon: 0.1
     eta: 0.4
@@ -50,7 +49,7 @@ features:
   prefix_window_size: 10          # History window of past activities (trace prefix)
 
   # Option A: Modular Feature Selection (Registry Pattern)
-  # When selected_features is defined, RIMS+ extracts and trains exclusively on these features.
+  # When selected_features is defined, RIMS++ extracts and trains exclusively on these features.
   # Available:
   #   - wip              (Process-level active case count)
   #   - ac_wip           (Activity-level active case count)
@@ -148,7 +147,7 @@ preprocessing:
     "W_Nabellen incomplete dossiers": "W_Call after incomplete files"
 
 # Activities to model (Duration, Waiting Time, Routing)
-# If empty list [] or omitted, RIMS+ automatically discovers and models all activities in the log.
+# If empty list [] or omitted, RIMS++ automatically discovers and models all activities in the log.
 target_activities: []
 
 # ===================================================================

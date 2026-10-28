@@ -1,6 +1,6 @@
 # Raw Event Logs Directory
 
-This directory stores original benchmark and domain event logs prior to RIMS+ preprocessing and filtering.
+This directory stores original benchmark and domain event logs prior to RIMS++ preprocessing and filtering.
 
 ## Default Dataset: BPI Challenge 2012
 

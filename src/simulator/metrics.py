@@ -111,7 +111,7 @@ class SimulationEvaluator:
         prints formatted comparison tables, and generates a markdown report.
         """
         print("\n" + "=" * 80)
-        print("          RIMS+ SIMULATION VS. REAL LOG BENCHMARK")
+        print("          RIMS++ SIMULATION VS. REAL LOG BENCHMARK")
         print("=" * 80)
 
         # Simulated cycle times
@@ -160,7 +160,7 @@ class SimulationEvaluator:
             sim_tasks_per_case = len(df_sim) / max(1, len(sim_cases))
             tasks_diff = sim_tasks_per_case - real_tasks_per_case
 
-            print(f"Metric                      | Real Historical | Simulated RIMS+ | Difference")
+            print(f"Metric                      | Real Historical | Simulated RIMS++ | Difference")
             print("-" * 75)
             print(f"Cases Evaluated             | {len(real_cases):>15,} | {len(sim_cases):>15,} | ---")
             print(f"Completed Work Tasks        | {len(real_completed):>15,} | {len(df_sim):>15,} | ---")
@@ -172,7 +172,7 @@ class SimulationEvaluator:
             print("=" * 75)
         else:
             real_mean = real_median = mae_cycle = wd = 0.0
-            print(f"Metric                      | Simulated RIMS+ (Generative Mode)")
+            print(f"Metric                      | Simulated RIMS++ (Generative Mode)")
             print("-" * 55)
             print(f"Cases Evaluated             | {len(sim_cases):>15,}")
             print(f"Total Work Events           | {len(df_sim):>15,}")
@@ -208,7 +208,7 @@ class SimulationEvaluator:
         out_base = self.cfg.get("paths", {}).get("output_base_dir", "data/processed")
         rep_path = os.path.join(PROJECT_ROOT, out_base, "simulation_report.md")
         with open(rep_path, "w") as f:
-            f.write("# RIMS+ Simulation Benchmark Report\n\n")
+            f.write("# RIMS++ Simulation Benchmark Report\n\n")
             f.write(f"- **Simulation Mode:** `{self.mode}`\n")
             f.write(f"- **Arrival Mode:** `{self.arrival_mode}`\n")
             f.write(f"- **Simulated Cases:** {len(sim_cases):,}\n")
@@ -222,7 +222,7 @@ class SimulationEvaluator:
             else:
                 f.write("\n")
             f.write("## Overall Cycle Time Benchmark\n\n")
-            f.write("| Metric | Real Historical | Simulated RIMS+ | Difference |\n")
+            f.write("| Metric | Real Historical | Simulated RIMS++ | Difference |\n")
             f.write("|---|---|---|---|\n")
             f.write(f"| **Cases Evaluated** | {len(real_cases) if real_cases is not None else 'N/A'} | {len(sim_cases):,} | --- |\n")
             if real_cases is not None:

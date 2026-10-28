@@ -2,7 +2,7 @@
 """
 src/05_train_routing.py
 
-White-Box XOR Decision Point Mining & Routing Classifier for RIMS+.
+White-Box XOR Decision Point Mining & Routing Classifier for RIMS++.
 Implements the RIMS & RIMS_tool methodology:
   1. Identifies XOR split places (out-degree >= 2) from the Petri net model.
   2. Aligns the event log against the Petri net using PM4Py state-equation A* alignments,
@@ -318,7 +318,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 # =====================================================================
 def main():
     parser = argparse.ArgumentParser(
-        description="White-Box XOR Decision Point Mining & Routing Classifier for RIMS+"
+        description="White-Box XOR Decision Point Mining & Routing Classifier for RIMS++"
     )
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--pnml", type=str, default=None, help="Path to Petri net (PNML file)")
@@ -397,7 +397,7 @@ def main():
         raise FileNotFoundError(f"Event log file not found at: {log_path}")
 
     print("=" * 85)
-    print("  RIMS+ WHITE-BOX XOR DECISION MINING & ROUTING CLASSIFIER")
+    print("  RIMS++ WHITE-BOX XOR DECISION MINING & ROUTING CLASSIFIER")
     print(f"  Petri Net:     {pnml_path}")
     print(f"  Event Log:     {log_path}")
     print(f"  Routing Mode:  {routing_mode.upper()} ({'case payload attributes' if routing_mode == 'payload' else ('inter-arrival time' if routing_mode == 'inter_arrival' else 'payload + inter-arrival')})")
@@ -745,7 +745,7 @@ def main():
 
     # Print Summary Table
     print("\n" + "=" * 95)
-    print(f"  RIMS+ WHITE-BOX DECISION POINT ROUTING BENCHMARK TABLE")
+    print(f"  RIMS++ WHITE-BOX DECISION POINT ROUTING BENCHMARK TABLE")
     print("=" * 95)
     print(f"{'Decision Point Place':<28} | {'Samples':>7} | {'Classes':>7} | {'Strategy':<15} | {'Accuracy':>8} | {'Macro F1':>8} | {'Status':<22}")
     print("-" * 95)

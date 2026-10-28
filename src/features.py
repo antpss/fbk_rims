@@ -1,7 +1,7 @@
 """
 src/features.py
 
-Declarative Feature Registry and Context Manager for RIMS+.
+Declarative Feature Registry and Context Manager for RIMS++.
 Enables clean, YAML-driven selection of feature sets across dataset generation,
 model training, and simulation runtime inference.
 """

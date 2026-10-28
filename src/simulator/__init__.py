@@ -2,7 +2,7 @@
 """
 src/simulator/__init__.py
 
-Modular Discrete-Event Simulation Package for RIMS+.
+Modular Discrete-Event Simulation Package for RIMS++.
 Provides OOP components for:
   - CalendarManager (working shifts, night and weekend pauses)
   - SharedWorkerPool / WorkerManager (multi-skilled human resource engine)

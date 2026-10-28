@@ -459,7 +459,7 @@ class SimulationProcess:
     def run(self):
         """Executes the discrete-event simulation engine and returns evaluation metrics."""
         print("\n" + "=" * 80)
-        print("      RIMS+ MODERN DISCRETE-EVENT SIMULATOR (SIMPY)")
+        print("      RIMS++ MODERN DISCRETE-EVENT SIMULATOR (SIMPY)")
         print(f"      Mode:        [{self.mode.upper()}]")
         print(f"      Arrivals:    [{self.arrival_mode.upper()}] Mode")
         print(f"      Petri Net:   {os.path.basename(self.pnml_path)}")

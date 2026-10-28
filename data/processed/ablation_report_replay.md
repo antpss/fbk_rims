@@ -1,4 +1,4 @@
-# RIMS+ Simulation Ablation Benchmark Report (REPLAY ARRIVAL)
+# RIMS++ Simulation Ablation Benchmark Report (REPLAY ARRIVAL)
 
 - **Arrival Mode:** `replay`
 - **Evaluated Cases per Mode:** 9,000

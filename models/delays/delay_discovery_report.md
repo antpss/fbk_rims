@@ -1,4 +1,4 @@
-# RIMS+ Chapela-Campa Extraneous Delay & Human Latency Discovery Report
+# RIMS++ Chapela-Campa Extraneous Delay & Human Latency Discovery Report
 
 - **Source Log:** `/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes`
 - **Algorithm:** `ECLAW_PLUS` (Eclipse-Aware Extrapolation)
@@ -9,7 +9,7 @@
 
 ## 1. Discovered External Uncoupled Delays (EUD)
 
-These activity delays passed both the Chapela-Campa un-eclipsed availability test and RIMS+ WIP orthogonality ($|r| < 0.30$):
+These activity delays passed both the Chapela-Campa un-eclipsed availability test and RIMS++ WIP orthogonality ($|r| < 0.30$):
 
 | Activity | Placement | Positive Ratio | Samples | Median Delay | WIP Corr ($r$) | Clock Type | Best Fit Distribution |
 |---|---|---|---|---|---|---|---|

@@ -1,4 +1,4 @@
-# RIMS+ Simulation Ablation Benchmark Report (GENERATIVE ARRIVAL)
+# RIMS++ Simulation Ablation Benchmark Report (GENERATIVE ARRIVAL)
 
 - **Arrival Mode:** `generative`
 - **Evaluated Cases per Mode:** 9,000

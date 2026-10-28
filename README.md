@@ -1,9 +1,9 @@
-# RIMS+: Runtime Integration of Machine Learning & Simulation
+# RIMS++: Runtime Integration of Machine Learning & Simulation
 
-**RIMS+** is a Business Process Simulation (BPS) framework that combines Petri net process models with Machine Learning. It discovers process structure, organizational roles, external delays, and routing rules directly from event logs, and simulates process executions in SimPy.
+**RIMS++** is a Business Process Simulation (BPS) framework that combines Petri net process models with Machine Learning. It discovers process structure, organizational roles, external delays, and routing rules directly from event logs, and simulates process executions in SimPy.
 
 What the framework does:
-* **Discovers and Executes Petri Nets**: Mines sound workflow nets from the event log (via Split Miner or Inductive Miner) and executes them using token marking semantics in SimPy.
+* **Discovers and Executes Petri Nets**: Mines sound workflow nets from the event log (via Split Miner) and executes them using token marking semantics in SimPy.
 * **Predicts Durations & Waiting Times with ML**: Trains machine learning models (XGBoost, TCN, LSTM) to predict activity processing and waiting times based on real-time process state (WIP, time of day, queue congestion).
 * **Mines Organizational Roles & Manages Workers**: Discovers roles from the log (*Burattin, Sperduti, & Veluscek, 2013*) and simulates named workers across departments, tracking individual availability, multi-tasking limits, and preventing workers from being in two places at once.
 * **Identifies External Delays & Cooldowns**: Detects delays caused by external factors (e.g. waiting for a customer response) or worker post-task cooldowns using causal estimators (*Chapela-Campa & Dumas, 2022, 2024*).
@@ -20,7 +20,6 @@ fbk_rims/
 ├── requirements.txt                   # Formal project dependencies (PyTorch, SimPy, PM4Py, Prophet, XGBoost)
 ├── context.md                         # Detailed project context, evolution, and architectural blueprint
 ├── README.md                          # Primary reference documentation
-├── readme2.md                         # Generalized, dataset-agnostic pipeline documentation (this file)
 ├── docs/                              # Flowcharts and architecture documentation
 │   └── causal_discovery_flowchart.md  # Triple causal test flowchart for extraneous delays
 ├── data/                              # Data directories
@@ -42,8 +41,7 @@ fbk_rims/
 │   ├── role_mapping.json              # Discovered organizational role partition, rosters, and capacities
 │   ├── role_discovery_report.md       # Organizational role discovery markdown report
 │   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
-│   │   ├── discovered_model_split.pnml     # Workflow net discovered via Split Miner
-│   │   └── discovered_model_inductive.pnml # Workflow net discovered via Inductive Miner
+│   │   └── discovered_model_split.pnml     # Workflow net discovered via Split Miner
 │   ├── delays/                        # Causal delays and worker refractory latencies
 │   │   ├── delay_manifest.json        # Machine-readable delay manifest with KS-fitted distributions
 │   │   └── delay_discovery_report.md  # Statistical delay discovery report
@@ -63,9 +61,9 @@ fbk_rims/
 │   └── prophet/                       # Serialized Facebook Prophet arrival models & metadata
 │       ├── prophet_arrivals_*.json    # Serialized model checkpoint for sub-second startup
 │       └── prophet_arrivals_*_meta.json # Training metadata, log timestamp, and carrying capacity
-├── src/                               # Active RIMS+ Core Pipeline & Simulator Package
+├── src/                               # Active RIMS++ Core Pipeline & Simulator Package
 │   ├── 00_filter_log.py               # Step 0: Raw event log preprocessing, cleaning & prefix partitioning
-│   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split / Inductive Miner)
+│   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split Miner)
 │   ├── 01b_discover_roles.py          # Step 1b: Organizational role mining
 │   ├── view_models.py                 # Step 1c: Petri net visualization (.png export)
 │   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair (PM4Py A* state space)
@@ -91,7 +89,7 @@ fbk_rims/
 
 > [!NOTE]
 > **Reference / Baseline Repositories (`RIMS/` & `RIMS_tool/`)**:
-> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes (Meneghello et al., using TensorFlow 1.x / Keras `.h5` LSTM models). **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS+ pipeline lives entirely in `src/`.
+> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes (Meneghello et al., using TensorFlow 1.x / Keras `.h5` LSTM models). **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS++ pipeline lives entirely in `src/`.
 
 ---
 
@@ -137,10 +135,9 @@ paths:
 ```
 
 ### 2. Process Discovery Settings
-Selects the automated process discovery algorithm and mining thresholds:
+Configures the Split Miner algorithm and graph simplification thresholds:
 ```yaml
 discovery:
-  miner: "split"                  # Options: "split", "inductive"
   split_miner:
     epsilon: 0.1
     eta: 0.4
@@ -303,14 +300,10 @@ python src/00_filter_log.py
 Discovers a structured workflow Petri net from the preprocessed log and verifies mathematical soundness (no deadlocks, proper termination) via PM4Py/Woflan checks:
 
 ```bash
-# Split Miner (Recommended for high precision and balanced complexity)
-python src/01_process_discovery.py --miner split
-
-# Alternatively, Inductive Miner (Guarantees structural soundness)
-python src/01_process_discovery.py --miner inductive --noise_threshold 0.2
+python src/01_process_discovery.py
 ```
 * **Input**: `data/processed/<log_name>_filtered.xes`
-* **Output**: `models/petri_nets/discovered_model_split.pnml` (or `inductive.pnml`)
+* **Output**: `models/petri_nets/discovered_model_split.pnml`
 
 To render high-resolution visual diagrams (`.png`) of discovered Petri nets:
 ```bash
@@ -550,7 +543,7 @@ python src/06_simulate.py --duration 365 --arrival_mode generative
 
 ## Validation Methodology & Evaluation Metrics
 
-RIMS+ evaluates simulation fidelity across both **macro process cycle time metrics** and **micro timestamp event distribution metrics**:
+RIMS++ evaluates simulation fidelity across both **macro process cycle time metrics** and **micro timestamp event distribution metrics**:
 
 ### 1. Macroscopic Cycle Time Metrics
 * **Cycle Time MAE**: Mean Absolute Error between the simulated case durations and the ground-truth historical case durations.
@@ -564,7 +557,7 @@ RIMS+ evaluates simulation fidelity across both **macro process cycle time metri
 
 ### Illustrative Simulation Leaderboard Structure (`data/processed/ablation_report.md`)
 
-When executing `--compare_modes`, RIMS+ generates a comprehensive comparison against the ground-truth historical benchmark:
+When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark:
 
 | Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Execution Time |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |

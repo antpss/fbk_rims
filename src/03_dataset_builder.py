@@ -16,7 +16,7 @@ except ImportError:
     from src.simulator.calendar import CalendarManager
 
 def main():
-    parser = argparse.ArgumentParser(description="Config-Driven Dataset Creation for RIMS+")
+    parser = argparse.ArgumentParser(description="Config-Driven Dataset Creation for RIMS++")
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"],
                         help="Task-specific dataset to generate ('duration' or 'waiting_time')")
@@ -30,7 +30,7 @@ def main():
         
     task_cfg = cfg["tasks"][task_name]
     print(f"============================================================")
-    print(f"  RIMS+ Dataset Builder — Task: [{task_name.upper()}]")
+    print(f"  RIMS++ Dataset Builder — Task: [{task_name.upper()}]")
     print(f"  Description: {task_cfg.get('description', '')}")
     print(f"============================================================")
 

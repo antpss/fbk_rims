@@ -1,7 +1,7 @@
 {
   "source_log": "/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes",
   "discovery_timestamp": "2026-10-21 12:20:04",
-  "engine": "RIMS+ & Chapela-Campa Causal Delay",
+  "engine": "RIMS++ & Chapela-Campa Causal Delay",
   "estimator": "eclaw_plus",
   "placement": "ex_ante",
   "concurrency_zeta": 0.2,
