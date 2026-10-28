@@ -32,6 +32,19 @@ discovery:
     minimize_or_joins: true
     variant: "classic"
 
+# Organizational Role Discovery & Resource Settings
+resources:
+  discovery:
+    algorithm: "sperduti"           # Options: "sperduti", "manual"
+    threshold: 0.35                 # Aggregation threshold (Burattin et al. 2013): 0.35 -> 3 macro roles; >= 0.60 -> 1 role per activity
+    output_file: "models/role_mapping.json"
+    report_file: "models/role_discovery_report.md"
+  simulation:
+    mode: "hybrid_sperduti"         # Options: "hybrid_sperduti" (route by role, dispatch to multi-skilled named workers), "legacy_anonymous", "activity_isolated"
+    dispatch_policy: "longest_idle_first"
+    enable_concurrency_quotas: true # Allows multi-tasking (C_w >= 1) mined from log to prevent artificial serialization
+
+
 # Feature Engineering Settings
 features:
   prefix_window_size: 10          # History window of past activities (trace prefix)

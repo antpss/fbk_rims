@@ -47,11 +47,17 @@ class SharedWorkerPool:
         with open(role_mapping_path, "r") as f:
             data = json.load(f)
 
+        self.activity_to_role = data.get("activity_to_role", {})
+        self.role_to_workers = data.get("role_to_workers", {})
+        self.role_names = data.get("__role_names__") or list(data.get("roles", {}).keys()) or sorted(list(set(self.activity_to_role.values())))
+        self.role_capacities = data.get("role_capacities", {r: 1 for r in self.role_names})
+
         self.all_workers = data.get("__all_resources__", [])
         if not self.all_workers:
             self.all_workers = sorted(list(set.union(*[set(data[k]) for k in data if not k.startswith("__")])))
 
         self.activity_pools = {k: data[k] for k in data if not k.startswith("__")}
+        self.worker_concurrencies = data.get("worker_concurrencies", {})
         self.resource_capacities = data.get("__resource_capacities__", {})
         self.worker_active_count = {w: 0 for w in self.all_workers}
         self.worker_busy = {w: False for w in self.all_workers}
@@ -62,6 +68,8 @@ class SharedWorkerPool:
         self._shift_alarm_active = False
 
     def _get_capacity(self, worker_id):
+        if worker_id in self.worker_concurrencies:
+            return int(self.worker_concurrencies[worker_id])
         return int(self.resource_capacities.get(worker_id, 1))
 
     def _is_worker_free(self, worker_id):
@@ -118,18 +126,41 @@ class SharedWorkerPool:
             else:
                 i += 1
 
-    def get_role_occupancy(self, activities_list):
-        """Returns concurrent activity utilization vector matching Role_*_OC."""
+    def get_role_occupancy(self, activities_list=None):
+        """Returns concurrent departmental utilization vector matching Role_*_OC."""
+        if not self.role_names:
+            # Fallback for legacy 1-to-1 activity pools if no roles are defined
+            activities_list = activities_list or list(self.activity_pools.keys())
+            oc = []
+            for act in activities_list:
+                eligible = self.activity_pools.get(act, self.all_workers)
+                busy_on_act = sum(1 for w in eligible if act in self.worker_activities[w])
+                oc.append(busy_on_act / max(1, len(eligible)))
+            return oc
+
         oc = []
-        for act in activities_list:
-            eligible = self.activity_pools.get(act, self.all_workers)
-            busy_on_act = sum(1 for w in eligible if act in self.worker_activities[w])
-            oc.append(busy_on_act / max(1, len(eligible)))
+        for r in self.role_names:
+            role_workers = self.role_to_workers.get(r, self.all_workers)
+            active_in_role = sum(
+                1 for w in role_workers
+                if any(self.activity_to_role.get(act) == r for act in self.worker_activities[w])
+            )
+            cap = max(1, self.role_capacities.get(r, len(role_workers)))
+            oc.append(min(1.0, active_in_role / cap))
         return oc
 
     def request_worker(self, activity):
-        """Requests an available worker from the activity's eligible skill pool using Longest Idle First."""
-        eligible = self.activity_pools.get(activity, self.all_workers)
+        """
+        Routes the task by organizational role and dispatches to an eligible multi-skilled
+        worker using Longest-Idle-First (LIF) without creating worker ubiquity.
+        """
+        # Step 1: Route by Role
+        role = self.activity_to_role.get(activity)
+        if role and role in self.role_to_workers:
+            eligible = self.role_to_workers[role]
+        else:
+            eligible = self.activity_pools.get(activity, self.all_workers)
+
         free_workers = [w for w in eligible if self._is_worker_free(w)]
         is_working = self._is_working_now()
 
@@ -150,6 +181,7 @@ class SharedWorkerPool:
             ev = self.env.event()
             self.pending_requests.append({
                 "activity": activity,
+                "role": role,
                 "eligible": set(eligible),
                 "event": ev,
                 "req_time": self.env.now
@@ -431,6 +463,8 @@ class SimulationProcess:
         print(f"      Mode:        [{self.mode.upper()}]")
         print(f"      Arrivals:    [{self.arrival_mode.upper()}] Mode")
         print(f"      Petri Net:   {os.path.basename(self.pnml_path)}")
+        if self.workers.role_names:
+            print(f"      Roles:       {len(self.workers.role_names)} Discovered Departments ({', '.join(self.workers.role_names)})")
         print(f"      Workers:     {len(self.workers.all_workers)} Distinct Multi-Skilled Human Agents")
         print(f"      Calendar:    Working Hours {self.calendar.hour_start}:00 - {self.calendar.hour_end}:00 (Mon-Fri)")
         if self.calendar.role_calendars:

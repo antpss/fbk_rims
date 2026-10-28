@@ -124,18 +124,26 @@ def main():
         with open(role_file, 'r') as f:
             role_data = json.load(f)
     else:
-        print(f"{role_file} not found. Automatically discovering resource pools from log...")
         role_data = {}
-        for act in activities:
-            act_df = df[(df["concept:name"] == act) & (df["org:resource"].notna()) & (df["org:resource"].astype(str).str.upper() != "SYNTHETIC")]
-            workers = sorted([str(r) for r in act_df["org:resource"].unique().tolist()])
-            role_data[act] = workers if workers else ["DEFAULT_WORKER"]
-        os.makedirs(os.path.dirname(role_file), exist_ok=True)
-        with open(role_file, 'w') as f:
-            json.dump(role_data, f, indent=2)
-        print(f"Generated {role_file} with resource pools for {len(role_data)} activities.")
-    activity_capacity = {act: max(1, len(role_data.get(act, [1]))) for act in activities}
-    print(f"Activity resource capacities (Role Pools): {activity_capacity}")
+
+    if "activity_to_role" not in role_data or "roles" not in role_data:
+        print(f"Role mapping in {role_file} is missing or legacy. Running Sperduti organizational role discovery...")
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("discover_roles", os.path.join(PROJECT_ROOT, "src", "01b_discover_roles.py"))
+            disc_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(disc_mod)
+            role_data = disc_mod.discover_roles(cfg)
+        except Exception as e:
+            print(f"Warning: Could not automatically run Sperduti role discovery: {e}")
+            role_data = {}
+
+    activity_to_role = role_data.get("activity_to_role", {act: f"Role_{i}" for i, act in enumerate(activities)})
+    role_names = role_data.get("__role_names__") or list(role_data.get("roles", {}).keys()) or sorted(list(set(activity_to_role.values())))
+    role_capacities = role_data.get("role_capacities", {r: 1 for r in role_names})
+    print(f"Discovered Organizational Roles ({len(role_names)}): {role_names}")
+    print(f"Role staffing capacities: {role_capacities}")
+    role_active = defaultdict(int)
 
     ac_wip = defaultdict(int)
     case_event_counts = df['case:concept:name'].value_counts().to_dict()
@@ -201,7 +209,7 @@ def main():
         wip = len(active_cases)
         weekday = timestamp.weekday()
         daytime = (timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second) / 86400.0
-        rp_oc_array = [ac_wip[act] / activity_capacity.get(act, 1) for act in activities]
+        rp_oc_array = [min(1.0, role_active[r] / max(1, role_capacities.get(r, 1))) for r in role_names]
 
         if case_id not in case_prefixes:
             case_prefixes[case_id] = []
@@ -224,6 +232,9 @@ def main():
 
             elif transition == "START":
                 ac_wip[activity_name] += 1
+                act_role = activity_to_role.get(activity_name)
+                if act_role:
+                    role_active[act_role] += 1
                 case_start_times[case_id][activity_name].append(timestamp)
 
                 # Universal Queue Wait Calculation:
@@ -241,6 +252,7 @@ def main():
                     ac_wip=ac_wip,
                     dt=timestamp,
                     role_oc=rp_oc_array,
+                    role_names=role_names,
                     prev_dur=case_prev_time[case_id],
                     offer_count=case_offer_count[case_id],
                     has_offer=1.0 if case_offer_count[case_id] > 0 else 0.0,
@@ -260,6 +272,9 @@ def main():
             elif transition == "COMPLETE":
                 if ac_wip[activity_name] > 0:
                     ac_wip[activity_name] -= 1
+                act_role = activity_to_role.get(activity_name)
+                if act_role and role_active[act_role] > 0:
+                    role_active[act_role] -= 1
 
                 if case_start_times[case_id][activity_name]:
                     start_ts = case_start_times[case_id][activity_name].pop(0)

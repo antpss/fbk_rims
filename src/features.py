@@ -27,6 +27,7 @@ class FeatureContext:
     offer_count: float = 0.0
     has_offer: float = 0.0
     role_oc: List[float] = field(default_factory=list)
+    role_names: List[str] = field(default_factory=list)
     prev_dur: float = 0.0
     worker_id: str = "UNKNOWN"
     all_milestones: List[str] = field(default_factory=list)
