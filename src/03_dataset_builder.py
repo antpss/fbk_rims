@@ -219,7 +219,8 @@ def main():
         # -------------------------------------------------------------
         if milestone_prefixes and activity_name.startswith(milestone_prefixes):
             case_milestones_seen[case_id].add(activity_name)
-            if any(p.startswith("O_") for p in milestone_prefixes) and activity_name.startswith("O_"):
+            # count discrete offer instances (O_CREATED)
+            if any(p.startswith("O_") for p in milestone_prefixes) and activity_name == "O_CREATED":
                 case_offer_count[case_id] += 1
 
         # -------------------------------------------------------------
@@ -237,14 +238,16 @@ def main():
                     role_active[act_role] += 1
                 case_start_times[case_id][activity_name].append(timestamp)
 
-                # Universal Queue Wait Calculation:
-                # START - prev_end_time (inter-activity idle wait from previous completed work item)
+                # Universal Net Queue Wait Calculation:
+                # Effective business working waiting time between previous task completion and current task start
                 if case_id in case_prev_end_time:
-                    current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
+                    current_wait = calendar.calculate_net_working_seconds(
+                        case_prev_end_time[case_id], timestamp, role_or_act=activity_name
+                    )
                 else:
                     current_wait = 0.0
 
-                current_wait = max(0.0, current_wait)
+                current_wait = max(0.0, float(current_wait))
 
                 ctx = FeatureContext(
                     target_act=activity_name,

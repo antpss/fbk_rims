@@ -177,6 +177,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
+    inference_mode: "argmax"         # Options: "argmax" (deterministic white-box rule execution), "sample" (probabilistic leaf sampling)
     mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival", "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest
@@ -197,6 +198,7 @@ model_strategy:
   # - "global_tournament": Trains only global engines (e.g. XGB vs TCN), crowns the best global model
   # - "single_global": Fast baseline, trains only one selected global engine
   mode: "hybrid"
+  split_strategy: "temporal"      # Options: "temporal" (chronological out-of-time split), "random" (case-level random split)
 
   # Used only when mode: "single_global"
   single_global_engine: "xgboost" # Options: "xgboost", "tcn", "lstm"
@@ -256,7 +258,7 @@ simulation:
   human_latency:
     enabled: true                 # Simulate post-task refractory periods (coffee breaks)
     queue_aware: true             # Queue-aware: only take break when queue has no pending tickets
-    max_cooldown: 1800.0          # Max cooldown ceiling in seconds (30 mins)
+    max_cooldown_seconds: 1800.0  # Max cooldown ceiling
   
   # Arrival Configuration (Replay historical timeline vs. Generative distribution vs. Prophet forecasting)
   arrival:

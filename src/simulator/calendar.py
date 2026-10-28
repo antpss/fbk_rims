@@ -160,7 +160,12 @@ class CalendarManager:
                     net_seconds += (win_e - win_s).total_seconds()
             curr_d += timedelta(days=1)
 
-        if net_seconds <= 0:
+        # If an activity starts on a scheduled working day and finishes on the same calendar day
+        # (e.g. worker stayed late past shift end to complete an active call or application),
+        # credit the continuous single-session working duration rather than truncating to near-zero.
+        if s_dt.date() == e_dt.date() and s_dt.date().weekday() in self.work_days and raw_seconds <= 4 * 3600.0:
+            net_seconds = max(net_seconds, raw_seconds)
+        elif net_seconds <= 0:
             net_seconds = min(raw_seconds, 3600.0)
 
         return net_seconds

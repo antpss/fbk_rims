@@ -1,11 +1,11 @@
-# RIMS++ Simulation Ablation Benchmark Report (PROPHET ARRIVAL)
+# RIMS++ Simulation Ablation Benchmark Report (REPLAY ARRIVAL)
 
-- **Arrival Mode:** `prophet`
-- **Evaluated Cases per Mode:** ALL
+- **Arrival Mode:** `replay`
+- **Evaluated Cases per Mode:** 500
 - **Real Historical Mean Cycle Time:** 11.3 days
 
 | Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Run Time |
 |---|---|---|---|---|---|---|
 | **REAL HISTORICAL** | 11.3 days | 8.3 days | --- | --- | --- | --- |
-| `hybrid_residual` ★ (Best) | 16.6 days | 4.8 days | 5.3 days | 7.9 days | 881.06h | 2075.9s |
-| `pure_physics` | 13.9 days | 2.2 days | 2.6 days | 8.7 days | 819.93h | 1333.6s |
+| `hybrid_residual` ★ (Best) | 8.9 days | 3.4 days | 2.5 days | 6.1 days | 85.87h | 44.2s |
+| `pure_physics` | 5.1 days | 1.9 days | 6.3 days | 6.3 days | 103.40h | 24.3s |

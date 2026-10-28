@@ -47,12 +47,12 @@ class Token:
         else:
             self.milestones_seen = set()
 
-        self.offer_count = float(
-            sum(1 for m in self.milestones_seen if m.startswith("O_"))
-            if (any(m.startswith("O_") for m in self.milestones_seen) or any(p.startswith("O_") for p in ms_prefixes))
-            else 0.0
-        )
-        self.has_offer = 1.0 if self.offer_count > 0 else 0.0
+        if any(p.startswith("O_") for p in ms_prefixes):
+            self.offer_count = 1.0 if any(m.startswith("O_") for m in self.milestones_seen) else 0.0
+            self.has_offer = 1.0 if self.offer_count > 0 else 0.0
+        else:
+            self.offer_count = 0.0
+            self.has_offer = 0.0
 
         self.ms_states = ms_states or []
         self.events_done = 0
@@ -78,6 +78,12 @@ class Token:
                         self.milestones_seen.add(m)
             elif isinstance(item, (list, tuple, set)):
                 self.milestones_seen.update(item)
+
+        # Dynamic offer cycle progression on executing offer-generating activity
+        if any(p.startswith("O_") for p in ms_prefixes):
+            if act == "W_Complete application":
+                self.offer_count += 1.0
+                self.has_offer = 1.0
 
     def run(self):
         """
@@ -207,18 +213,20 @@ class Token:
                     prev_dur=self.prev_dur,
                     case_attrs=self.case_attrs
                 )
-                # Damping factor on repeated loop iterations to prevent residual stacking, in details:
-
-                #Count prior executions of this specific activity in this case
+                # Damping factor on repeated loop iterations to prevent residual stacking
                 act_occurrences = self.prefix.count(act)
-
-                #Compute exponential decay factor (1.0 for first visit, 0.5 for 2nd, 0.25 for 3rd...)
                 loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
 
-                #Apply the damped residual waiting time
-                w_worklist = max(0.0, w_ml - ext_delay) * loop_decay
-                if w_worklist > 0:
-                    yield self.env.timeout(w_worklist)
+                # w_ml is net business hours wait; advance across calendar business hours
+                w_worklist_net = max(0.0, w_ml - ext_delay) * loop_decay
+                if w_worklist_net > 0:
+                    actual_worklist_wait = self.process.calendar.calculate_calendar_duration(
+                        self.env.now, w_worklist_net, role_or_act=act
+                    )
+                    yield self.env.timeout(actual_worklist_wait)
+                    w_worklist = actual_worklist_wait
+                else:
+                    w_worklist = 0.0
             else:
                 w_worklist = 0.0
 
@@ -241,6 +249,10 @@ class Token:
             total_wait = ext_delay + w_worklist + shift_gap + w_queue
 
             # 7. Execution Duration with Calendar Working Hours (Per-Role or Global)
+            # Recompute datetime and role occupancy at execution start (t_start)
+            curr_dt = self.process.calendar.to_datetime(t_start)
+            role_oc = self.process.workers.get_role_occupancy(self.process.target_activities)
+
             self.process.ac_wip[act] += 1
             dur_pred = self.process.predictor.predict_duration(
                 act, self.prefix, self.process.active_cases_count,
@@ -286,9 +298,7 @@ class Token:
             # Advance milestone state dynamically based on actual executed activity
             self.update_milestones(act)
 
-            if any(p.startswith("O_") for p in ms_prefixes) or self.offer_count > 0:
-                self.offer_count = float(sum(1 for m in self.milestones_seen if m.startswith("O_")))
-                self.has_offer = 1.0 if self.offer_count > 0 else 0.0
+            self.has_offer = 1.0 if self.offer_count > 0 else 0.0
 
         self.process.active_cases_count = max(0, self.process.active_cases_count - 1)
 

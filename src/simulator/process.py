@@ -64,6 +64,8 @@ class SharedWorkerPool:
         self.worker_activities = {w: [] for w in self.all_workers}
         self.worker_activity = {w: None for w in self.all_workers}
         self.worker_idle_since = {w: 0.0 for w in self.all_workers}
+        self.worker_in_cooldown = {w: False for w in self.all_workers}
+        self.worker_cooldown_events = {}
         self.pending_requests = []
         self._shift_alarm_active = False
 
@@ -73,7 +75,20 @@ class SharedWorkerPool:
         return int(self.resource_capacities.get(worker_id, 1))
 
     def _is_worker_free(self, worker_id):
-        return self.worker_active_count[worker_id] < self._get_capacity(worker_id)
+
+    def _interrupt_cooldown_if_eligible(self, eligible_workers):
+        """Queue-Aware Cooldown: Interrupts refractory break when incoming or pending tickets require worker."""
+        queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
+        if not queue_aware:
+            return None
+        for w in eligible_workers:
+            if self.worker_in_cooldown.get(w, False):
+                ev = self.worker_cooldown_events.get(w)
+                if ev and not ev.triggered:
+                    self.worker_in_cooldown[w] = False
+                    ev.succeed()
+                    return w
+        return None
 
     def _is_working_now(self):
         if not self.calendar or not getattr(self.calendar, "enabled", False):
@@ -112,6 +127,11 @@ class SharedWorkerPool:
                 continue
 
             free_workers = [w for w in req["eligible"] if self._is_worker_free(w)]
+            if not free_workers:
+                interrupted = self._interrupt_cooldown_if_eligible(req["eligible"])
+                if interrupted:
+                    free_workers = [interrupted]
+
             if free_workers:
                 min_idle = min(self.worker_idle_since[w] for w in free_workers)
                 candidates = [w for w in free_workers if self.worker_idle_since[w] == min_idle]
@@ -164,6 +184,12 @@ class SharedWorkerPool:
         free_workers = [w for w in eligible if self._is_worker_free(w)]
         is_working = self._is_working_now()
 
+        # If no free workers, check if an eligible resting worker can be interrupted
+        if is_working and not free_workers:
+            interrupted = self._interrupt_cooldown_if_eligible(eligible)
+            if interrupted:
+                free_workers = [interrupted]
+
         if is_working and free_workers:
             # Longest Idle First: select the worker who has been waiting idle the longest
             min_idle = min(self.worker_idle_since[w] for w in free_workers)
@@ -198,6 +224,12 @@ class SharedWorkerPool:
             self.worker_activities[worker_id].pop()
         self.worker_activity[worker_id] = self.worker_activities[worker_id][-1] if self.worker_activities[worker_id] else None
 
+        # Concurrency slot is freed upon task release
+        self.worker_active_count[worker_id] = max(0, self.worker_active_count[worker_id] - 1)
+        self.worker_busy[worker_id] = not self._is_worker_free(worker_id)
+        if self._is_worker_free(worker_id):
+            self.worker_idle_since[worker_id] = self.env.now
+
         cooldown_enabled = self.latency_cfg.get("enabled", True) if self.latency_cfg else False
         queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
 
@@ -207,12 +239,12 @@ class SharedWorkerPool:
             for req in self.pending_requests
         )
 
-        # Queue-Aware Cooldown: If tickets are waiting, worker immediately takes next ticket.
         # Only take coffee break cooldown if no immediate tickets are waiting.
-        if cooldown_enabled and (not queue_aware or not has_pending_work):
             cooldown = self._sample_cooldown(worker_id)
             if cooldown > 0:
-                self.env.process(self._cooldown_and_dispatch(worker_id, cooldown))
+                self.worker_in_cooldown[worker_id] = True
+                cancel_ev = self.env.event()
+                self.env.process(self._cooldown_and_dispatch(worker_id, cooldown, cancel_ev))
                 return
 
         self._complete_release(worker_id)
@@ -222,7 +254,7 @@ class SharedWorkerPool:
         prof = profiles.get(worker_id) or self.latency_cfg
         dist = prof.get("best_distribution") or prof.get("global_distribution", "lognormal")
         params = prof.get("distribution_params") or prof.get("global_params", {})
-        max_cd = float(self.latency_cfg.get("max_cooldown_seconds", 1800.0))
+        max_cd = float(self.latency_cfg.get("max_cooldown_seconds", self.latency_cfg.get("max_cooldown", 1800.0)))
 
         try:
             if dist == "lognormal":
@@ -236,18 +268,17 @@ class SharedWorkerPool:
         except Exception:
             return float(random.expovariate(1.0 / 300.0))
 
-    def _cooldown_and_dispatch(self, worker_id, cooldown_seconds):
-        yield self.env.timeout(cooldown_seconds)
+    def _cooldown_and_dispatch(self, worker_id, cooldown_seconds, cancel_ev):
+        # Break finishes naturally or is interrupted when pending work arrives
+        yield self.env.timeout(cooldown_seconds) | cancel_ev
         self._complete_release(worker_id)
 
     def _complete_release(self, worker_id):
-        self.worker_active_count[worker_id] = max(0, self.worker_active_count[worker_id] - 1)
         self.worker_busy[worker_id] = not self._is_worker_free(worker_id)
         if self._is_worker_free(worker_id):
             self.worker_idle_since[worker_id] = self.env.now
 
         if not self._is_working_now():
-            self._ensure_shift_alarm()
             return
 
         self._dispatch_all_pending()

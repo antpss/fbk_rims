@@ -409,7 +409,7 @@ class ChampionPredictor:
                     row_df[col] = row_df[col].astype("category")
 
             pred_log1p = model.predict(row_df)[0]
-            val = float(np.expm1(np.clip(pred_log1p, 0.0, 25.0)))
+            val = float(np.expm1(np.clip(pred_log1p, 0.0, 15.0)))
             return max(1.0, val)
 
         elif m_type in ["tcn", "lstm"]:
@@ -479,7 +479,7 @@ class ChampionPredictor:
 
             with torch.no_grad():
                 out = model(seq_t, act_t, feat_t).item()
-            val = float(np.expm1(np.clip(out, 0.0, 25.0)))
+            val = float(np.expm1(np.clip(out, 0.0, 15.0)))
             return max(1.0, val)
 
         return default_fallback
@@ -496,21 +496,19 @@ class ChampionPredictor:
         if p_info.get("strategy") == "machine_learning" and place_id in self.routing_models:
             clf = self.routing_models[place_id]
             feat_cols = p_info["features"]
-            recent_p = prefix[-self.max_seq_len:] if len(prefix) >= self.max_seq_len else ["<START>"] * (self.max_seq_len - len(prefix)) + prefix
 
-            row = {}
-            for k, p_act in enumerate(recent_p):
-                row[f"prefix_{k+1}"] = p_act
-            row["RequestedAmount"] = float(requested_amount)
-            row["Offer_Count"] = float(offer_count)
-            row["Has_Offer"] = float(has_offer)
-            row["offer_count"] = float(offer_count)
-            row["has_offer"] = float(has_offer)
-            row["loop_count"] = float(loop_count)
-            row["prev_activity"] = prefix[-1] if prefix else "<START>"
-            row["hour"] = curr_dt.hour if curr_dt is not None else 12
-            row["weekday"] = curr_dt.weekday() if curr_dt is not None else 0
-            row["inter_arrival_seconds"] = float(inter_arrival_seconds)
+            row = {
+                "RequestedAmount": float(requested_amount),
+                "Offer_Count": float(offer_count),
+                "Has_Offer": float(has_offer),
+                "offer_count": float(offer_count),
+                "has_offer": float(has_offer),
+                "loop_count": float(loop_count),
+                "prev_activity": prefix[-1] if prefix else "<START>",
+                "hour": curr_dt.hour if curr_dt is not None else 12,
+                "weekday": curr_dt.weekday() if curr_dt is not None else 0,
+                "inter_arrival_seconds": float(inter_arrival_seconds),
+            }
 
             if case_attrs:
                 for k, v in case_attrs.items():
@@ -542,7 +540,11 @@ class ChampionPredictor:
                 label_enc = p_info["label_encoding"]
                 idx_to_label = {v: k for k, v in label_enc.items()}
 
-                if hasattr(clf, "predict_proba"):
+                # Configurable routing inference mode (default: argmax)
+                inference_mode = self.cfg.get("tasks", {}).get("routing", {}).get("inference_mode", "argmax")
+                if inference_mode == "argmax":
+                    pred_code = clf.predict(row_df)[0]
+                elif hasattr(clf, "predict_proba"):
                     probas = clf.predict_proba(row_df)[0]
                     p_sum = probas.sum()
                     if p_sum > 0:

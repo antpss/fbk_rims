@@ -294,17 +294,28 @@ def main():
 
     # Case-level 70/10/20 train/val/test split to prevent cross-event data leakage
     seed = cfg["project"]["random_seed"]
+    split_strat = strat_cfg.get("split_strategy", "temporal")
     case_col = 'Case_ID' if 'Case_ID' in df.columns else ('case_id' if 'case_id' in df.columns else None)
 
     if case_col is not None:
         unique_cases = df[case_col].unique()
-        train_val_cases, test_cases = train_test_split(unique_cases, test_size=0.20, random_state=seed)
-        train_cases, val_cases = train_test_split(train_val_cases, test_size=0.125, random_state=seed) # 0.125 * 0.8 = 0.10
+        if split_strat == "temporal":
+            # Out-Of-Time (OOT) Chronological Split: preserves arrival order, zero cross-case temporal leakage
+            n_cases = len(unique_cases)
+            n_train = int(n_cases * 0.70)
+            n_val = int(n_cases * 0.10)
+            train_cases = unique_cases[:n_train]
+            val_cases = unique_cases[n_train:n_train + n_val]
+            test_cases = unique_cases[n_train + n_val:]
+            print(f"\n[Chronological Out-Of-Time 70/10/20 Split] Unique cases: {len(unique_cases)}")
+        else:
+            train_val_cases, test_cases = train_test_split(unique_cases, test_size=0.20, random_state=seed)
+            train_cases, val_cases = train_test_split(train_val_cases, test_size=0.125, random_state=seed) # 0.125 * 0.8 = 0.10
+            print(f"\n[Case-Level Random 70/10/20 Split] Unique cases: {len(unique_cases)}")
 
         train_df = df[df[case_col].isin(train_cases)].reset_index(drop=True)
         val_df = df[df[case_col].isin(val_cases)].reset_index(drop=True)
         test_df = df[df[case_col].isin(test_cases)].reset_index(drop=True)
-        print(f"\n[Case-Level 70/10/20 Split] Unique cases: {len(unique_cases)}")
         print(f"  Train: {len(train_cases)} cases ({len(train_df)} events, {len(train_df)/len(df)*100:.1f}%)")
         print(f"  Val:   {len(val_cases)} cases ({len(val_df)} events, {len(val_df)/len(df)*100:.1f}%)")
         print(f"  Test:  {len(test_cases)} cases ({len(test_df)} events, {len(test_df)/len(df)*100:.1f}%)")

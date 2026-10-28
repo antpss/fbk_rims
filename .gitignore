@@ -23,6 +23,7 @@ original_rims_source
 scraped_rims_docs
 scraped_doc.html
 tests/
+codebase.txt
 
 # Intermediate ML artifacts
 **/catboost_info/

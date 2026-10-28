@@ -1,4 +1,5 @@
 {
+  "routing_mode": "payload",
   "classifier_type": "decision_tree",
   "min_f1_threshold": 0.6,
   "max_depth": 21,
@@ -337,22 +338,22 @@
         "sfl_7880bfc5-2176-4f7b-925d-a22aef0d9ddf"
       ],
       "best_parameters": {
-        "max_depth": 16,
-        "min_samples_split": 3,
-        "min_samples_leaf": 21,
-        "criterion": "entropy",
+        "max_depth": 5,
+        "min_samples_split": 18,
+        "min_samples_leaf": 25,
+        "criterion": "gini",
         "class_weight": null
       },
       "accuracy": 0.9803,
-      "macro_f1": 0.7222,
-      "weighted_f1": 0.9789,
+      "macro_f1": 0.7223,
+      "weighted_f1": 0.9785,
       "confusion_matrix": [
         [
-          1182,
-          9
+          1183,
+          8
         ],
         [
-          15,
+          16,
           10
         ]
       ],
@@ -385,17 +386,17 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.1683,
-        "weekday": 0.0469,
+        "hour": 0.0149,
+        "weekday": 0.0063,
         "prev_activity": 0.0,
-        "loop_count": 0.6089,
+        "loop_count": 0.8224,
         "offer_count": 0.0,
         "has_offer": 0.0,
-        "RequestedAmount": 0.1664,
+        "RequestedAmount": 0.1563,
         "has_A_ACCEPTED": 0.0,
         "has_A_FINALIZED": 0.0,
         "has_A_PARTLYSUBMITTED": 0.0,
-        "has_A_PREACCEPTED": 0.0095,
+        "has_A_PREACCEPTED": 0.0,
         "has_A_SUBMITTED": 0.0,
         "has_O_CREATED": 0.0,
         "has_O_SELECTED": 0.0,
@@ -424,8 +425,8 @@
         "sfl_62b9ad3b-bb63-47fe-adaa-57fd43a71b6a": 853
       },
       "branches_defined": [
-        "sfl_62b9ad3b-bb63-47fe-adaa-57fd43a71b6a",
-        "sfl_a48c0452-15e0-45d5-943b-8c163caedea7"
+        "sfl_a48c0452-15e0-45d5-943b-8c163caedea7",
+        "sfl_62b9ad3b-bb63-47fe-adaa-57fd43a71b6a"
       ],
       "best_parameters": {
         "max_depth": 3,
@@ -434,17 +435,17 @@
         "criterion": "gini",
         "class_weight": "balanced"
       },
-      "accuracy": 0.8561,
-      "macro_f1": 0.7843,
-      "weighted_f1": 0.8461,
+      "accuracy": 0.8633,
+      "macro_f1": 0.7768,
+      "weighted_f1": 0.8526,
       "confusion_matrix": [
         [
-          97,
-          78
+          81,
+          72
         ],
         [
-          22,
-          498
+          20,
+          500
         ]
       ],
       "label_encoding": {
@@ -479,14 +480,14 @@
         "hour": 0.0,
         "weekday": 0.0,
         "prev_activity": 0.0,
-        "loop_count": 0.0483,
+        "loop_count": 0.0513,
         "offer_count": 0.0,
         "has_offer": 0.0,
         "RequestedAmount": 0.0,
-        "has_A_ACCEPTED": 0.1615,
+        "has_A_ACCEPTED": 0.1484,
         "has_A_FINALIZED": 0.0,
         "has_A_PARTLYSUBMITTED": 0.0,
-        "has_A_PREACCEPTED": 0.7903,
+        "has_A_PREACCEPTED": 0.8003,
         "has_A_SUBMITTED": 0.0,
         "has_O_CREATED": 0.0,
         "has_O_SELECTED": 0.0,
@@ -516,35 +517,35 @@
         "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab": 1578
       },
       "branches_defined": [
-        "sfl_e3b0804c-7695-42ff-9fd6-64abbbd2858d",
+        "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab",
         "sfl_209ee772-9f1e-497f-8772-f702cc504bd6",
-        "sfl_15f52369-5f16-47b7-bd64-087ffe38b8ab"
+        "sfl_e3b0804c-7695-42ff-9fd6-64abbbd2858d"
       ],
       "best_parameters": {
-        "max_depth": 7,
-        "min_samples_split": 16,
-        "min_samples_leaf": 8,
-        "criterion": "entropy",
+        "max_depth": 3,
+        "min_samples_split": 15,
+        "min_samples_leaf": 25,
+        "criterion": "gini",
         "class_weight": "balanced"
       },
-      "accuracy": 0.6436,
-      "macro_f1": 0.5829,
-      "weighted_f1": 0.678,
+      "accuracy": 0.6338,
+      "macro_f1": 0.567,
+      "weighted_f1": 0.6629,
       "confusion_matrix": [
         [
-          220,
-          84,
+          262,
+          68,
           0
         ],
         [
-          255,
-          215,
+          313,
+          158,
           0
         ],
         [
-          215,
-          122,
-          786
+          243,
+          71,
+          783
         ]
       ],
       "label_encoding": {
@@ -577,13 +578,13 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.0196,
-        "weekday": 0.0059,
+        "hour": 0.0,
+        "weekday": 0.0,
         "prev_activity": 0.0,
-        "loop_count": 0.0396,
-        "offer_count": 0.0454,
+        "loop_count": 0.0433,
+        "offer_count": 0.0049,
         "has_offer": 0.0,
-        "RequestedAmount": 0.0259,
+        "RequestedAmount": 0.0179,
         "has_A_ACCEPTED": 0.0,
         "has_A_FINALIZED": 0.0,
         "has_A_PARTLYSUBMITTED": 0.0,
@@ -592,12 +593,12 @@
         "has_O_CREATED": 0.0,
         "has_O_SELECTED": 0.0,
         "has_O_SENT": 0.0,
-        "has_O_SENT_BACK": 0.8609,
+        "has_O_SENT_BACK": 0.9339,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0027,
+        "has_W_Handle leads": 0.0,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -631,17 +632,17 @@
         "criterion": "gini",
         "class_weight": "balanced"
       },
-      "accuracy": 0.7942,
-      "macro_f1": 0.764,
-      "weighted_f1": 0.7964,
+      "accuracy": 0.7991,
+      "macro_f1": 0.7651,
+      "weighted_f1": 0.8013,
       "confusion_matrix": [
         [
-          1011,
-          416
+          1004,
+          423
         ],
         [
-          537,
-          2667
+          540,
+          2826
         ]
       ],
       "label_encoding": {
@@ -673,27 +674,27 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.0022,
+        "hour": 0.0,
         "weekday": 0.0,
         "prev_activity": 0.0,
         "loop_count": 0.0,
-        "offer_count": 0.0559,
+        "offer_count": 0.0255,
         "has_offer": 0.0,
         "RequestedAmount": 0.0,
         "has_A_ACCEPTED": 0.0,
-        "has_A_FINALIZED": 0.883,
+        "has_A_FINALIZED": 0.8933,
         "has_A_PARTLYSUBMITTED": 0.0,
-        "has_A_PREACCEPTED": 0.0408,
+        "has_A_PREACCEPTED": 0.039,
         "has_A_SUBMITTED": 0.0,
         "has_O_CREATED": 0.0,
         "has_O_SELECTED": 0.0,
         "has_O_SENT": 0.0,
-        "has_O_SENT_BACK": 0.0,
+        "has_O_SENT_BACK": 0.0247,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0181,
+        "has_W_Handle leads": 0.0175,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -712,27 +713,27 @@
         "sfl_9440a9a8-a283-4441-99df-3c46dbec6376": 1578
       },
       "branches_defined": [
-        "sfl_9440a9a8-a283-4441-99df-3c46dbec6376",
-        "sfl_8efe2c8f-581b-4db0-b64b-a11789b3a938"
+        "sfl_8efe2c8f-581b-4db0-b64b-a11789b3a938",
+        "sfl_9440a9a8-a283-4441-99df-3c46dbec6376"
       ],
       "best_parameters": {
         "max_depth": 21,
-        "min_samples_split": 6,
+        "min_samples_split": 13,
         "min_samples_leaf": 1,
         "criterion": "gini",
         "class_weight": null
       },
-      "accuracy": 0.6579,
-      "macro_f1": 0.4923,
-      "weighted_f1": 0.702,
+      "accuracy": 0.734,
+      "macro_f1": 0.4988,
+      "weighted_f1": 0.7438,
       "confusion_matrix": [
         [
-          1403,
-          564
+          1566,
+          325
         ],
         [
-          217,
-          99
+          262,
+          54
         ]
       ],
       "label_encoding": {
@@ -764,13 +765,13 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.2026,
-        "weekday": 0.1405,
+        "hour": 0.2454,
+        "weekday": 0.1349,
         "prev_activity": 0.0,
-        "loop_count": 0.1686,
-        "offer_count": 0.2554,
+        "loop_count": 0.2623,
+        "offer_count": 0.0644,
         "has_offer": 0.0,
-        "RequestedAmount": 0.1949,
+        "RequestedAmount": 0.2519,
         "has_A_ACCEPTED": 0.0,
         "has_A_FINALIZED": 0.0,
         "has_A_PARTLYSUBMITTED": 0.0,
@@ -784,7 +785,7 @@
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.038,
+        "has_W_Handle leads": 0.0411,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -811,23 +812,23 @@
         "sfl_8e385c9d-a3fc-4b79-b4e4-3e1f18168d4a"
       ],
       "best_parameters": {
-        "max_depth": 11,
-        "min_samples_split": 7,
-        "min_samples_leaf": 5,
+        "max_depth": 4,
+        "min_samples_split": 15,
+        "min_samples_leaf": 20,
         "criterion": "gini",
-        "class_weight": null
+        "class_weight": "balanced"
       },
-      "accuracy": 0.838,
-      "macro_f1": 0.8023,
-      "weighted_f1": 0.8378,
+      "accuracy": 0.8284,
+      "macro_f1": 0.7956,
+      "weighted_f1": 0.8314,
       "confusion_matrix": [
         [
-          1022,
-          405
+          1084,
+          343
         ],
         [
-          396,
-          3120
+          527,
+          3117
         ]
       ],
       "label_encoding": {
@@ -859,27 +860,27 @@
         "has_W_Validate application"
       ],
       "feature_importances": {
-        "hour": 0.0187,
-        "weekday": 0.0117,
+        "hour": 0.0,
+        "weekday": 0.0,
         "prev_activity": 0.0,
-        "loop_count": 0.1337,
-        "offer_count": 0.0946,
+        "loop_count": 0.0425,
+        "offer_count": 0.0133,
         "has_offer": 0.0,
-        "RequestedAmount": 0.0253,
+        "RequestedAmount": 0.0,
         "has_A_ACCEPTED": 0.0,
-        "has_A_FINALIZED": 0.4126,
+        "has_A_FINALIZED": 0.4202,
         "has_A_PARTLYSUBMITTED": 0.0,
         "has_A_PREACCEPTED": 0.0,
         "has_A_SUBMITTED": 0.0,
         "has_O_CREATED": 0.0,
         "has_O_SELECTED": 0.0,
         "has_O_SENT": 0.0,
-        "has_O_SENT_BACK": 0.3022,
+        "has_O_SENT_BACK": 0.524,
         "has_W_Assess fraud": 0.0,
         "has_W_Call after incomplete files": 0.0,
         "has_W_Call after offers": 0.0,
         "has_W_Complete application": 0.0,
-        "has_W_Handle leads": 0.0012,
+        "has_W_Handle leads": 0.0,
         "has_W_Validate application": 0.0
       },
       "cat_mappings": {
@@ -899,8 +900,8 @@
         "sfl_f4bb1369-90cb-458a-88ba-af8a80ada8ad": 2597
       },
       "branches_defined": [
-        "sfl_29e750fe-6eab-4957-9f5f-532da56aa994",
         "sfl_f4bb1369-90cb-458a-88ba-af8a80ada8ad",
+        "sfl_29e750fe-6eab-4957-9f5f-532da56aa994",
         "sfl_fd23cc6c-f68a-4780-b2c2-e08b955a4062"
       ],
       "strategy": "empirical_probability",

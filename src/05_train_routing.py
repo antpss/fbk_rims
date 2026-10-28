@@ -121,7 +121,7 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, window_size=10, case_attrs_cfg=None, milestone_prefixes=None, excluded_milestones=None, routing_mode="payload"):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, milestone_prefixes=None, excluded_milestones=None, routing_mode="payload"):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
     Extracts prefix history, loop counts, milestone business state, offer counts,
@@ -264,7 +264,8 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                 if ms_prefixes_tuple and log_label.startswith(ms_prefixes_tuple):
                     if log_label not in excluded_ms:
                         milestones_seen.add(log_label)
-                if log_label.startswith("O_"):
+                # count discrete offer instances (O_CREATED)
+                if log_label == "O_CREATED":
                     offer_count += 1
 
             # 2. Skip if transition did not fire in Petri net
@@ -429,7 +430,6 @@ def main():
         log_path=log_path,
         pnml_path=pnml_path,
         xor_decision_points=xor_points,
-        window_size=window_size,
         case_attrs_cfg=case_attrs_cfg,
         milestone_prefixes=milestone_prefixes,
         excluded_milestones=excluded_milestones,

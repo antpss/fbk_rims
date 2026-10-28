@@ -62,19 +62,36 @@ class SimulationEvaluator:
         print(f"[✓] Saved simulated event log (CSV) to: {self.sim_log_path}")
 
     def save_xes(self, df_sim):
-        """Saves simulated event log to standard IEEE XES format using PM4Py."""
+        """Saves simulated event log to standard IEEE XES format with paired START and COMPLETE transitions."""
         if not self.export_xes or len(df_sim) == 0:
             return
-        df_xes = df_sim.copy()
-        df_xes["case:concept:name"] = df_xes["case_id"].astype(str)
-        df_xes["concept:name"] = df_xes["activity"]
-        df_xes["time:timestamp"] = pd.to_datetime(df_xes["complete_timestamp"])
-        df_xes["start_timestamp"] = pd.to_datetime(df_xes["start_timestamp"])
-        df_xes["org:resource"] = df_xes["resource_id"]
-        df_xes["lifecycle:transition"] = "complete"
+
+        # Paired START lifecycle events
+        df_start = df_sim.copy()
+        df_start["case:concept:name"] = df_start["case_id"].astype(str)
+        df_start["concept:name"] = df_start["activity"]
+        df_start["time:timestamp"] = pd.to_datetime(df_start["start_timestamp"])
+        df_start["org:resource"] = df_start["resource_id"]
+        df_start["lifecycle:transition"] = "start"
+        df_start["_trans_order"] = 0
+
+        # Paired COMPLETE lifecycle events
+        df_comp = df_sim.copy()
+        df_comp["case:concept:name"] = df_comp["case_id"].astype(str)
+        df_comp["concept:name"] = df_comp["activity"]
+        df_comp["time:timestamp"] = pd.to_datetime(df_comp["complete_timestamp"])
+        df_comp["org:resource"] = df_comp["resource_id"]
+        df_comp["lifecycle:transition"] = "complete"
+        df_comp["_trans_order"] = 1
+
+        df_paired = pd.concat([df_start, df_comp], ignore_index=True)
+        df_paired = df_paired.sort_values(
+            by=["case:concept:name", "time:timestamp", "_trans_order"]
+        ).drop(columns=["_trans_order"]).reset_index(drop=True)
+
         os.makedirs(os.path.dirname(self.output_simulated_xes), exist_ok=True)
-        pm4py.write_xes(df_xes, self.output_simulated_xes)
-        print(f"[✓] Saved standard IEEE XES log to: {self.output_simulated_xes}")
+        pm4py.write_xes(df_paired, self.output_simulated_xes)
+        print(f"[✓] Saved standard IEEE XES log with paired lifecycle ({len(df_paired)} events) to: {self.output_simulated_xes}")
 
     def compute_red_distance(self, df_real, df_sim, bin_size_hours=1.0):
         """
