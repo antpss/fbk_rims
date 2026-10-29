@@ -318,7 +318,11 @@ python src/view_models.py
 Discovers the underlying organizational structure and operational departments directly from the event log using the **Burattin–Sperduti Multiset Jaccard Similarity Algorithm** (*Burattin, Sperduti, & Veluscek, 2013*):
 
 1. **Multiset Jaccard Similarity**: Evaluates pairwise activity profile overlap between all recorded human originators:
-   $$S(a_i, a_j) = \frac{\sum_{r \in R} \min\big(p_i(r), p_j(r)\big)}{\sum_{r \in R} \max\big(p_i(r), p_j(r)\big)}$$
+
+$$
+S(a_i, a_j) = \frac{\sum_{r \in R} \min\big(p_i(r), p_j(r)\big)}{\sum_{r \in R} \max\big(p_i(r), p_j(r)\big)}
+$$
+
    where $p_i(r)$ denotes the number of times worker $r$ executed activity $a_i$.
 
 2. **Agglomerative Department Partitioning**:
@@ -327,13 +331,12 @@ Discovers the underlying organizational structure and operational departments di
      * A strict threshold (e.g. $\theta \ge 0.60$) separates tasks into highly specialized roles (approaching 1 role per activity).
    * Maps every activity to a discovered role, lists all qualified human workers, and calculates effective staffing capacity.
 
-3. **Empirical Multi-Tasking Quotas (C_w)**
-
+3. **Empirical Multi-Tasking Quotas ($C_w$)**:
    Computes the 95th percentile of concurrent active cases per worker directly from historical event intervals:
 
-   $$
-   C_w = \text{Percentile}_{95}\left(\text{active\_cases}(w,t)\right)
-   $$
+$$
+C_w = \text{Percentile}_{95}\big(\operatorname{active\_cases}(w, t)\big)
+$$
 
    This enables workers to interleave tasks naturally (e.g. desk office work, phone follow-ups) without causing artificial queue serialization.
 
@@ -390,9 +393,11 @@ Sweeps the aligned log chronologically to construct state feature vectors withou
   * `Weekday_0` $\dots$ `Weekday_6`: One-hot indicators for day of the week.
 * **Dynamic Departmental Occupancy (`Role_k_OC`)**:
   Computes the real-time utilization vector for each discovered organizational role:
-  $$
-  \text{Role\_k\_OC}(t) = \min\left(1.0, \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)
-  $$
+
+$$
+\text{Role\_k\_OC}(t) = \min\left(1.0, \; \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)
+$$
+
   providing ML regressors with continuous macro-level departmental congestion signals.
 * **Declarative Case & Event Attributes**:
   Extracts case-level attributes (e.g. case category, cost, requested amount, customer tier) with empirical median/mode imputation governed by `treat_zero_as_missing`.
@@ -556,7 +561,11 @@ RIMS++ evaluates simulation fidelity across both **macro process cycle time metr
 * **Cycle Time MAE**: Mean Absolute Error between the simulated case durations and the ground-truth historical case durations.
 * **Mean & Median Cycle Time**: Validates whether the simulation accurately replicates overall business turnaround times without systemic under- or over-estimation.
 * **1D Wasserstein Distance (Earth Mover's Distance on Cycle Time)**: Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
-  $$W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx$$
+
+$$
+W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx
+$$
+
   providing a robust, scale-sensitive distance metric between duration curves.
 
 ### 2. Microscopic Event Distribution Metrics
