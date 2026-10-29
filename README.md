@@ -208,8 +208,8 @@ preprocessing:
 
 > [!NOTE]
 > **Understanding Prefix Filtering (Standard Logs vs. Multi-Stream Logs)**:
-> * **Standard Single-Lifecycle Logs (Default)**: In the vast majority of event logs (e.g., healthcare workflows, manufacturing tickets, IT incident logs), all recorded events represent operational tasks. In this setting, simply leave `process_activity_prefixes: []` and `milestone_prefixes: []`. Every activity in the log is modeled directly in the Petri net, trained for duration/waiting time, and assigned to organizational roles.
-> * **Multi-Stream Event Logs (e.g., BPI Challenge 2012 / 2017)**: Certain enterprise logs record multiple interleaved event streams within the same trace — for instance, transactional human work items (e.g., prefixed with `W_`) alongside asynchronous case status milestones (e.g., application milestones prefixed with `A_` or offer updates prefixed with `O_`). For these logs, configuring `process_activity_prefixes: ["W_"]` and `milestone_prefixes: ["A_", "O_"]` cleanly decouples human work items for Petri net execution while transforming the asynchronous milestone streams into dynamic contextual features (`Milestone_<NAME>`), avoiding Petri net spaghetti models.
+> * **Standard Single-Lifecycle Logs (Default)**: In the vast majority of event logs all recorded events represent operational tasks. In this setting, simply leave `process_activity_prefixes: []` and `milestone_prefixes: []`. Every activity in the log is modeled directly in the Petri net, trained for duration/waiting time, and assigned to organizational roles.
+> * **Multi-Stream Event Logs (e.g., BPI Challenge 2012 / 2017)**: Certain enterprise logs record multiple interleaved event streams within the same trace — for instance, transactional human work items (e.g., prefixed with `W_`) alongside asynchronous case status milestones (e.g., application milestones prefixed with `A_` or offer updates prefixed with `O_`). For these logs, configuring `process_activity_prefixes: ["W_"]` and `milestone_prefixes: ["A_", "O_"]` cleanly decouples human work items for Petri net execution while transforming the asynchronous milestone streams into dynamic contextual features (`Milestone_<NAME>`).
 
 ### 6. Config-Driven Task Specifications
 ```yaml
@@ -329,7 +329,9 @@ Discovers the underlying organizational structure and operational departments di
 
 3. **Empirical Multi-Tasking Quotas ($C_w$)**:
    Computes the 95th percentile of concurrent active cases per worker directly from historical event intervals:
-   $$C_w = \text{Percentile}_{95}\big(\text{active\_cases}(w, t)\big)$$
+   $$
+   C_w = \text{Percentile}_{95}\big(\texttt{active\_cases}(w, t)\big)
+   $$
    This enables workers to interleave tasks naturally (e.g. desk office work, phone follow-ups) without causing artificial queue serialization.
 
 ```bash
@@ -385,7 +387,9 @@ Sweeps the aligned log chronologically to construct state feature vectors withou
   * `Weekday_0` $\dots$ `Weekday_6`: One-hot indicators for day of the week.
 * **Dynamic Departmental Occupancy (`Role_k_OC`)**:
   Computes the real-time utilization vector for each discovered organizational role:
-  $$\text{Role\_k\_OC}(t) = \min\left(1.0, \; \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)$$
+  $$
+  \text{Role\_k\_OC}(t) = \min\left(1.0, \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)
+  $$
   providing ML regressors with continuous macro-level departmental congestion signals.
 * **Declarative Case & Event Attributes**:
   Extracts case-level attributes (e.g. case category, cost, requested amount, customer tier) with empirical median/mode imputation governed by `treat_zero_as_missing`.
@@ -557,7 +561,7 @@ RIMS++ evaluates simulation fidelity across both **macro process cycle time metr
 
 ### Illustrative Simulation Leaderboard Structure (`data/processed/ablation_report.md`)
 
-When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark:
+When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark, for example:
 
 | Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Execution Time |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
