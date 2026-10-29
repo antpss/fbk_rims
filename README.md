@@ -335,7 +335,7 @@ $$
    Computes the 95th percentile of concurrent active cases per worker directly from historical event intervals:
 
 $$
-C_w = \text{Percentile}_{95}\big(\operatorname{active\_cases}(w, t)\big)
+C_w = \text{Percentile}_{95}\big(\text{ActiveCases}(w, t)\big)
 $$
 
    This enables workers to interleave tasks naturally (e.g. desk office work, phone follow-ups) without causing artificial queue serialization.
@@ -395,7 +395,7 @@ Sweeps the aligned log chronologically to construct state feature vectors withou
   Computes the real-time utilization vector for each discovered organizational role:
 
 $$
-\text{Role\_k\_OC}(t) = \min\left(1.0, \; \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)
+\text{Role}_k^{\text{OC}}(t) = \min\left(1.0, \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)
 $$
 
   providing ML regressors with continuous macro-level departmental congestion signals.
@@ -561,11 +561,7 @@ RIMS++ evaluates simulation fidelity across both **macro process cycle time metr
 * **Cycle Time MAE**: Mean Absolute Error between the simulated case durations and the ground-truth historical case durations.
 * **Mean & Median Cycle Time**: Validates whether the simulation accurately replicates overall business turnaround times without systemic under- or over-estimation.
 * **1D Wasserstein Distance (Earth Mover's Distance on Cycle Time)**: Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
-
-$$
-W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx
-$$
-
+  $$W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx$$
   providing a robust, scale-sensitive distance metric between duration curves.
 
 ### 2. Microscopic Event Distribution Metrics
