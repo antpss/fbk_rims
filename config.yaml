@@ -121,7 +121,8 @@ preprocessing:
   # Dynamic progression: milestones achieved when human tasks complete
   milestone_progression:
     "W_Complete application": ["A_ACCEPTED", "O_SELECTED", "A_FINALIZED", "O_CREATED", "O_SENT"]
-    "W_Call after offers": ["O_SENT_BACK"]
+    "W_Call after offers":
+      "O_SENT_BACK": 0.15
     "W_Validate application": ["A_APPROVED", "A_REGISTERED", "A_ACTIVATED", "O_ACCEPTED"]
     "W_Handle leads": ["A_PREACCEPTED"]
 
@@ -177,7 +178,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
-    inference_mode: "argmax"         # Options: "argmax" (deterministic white-box rule execution), "sample" (probabilistic leaf sampling)
+    inference_mode: "sample"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
     mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival", "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest

@@ -382,9 +382,10 @@ class SimulationProcess:
                         if trig and res:
                             self.external_delays[(trig, res)] = d
 
-                    # Also register causal transition arcs if present
+                    # Also register causal transition arcs if external (or if internal delays are enabled)
                     for d in self.delay_manifest.get("causal_transition_arcs", []):
-                        self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
+                        if use_all or d.get("is_external", False) or d.get("resume_activity") in self.ex_ante_delays:
+                            self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
 
             except Exception as e:
                 print(f"[!] Warning: Failed to load delay manifest: {e}")
@@ -476,6 +477,11 @@ class SimulationProcess:
         return self._sample_delay_dist(d)
 
     def _sample_delay_dist(self, d):
+        # Hurdle gate: only sample from the positive delay distribution with probability positive_delay_ratio
+        pos_ratio = float(d.get("positive_delay_ratio", 1.0))
+        if random.random() > pos_ratio:
+            return 0.0
+
         dist = d.get("best_distribution", "lognormal")
         params = d.get("distribution_params", {})
         try:

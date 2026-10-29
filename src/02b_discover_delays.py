@@ -527,16 +527,28 @@ class ChapelaDelayDiscoveryEngine:
                 continue
             delays = np.array([s["delay_seconds"] for s in samples])
             pos = delays[delays > 0]
-            if len(pos) / len(delays) < self.delta:
+            pos_ratio = len(pos) / len(delays)
+            if pos_ratio < self.delta:
                 continue
             med = float(np.median(pos)) if len(pos) > 0 else 0.0
             if med < self.min_delay_seconds:
                 continue
+
+            wips = np.array([s["wip"] for s in samples])
+            off_ratios = np.array([s["off_calendar_ratio"] for s in samples])
+            corr = stats.pearsonr(wips, delays)[0] if (np.std(wips) > 0 and np.std(delays) > 0) else 0.0
+            mean_off_ratio = float(np.mean(off_ratios))
+            is_eud = (abs(corr) < 0.30) and (mean_off_ratio >= 0.40)
+
             fit_r = fit_best_distribution(pos)
             arc_manifest_entries.append({
                 "trigger_activity": act_a,
                 "resume_activity": act_b,
                 "sample_count": len(samples),
+                "positive_delay_ratio": round(float(pos_ratio), 4),
+                "is_external": bool(is_eud),
+                "clock_type": "24_7" if mean_off_ratio >= 0.40 else "business_shift",
+                "median_hours": round(float(med / 3600.0), 2),
                 "median_days": round(float(med / 86400.0), 2),
                 "best_distribution": fit_r["distribution"],
                 "distribution_params": fit_r["params"]

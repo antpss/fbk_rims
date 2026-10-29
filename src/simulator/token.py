@@ -191,13 +191,17 @@ class Token:
                 self.prev_dur = 0.0
                 continue
 
-            # 3. Chapela-Campa Ex-Ante Extraneous Delay or Transition-Arc Delay
+            # Damping factor on repeated loop iterations to prevent unbounded delay stacking
+            act_occurrences = self.prefix.count(act)
+            loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
+
+            # 3. Chapela-Campa Transition-Arc Delay (specific) or Ex-Ante Extraneous Delay (generic fallback)
             ext_delay = 0.0
             ext_delay_net = 0.0
-            if self.process.has_ex_ante_delay(act):
-                ext_delay = self.process.sample_ex_ante_delay(act)
-            elif self.prev_act and (self.prev_act, act) in self.process.external_delays:
-                ext_delay = self.process.sample_external_delay(self.prev_act, act)
+            if self.prev_act and (self.prev_act, act) in self.process.external_delays:
+                ext_delay = self.process.sample_external_delay(self.prev_act, act) * loop_decay
+            elif self.process.has_ex_ante_delay(act):
+                ext_delay = self.process.sample_ex_ante_delay(act) * loop_decay
 
             if ext_delay > 0:
                 t_before_ext = self.env.now
@@ -220,12 +224,8 @@ class Token:
                     prev_dur=self.prev_dur,
                     case_attrs=self.case_attrs
                 )
-                # Damping factor on repeated loop iterations to prevent residual stacking
-                act_occurrences = self.prefix.count(act)
-                loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
-
                 # w_ml is net business hours wait; subtract net external delay to match units
-                w_worklist_net = max(0.0, w_ml - ext_delay_net) * loop_decay
+                w_worklist_net = max(0.0, w_ml * loop_decay - ext_delay_net)
                 if w_worklist_net > 0:
                     actual_worklist_wait = self.process.calendar.calculate_calendar_duration(
                         self.env.now, w_worklist_net, role_or_act=act

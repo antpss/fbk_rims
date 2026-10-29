@@ -574,7 +574,7 @@ class ChampionPredictor:
             try:
                 label_enc = p_info["label_encoding"]
                 idx_to_label = {v: k for k, v in label_enc.items()}
-                inference_mode = self.cfg.get("tasks", {}).get("routing", {}).get("inference_mode", "argmax")
+                inference_mode = self.cfg.get("tasks", {}).get("routing", {}).get("inference_mode", "sample")
 
                 is_xgb = "xgb" in str(type(clf)).lower()
                 if is_xgb:
