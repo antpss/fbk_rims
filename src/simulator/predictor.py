@@ -15,7 +15,10 @@ import json
 import random
 import logging
 import importlib
+import warnings
 from datetime import datetime
+
+warnings.filterwarnings("ignore", message=".*does not have valid feature names.*")
 
 logger = logging.getLogger("rims_predictor")
 
@@ -397,17 +400,25 @@ class ChampionPredictor:
             else:
                 cols_to_use = [c for c in row_dict.keys() if c in self.feature_cols or c.startswith("Act_Minus_") or c == "Target_Activity"]
 
-            row_df = pd.DataFrame([{c: row_dict.get(c, 0.0) for c in cols_to_use}])[cols_to_use]
             prefix_dtype = suite.get("prefix_cat_dtype")
             target_dtype = suite.get("target_act_dtype")
-            for col in row_df.columns:
-                if col.startswith("Act_Minus_"):
-                    row_df[col] = pd.Categorical(row_df[col], dtype=prefix_dtype) if prefix_dtype is not None else row_df[col].astype("category")
-                elif col == "Target_Activity":
-                    row_df[col] = pd.Categorical(row_df[col], dtype=target_dtype) if target_dtype is not None else row_df[col].astype("category")
-                elif col == "Resource_ID":
-                    row_df[col] = row_df[col].astype("category")
+            resource_dtype = suite.get("resource_cat_dtype")
 
+            col_dict = {}
+            for col in cols_to_use:
+                if col.startswith("Act_Minus_"):
+                    val = row_dict.get(col, "NONE")
+                    col_dict[col] = pd.Categorical([val], dtype=prefix_dtype) if prefix_dtype is not None else [val]
+                elif col == "Target_Activity":
+                    val = row_dict.get(col, activity)
+                    col_dict[col] = pd.Categorical([val], dtype=target_dtype) if target_dtype is not None else [val]
+                elif col == "Resource_ID":
+                    val = row_dict.get(col, "UNKNOWN")
+                    col_dict[col] = pd.Categorical([val], dtype=resource_dtype) if resource_dtype is not None else [val]
+                else:
+                    col_dict[col] = [row_dict.get(col, 0.0)]
+
+            row_df = pd.DataFrame(col_dict)
             pred_log1p = model.predict(row_df)[0]
             val = float(np.expm1(np.clip(pred_log1p, 0.0, 15.0)))
             return max(1.0, val)
@@ -447,28 +458,62 @@ class ChampionPredictor:
                     scaler = suite["scalers"].get("scaler_global.pkl") or suite["scalers"].get("scaler_local.pkl")
                 entry["scaler"] = scaler
 
+            if "scaler_mean" not in entry and scaler is not None and hasattr(scaler, "mean_"):
+                entry["scaler_mean"] = scaler.mean_.astype(np.float32)
+                entry["scaler_scale"] = scaler.scale_.astype(np.float32)
+
             if "cols" not in entry:
                 entry["cols"] = list(scaler.feature_names_in_) if (scaler and hasattr(scaler, "feature_names_in_")) else self.feature_cols
             cols = entry["cols"]
-            feat_dict = {}
-            for c in cols:
-                if c in f_dict:
-                    feat_dict[c] = f_dict[c]
-                elif c.startswith("Milestone_"):
-                    m_name = c[len("Milestone_"):]
-                    feat_dict[c] = 1.0 if m_name in milestones_seen else 0.0
-                elif c == "Offer_Count":
-                    feat_dict[c] = float(offer_count)
-                elif c == "Has_Offer":
-                    feat_dict[c] = float(has_offer)
-                else:
-                    feat_dict[c] = 0.0
-            feat_df = pd.DataFrame([feat_dict])[cols]
-            if scaler:
-                feat_vals = scaler.transform(feat_df)
+
+            if "scaler_mean" in entry:
+                feat_raw = []
+                for c in cols:
+                    if c in f_dict:
+                        feat_raw.append(float(f_dict[c]))
+                    elif c.startswith("Milestone_"):
+                        m_name = c[len("Milestone_"):]
+                        feat_raw.append(1.0 if m_name in milestones_seen else 0.0)
+                    elif c == "Offer_Count":
+                        feat_raw.append(float(offer_count))
+                    elif c == "Has_Offer":
+                        feat_raw.append(float(has_offer))
+                    else:
+                        feat_raw.append(0.0)
+                feat_arr = (np.array([feat_raw], dtype=np.float32) - entry["scaler_mean"]) / entry["scaler_scale"]
+                feat_t = torch.from_numpy(feat_arr)
             else:
-                feat_vals = feat_df.values.astype(np.float32)
-            feat_t = torch.tensor(feat_vals, dtype=torch.float32)
+                feat_dict = {}
+                for c in cols:
+                    if c in f_dict:
+                        feat_dict[c] = f_dict[c]
+                    elif c.startswith("Milestone_"):
+                        m_name = c[len("Milestone_"):]
+                        feat_dict[c] = 1.0 if m_name in milestones_seen else 0.0
+                    elif c == "Offer_Count":
+                        feat_dict[c] = float(offer_count)
+                    elif c == "Has_Offer":
+                        feat_dict[c] = float(has_offer)
+                    else:
+                        feat_dict[c] = 0.0
+                feat_df = pd.DataFrame([feat_dict])[cols]
+                if scaler:
+                    feat_vals = scaler.transform(feat_df)
+                else:
+                    feat_vals = feat_df.values.astype(np.float32)
+                feat_t = torch.tensor(feat_vals, dtype=torch.float32)
+
+            if target_n is not None and feat_t.shape[1] != target_n:
+                if feat_t.shape[1] > target_n:
+                    feat_t = feat_t[:, :target_n]
+                else:
+                    pad = torch.zeros((feat_t.shape[0], target_n - feat_t.shape[1]), dtype=feat_t.dtype)
+                    feat_t = torch.cat([feat_t, pad], dim=1)
+
+            with torch.no_grad():
+                out = model(seq_t, act_t, feat_t).item()
+            val = float(np.expm1(np.clip(out, 0.0, 15.0)))
+            return max(1.0, val)
 
             if target_n is not None and feat_t.shape[1] != target_n:
                 if feat_t.shape[1] > target_n:
@@ -532,28 +577,34 @@ class ChampionPredictor:
                     row[c] = cats.index(val) if val in cats else -1
 
             try:
-                row_df = pd.DataFrame([row])[feat_cols]
-                for c in row_df.columns:
-                    if (c.startswith("prefix_") or c == "prev_activity") and c not in cat_map:
-                        row_df[c] = row_df[c].astype("category")
-
                 label_enc = p_info["label_encoding"]
                 idx_to_label = {v: k for k, v in label_enc.items()}
-
-                # Configurable routing inference mode (default: argmax)
                 inference_mode = self.cfg.get("tasks", {}).get("routing", {}).get("inference_mode", "argmax")
-                if inference_mode == "argmax":
-                    pred_code = clf.predict(row_df)[0]
-                elif hasattr(clf, "predict_proba"):
-                    probas = clf.predict_proba(row_df)[0]
-                    p_sum = probas.sum()
-                    if p_sum > 0:
-                        probas = probas / p_sum
-                        pred_code = np.random.choice(clf.classes_, p=probas)
+
+                is_xgb = "xgb" in str(type(clf)).lower()
+                if is_xgb:
+                    row_df = pd.DataFrame([row])[feat_cols]
+                    for c in row_df.columns:
+                        if (c.startswith("prefix_") or c == "prev_activity") and c not in cat_map:
+                            row_df[c] = row_df[c].astype("category")
+                    if inference_mode == "argmax":
+                        pred_code = clf.predict(row_df)[0]
+                    elif hasattr(clf, "predict_proba"):
+                        probas = clf.predict_proba(row_df)[0]
+                        p_sum = probas.sum()
+                        pred_code = np.random.choice(clf.classes_, p=probas / p_sum) if p_sum > 0 else clf.predict(row_df)[0]
                     else:
                         pred_code = clf.predict(row_df)[0]
                 else:
-                    pred_code = clf.predict(row_df)[0]
+                    x_arr = np.array([[float(row.get(c, 0.0)) for c in feat_cols]], dtype=np.float32)
+                    if inference_mode == "argmax":
+                        pred_code = clf.predict(x_arr)[0]
+                    elif hasattr(clf, "predict_proba"):
+                        probas = clf.predict_proba(x_arr)[0]
+                        p_sum = probas.sum()
+                        pred_code = np.random.choice(clf.classes_, p=probas / p_sum) if p_sum > 0 else clf.predict(x_arr)[0]
+                    else:
+                        pred_code = clf.predict(x_arr)[0]
 
                 return idx_to_label.get(pred_code)
             except Exception as e:

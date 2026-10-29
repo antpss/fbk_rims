@@ -75,6 +75,10 @@ class SharedWorkerPool:
         return int(self.resource_capacities.get(worker_id, 1))
 
     def _is_worker_free(self, worker_id):
+        return (
+            self.worker_active_count[worker_id] < self._get_capacity(worker_id)
+            and not self.worker_in_cooldown.get(worker_id, False)
+        )
 
     def _interrupt_cooldown_if_eligible(self, eligible_workers):
         """Queue-Aware Cooldown: Interrupts refractory break when incoming or pending tickets require worker."""
@@ -240,10 +244,12 @@ class SharedWorkerPool:
         )
 
         # Only take coffee break cooldown if no immediate tickets are waiting.
+        if cooldown_enabled and (not queue_aware or not has_pending_work):
             cooldown = self._sample_cooldown(worker_id)
             if cooldown > 0:
                 self.worker_in_cooldown[worker_id] = True
                 cancel_ev = self.env.event()
+                self.worker_cooldown_events[worker_id] = cancel_ev
                 self.env.process(self._cooldown_and_dispatch(worker_id, cooldown, cancel_ev))
                 return
 
@@ -269,8 +275,9 @@ class SharedWorkerPool:
             return float(random.expovariate(1.0 / 300.0))
 
     def _cooldown_and_dispatch(self, worker_id, cooldown_seconds, cancel_ev):
-        # Break finishes naturally or is interrupted when pending work arrives
         yield self.env.timeout(cooldown_seconds) | cancel_ev
+        self.worker_in_cooldown[worker_id] = False
+        self.worker_cooldown_events.pop(worker_id, None)
         self._complete_release(worker_id)
 
     def _complete_release(self, worker_id):
@@ -279,6 +286,7 @@ class SharedWorkerPool:
             self.worker_idle_since[worker_id] = self.env.now
 
         if not self._is_working_now():
+            self._ensure_shift_alarm()
             return
 
         self._dispatch_all_pending()

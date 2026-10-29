@@ -163,7 +163,17 @@ def main():
     missing_start_skipped = 0
     print("Sweeping log chronologically to construct state vectors...")
 
-    for _, row in df.iterrows():
+    base_cols = [
+        "case:concept:name", "concept:name", "lifecycle:transition",
+        "time:timestamp", "org:resource", "is_synthetic"
+    ]
+    for attr in case_attrs:
+        col = attr["column"]
+        base_cols.extend([col, col.replace("case:", "")])
+    base_cols.extend(event_attrs)
+    required_cols = [c for c in dict.fromkeys(base_cols) if c in df.columns]
+
+    for row in df[required_cols].to_dict("records"):
         case_id = row["case:concept:name"]
         activity_name = row["concept:name"]
         transition = str(row.get("lifecycle:transition", "COMPLETE")).upper()
@@ -242,7 +252,7 @@ def main():
                 # Effective business working waiting time between previous task completion and current task start
                 if case_id in case_prev_end_time:
                     current_wait = calendar.calculate_net_working_seconds(
-                        case_prev_end_time[case_id], timestamp, role_or_act=activity_name
+                        case_prev_end_time[case_id], timestamp, role_or_act=activity_name, allow_zero=True
                     )
                 else:
                     current_wait = 0.0

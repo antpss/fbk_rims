@@ -247,7 +247,8 @@ class ChapelaDelayDiscoveryEngine:
         start_events_map = defaultdict(list)
         instances = []
 
-        for _, row in df.iterrows():
+        needed_inst_cols = [c for c in ["case:concept:name", "concept:name", "lifecycle:transition", "time:timestamp", "org:resource"] if c in df.columns]
+        for row in df[needed_inst_cols].to_dict("records"):
             c = str(row["case:concept:name"])
             a = str(row["concept:name"])
             trans = str(row.get("lifecycle:transition", "COMPLETE")).upper()
@@ -548,7 +549,8 @@ class ChapelaDelayDiscoveryEngine:
         df_shifts = df[df["lifecycle:transition"].isin(["START", "COMPLETE"])].sort_values(by="time:timestamp")
 
         res_events = defaultdict(list)
-        for _, r in df_shifts.iterrows():
+        needed_shift_cols = [c for c in ["org:resource", "lifecycle:transition", "time:timestamp"] if c in df_shifts.columns]
+        for r in df_shifts[needed_shift_cols].to_dict("records"):
             res = str(r["org:resource"])
             if res in ("nan", "NONE", "", "None", "UNKNOWN", "SYSTEM"):
                 continue

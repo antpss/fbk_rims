@@ -193,14 +193,21 @@ class Token:
 
             # 3. Chapela-Campa Ex-Ante Extraneous Delay or Transition-Arc Delay
             ext_delay = 0.0
+            ext_delay_net = 0.0
             if self.process.has_ex_ante_delay(act):
                 ext_delay = self.process.sample_ex_ante_delay(act)
-                if ext_delay > 0:
-                    yield self.env.timeout(ext_delay)
             elif self.prev_act and (self.prev_act, act) in self.process.external_delays:
                 ext_delay = self.process.sample_external_delay(self.prev_act, act)
-                if ext_delay > 0:
-                    yield self.env.timeout(ext_delay)
+
+            if ext_delay > 0:
+                t_before_ext = self.env.now
+                yield self.env.timeout(ext_delay)
+                t_after_ext = self.env.now
+                dt_before = self.process.calendar.to_datetime(t_before_ext)
+                dt_after = self.process.calendar.to_datetime(t_after_ext)
+                ext_delay_net = self.process.calendar.calculate_net_working_seconds(
+                    dt_before, dt_after, role_or_act=act, allow_zero=True
+                )
 
             # 4. Worklist Waiting Time (ML expectation: batching & uncoupled backlog)
             role_oc = self.process.workers.get_role_occupancy(self.process.target_activities)
@@ -217,8 +224,8 @@ class Token:
                 act_occurrences = self.prefix.count(act)
                 loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
 
-                # w_ml is net business hours wait; advance across calendar business hours
-                w_worklist_net = max(0.0, w_ml - ext_delay) * loop_decay
+                # w_ml is net business hours wait; subtract net external delay to match units
+                w_worklist_net = max(0.0, w_ml - ext_delay_net) * loop_decay
                 if w_worklist_net > 0:
                     actual_worklist_wait = self.process.calendar.calculate_calendar_duration(
                         self.env.now, w_worklist_net, role_or_act=act

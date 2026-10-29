@@ -82,7 +82,7 @@ class ArrivalGenerator:
                     attr_imputation[attr["feature_name"]] = val_stat
 
                 case_first_rows = df_real.groupby("case:concept:name", sort=False).first().reset_index()
-                for _, r in case_first_rows.iterrows():
+                for r in case_first_rows.to_dict("records"):
                     rec = {}
                     for attr in case_attrs:
                         col = attr["column"]
@@ -480,7 +480,8 @@ class ArrivalGenerator:
 
             forecast = model.predict(df_future)
 
-            for _, row in forecast.iterrows():
+            f_cols = [c for c in ["ds", "yhat", "yhat_lower", "yhat_upper"] if c in forecast.columns]
+            for row in forecast[f_cols].to_dict("records"):
                 if effective_cases is not None and len(arrivals) >= effective_cases:
                     break
                 if dur_days is not None and (cur_time - start_time).total_seconds() >= dur_days * 86400.0:

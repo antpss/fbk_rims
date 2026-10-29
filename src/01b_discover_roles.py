@@ -126,7 +126,8 @@ def discover_roles(cfg=None, threshold=None, force=False):
     role_concurrency_history = defaultdict(list)
 
     events_list = []
-    for _, row in df_sorted.iterrows():
+    needed_cols = [c for c in ["concept:name", "org:resource", "lifecycle:transition", "time:timestamp"] if c in df_sorted.columns]
+    for row in df_sorted[needed_cols].to_dict("records"):
         act = row["concept:name"]
         w = row["org:resource"]
         trans = str(row.get("lifecycle:transition", "COMPLETE")).upper()

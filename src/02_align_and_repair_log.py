@@ -76,10 +76,10 @@ def main():
         work_items = []
         pending_start = defaultdict(list)
 
-        for _, row in grp_sorted.iterrows():
+        for row in grp_sorted.dropna(axis=1, how="all").to_dict("records"):
             act = row["concept:name"]
             trans = str(row.get("lifecycle:transition", "COMPLETE")).upper()
-            row_dict = {k: v for k, v in row.dropna().to_dict().items() if not k.startswith("case:")}
+            row_dict = {k: v for k, v in row.items() if not k.startswith("case:") and pd.notna(v)}
             evt = Event(row_dict)
 
             is_ms = bool(milestone_prefixes) and act.startswith(milestone_prefixes)
