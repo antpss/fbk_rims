@@ -73,7 +73,7 @@ fbk_rims/
 │   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
 │   ├── benchmark_models.py            # Step 4b: Automated benchmarking & champion synthesis
 │   ├── 05_train_routing.py            # Step 5: White-Box XOR decision mining & Hyperopt tuning
-│   ├── 06_simulate.py                 # Step 6: Discrete-event simulation CLI runner
+│   ├── 06_simulate.py                 # Step 6: Simulation CLI runner
 │   ├── simulator/                     # Modular OOP Simulation Package
 │   │   ├── __init__.py                # Package exports
 │   │   ├── calendar.py                # CalendarManager (working shifts, night/weekend rollover)
@@ -498,7 +498,7 @@ python src/05_train_routing.py --classifier xgboost
 
 ---
 
-## Step 6: Discrete-Event Simulation Engine (`src/06_simulate.py` & `src/simulator/`)
+## Step 6: Simulation Engine (`src/06_simulate.py` & `src/simulator/`)
 
 The simulation engine is structured as a modular object-oriented package in `src/simulator/`, orchestrated via the CLI runner `src/06_simulate.py`:
 

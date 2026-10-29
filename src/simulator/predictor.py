@@ -150,12 +150,14 @@ class ChampionPredictor:
 
         # Reconstruct CategoricalDtypes for XGBoost runtime inference parity
         act_categories = []
+        res_categories = []
         cat_file = os.path.join(base_dir, "categories.json")
         if os.path.exists(cat_file):
             try:
                 with open(cat_file) as f:
                     cat_meta = json.load(f)
                     act_categories = cat_meta.get("activities", [])
+                    res_categories = cat_meta.get("resources", [])
             except Exception:
                 pass
 
@@ -173,6 +175,11 @@ class ChampionPredictor:
         else:
             suite["prefix_cat_dtype"] = None
             suite["target_act_dtype"] = None
+
+        if res_categories:
+            suite["resource_cat_dtype"] = pd.CategoricalDtype(categories=res_categories + ["UNKNOWN"], ordered=False)
+        else:
+            suite["resource_cat_dtype"] = None
 
         def _resolve_scaler(s_dir, num_feats):
             cand_scalers = []
@@ -414,7 +421,7 @@ class ChampionPredictor:
                     col_dict[col] = pd.Categorical([val], dtype=target_dtype) if target_dtype is not None else [val]
                 elif col == "Resource_ID":
                     val = row_dict.get(col, "UNKNOWN")
-                    col_dict[col] = pd.Categorical([val], dtype=resource_dtype) if resource_dtype is not None else [val]
+                    col_dict[col] = pd.Categorical([val], dtype=resource_dtype) if resource_dtype is not None else pd.Categorical([val])
                 else:
                     col_dict[col] = [row_dict.get(col, 0.0)]
 
@@ -502,18 +509,6 @@ class ChampionPredictor:
                 else:
                     feat_vals = feat_df.values.astype(np.float32)
                 feat_t = torch.tensor(feat_vals, dtype=torch.float32)
-
-            if target_n is not None and feat_t.shape[1] != target_n:
-                if feat_t.shape[1] > target_n:
-                    feat_t = feat_t[:, :target_n]
-                else:
-                    pad = torch.zeros((feat_t.shape[0], target_n - feat_t.shape[1]), dtype=feat_t.dtype)
-                    feat_t = torch.cat([feat_t, pad], dim=1)
-
-            with torch.no_grad():
-                out = model(seq_t, act_t, feat_t).item()
-            val = float(np.expm1(np.clip(out, 0.0, 15.0)))
-            return max(1.0, val)
 
             if target_n is not None and feat_t.shape[1] != target_n:
                 if feat_t.shape[1] > target_n:
