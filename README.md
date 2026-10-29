@@ -327,11 +327,14 @@ Discovers the underlying organizational structure and operational departments di
      * A strict threshold (e.g. $\theta \ge 0.60$) separates tasks into highly specialized roles (approaching 1 role per activity).
    * Maps every activity to a discovered role, lists all qualified human workers, and calculates effective staffing capacity.
 
-3. **Empirical Multi-Tasking Quotas** ($C_w$):
+3. **Empirical Multi-Tasking Quotas (C_w)**
+
    Computes the 95th percentile of concurrent active cases per worker directly from historical event intervals:
-$$
-C_w = \text{Percentile}_{95}\left(\text{active\_cases}(w,t)\right)
-$$
+
+   $$
+   C_w = \text{Percentile}_{95}\left(\text{active\_cases}(w,t)\right)
+   $$
+
    This enables workers to interleave tasks naturally (e.g. desk office work, phone follow-ups) without causing artificial queue serialization.
 
 ```bash
