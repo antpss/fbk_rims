@@ -2,7 +2,7 @@
   "__metadata__": {
     "algorithm": "Burattin-Sperduti-Veluscek (2013)",
     "threshold": 0.35,
-    "generated_at": "2026-10-27 16:27:47",
+    "generated_at": "2026-10-30 12:19:26",
     "total_distinct_resources": 58,
     "total_roles": 3
   },
@@ -150,6 +150,42 @@
     "Role_0_FrontOffice_Processing": 8,
     "Role_1_Validation_Underwriting": 4,
     "Role_2_Fraud_Squad": 1
+  },
+  "role_calendars": {
+    "Role_0_FrontOffice_Processing": {
+      "work_days": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "hour_start": 8,
+      "hour_end": 20
+    },
+    "Role_1_Validation_Underwriting": {
+      "work_days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "hour_start": 7,
+      "hour_end": 17
+    },
+    "Role_2_Fraud_Squad": {
+      "work_days": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "hour_start": 7,
+      "hour_end": 16
+    }
   },
   "worker_concurrencies": {
     "10124": 1,

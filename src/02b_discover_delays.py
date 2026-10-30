@@ -294,10 +294,8 @@ class ChapelaDelayDiscoveryEngine:
         target_activities = set(self.cfg.get("target_activities", []))
         proc_prefixes = tuple(self.cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
 
-        cal = self.calendar_mgr.get_calendar(role_or_act=None)
-        cal_enabled = cal.enabled
-        work_days = cal.work_days
-        h_start, h_end = cal.hour_start, cal.hour_end
+        cal_global = self.calendar_mgr.get_calendar(role_or_act=None)
+        print(f"      Global Calendar: {cal_global.hour_start}:00 - {cal_global.hour_end}:00 (Active: {cal_global.enabled})")
 
         delay_samples_ex_ante = defaultdict(list)
         delay_samples_ex_post = defaultdict(list)
@@ -352,9 +350,12 @@ class ChapelaDelayDiscoveryEngine:
                         if b_e > S:
                             unavail.append((max(S, b_s), min(E, b_e)))
 
-                # 2. Calendar non-working periods NW(ρ)
+                # 2. Calendar non-working periods NW(ρ) for target activity's role
                 cal_nw_sec = 0.0
-                if cal_enabled:
+                cal_t = self.calendar_mgr.get_calendar(act_t)
+                if cal_t.enabled:
+                    work_days = cal_t.work_days
+                    h_start, h_end = cal_t.hour_start, cal_t.hour_end
                     cur_day = S.replace(hour=0, minute=0, second=0, microsecond=0)
                     end_day = E.replace(hour=0, minute=0, second=0, microsecond=0)
                     delta_days = (end_day - cur_day).days
@@ -368,16 +369,18 @@ class ChapelaDelayDiscoveryEngine:
                                 unavail.append((win_s, win_e))
                                 cal_nw_sec += (win_e - win_s).total_seconds()
                         else:
-                            m_s = max(S, c_day)
-                            m_e = min(E, c_day.replace(hour=h_start))
-                            if m_s < m_e:
-                                unavail.append((m_s, m_e))
-                                cal_nw_sec += (m_e - m_s).total_seconds()
-                            e_s = max(S, c_day.replace(hour=h_end))
-                            e_e = min(E, c_day + timedelta(days=1))
-                            if e_s < e_e:
-                                unavail.append((e_s, e_e))
-                                cal_nw_sec += (e_e - e_s).total_seconds()
+                            if h_start > 0:
+                                m_s = max(S, c_day)
+                                m_e = min(E, c_day.replace(hour=h_start))
+                                if m_s < m_e:
+                                    unavail.append((m_s, m_e))
+                                    cal_nw_sec += (m_e - m_s).total_seconds()
+                            if h_end < 24:
+                                e_s = max(S, c_day.replace(hour=h_end))
+                                e_e = min(E, c_day + timedelta(days=1))
+                                if e_s < e_e:
+                                    unavail.append((e_s, e_e))
+                                    cal_nw_sec += (e_e - e_s).total_seconds()
 
                 # 3. Merge unavailable intervals
                 valid_unavail = [u for u in unavail if u[0] < u[1]]

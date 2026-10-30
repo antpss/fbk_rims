@@ -180,6 +180,46 @@ def discover_roles(cfg=None, threshold=None, force=False):
         cap = max(1, min(p95, pool_size))
         role_capacities[r_name] = cap
 
+    # Discover empirical operational calendars per role (fractional hours with p05/p95 bounds)
+    print("Computing empirical operational shift calendars per role...")
+    role_calendars = {}
+    day_labels = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+    for r_name, acts in role_to_activities.items():
+        df_r = df_target[df_target["concept:name"].isin(acts)].copy()
+        if df_r.empty:
+            role_calendars[r_name] = {"work_days": [0, 1, 2, 3, 4], "hour_start": 8, "hour_end": 20}
+            continue
+
+        # Active weekdays with >= 2% of role events
+        wday_counts = df_r["time:timestamp"].dt.weekday.value_counts(normalize=True)
+        active_days = sorted([int(day) for day, frac in wday_counts.items() if frac >= 0.02])
+        if not active_days:
+            active_days = [0, 1, 2, 3, 4]
+
+        trans_col = df_r["lifecycle:transition"].astype(str).str.upper() if "lifecycle:transition" in df_r.columns else pd.Series("COMPLETE", index=df_r.index)
+        df_role_starts = df_r[trans_col == "START"]
+        if df_role_starts.empty:
+            df_role_starts = df_r
+        df_role_comps = df_r[trans_col == "COMPLETE"]
+        if df_role_comps.empty:
+            df_role_comps = df_r
+
+        start_frac = df_role_starts["time:timestamp"].dt.hour + df_role_starts["time:timestamp"].dt.minute / 60.0
+        comp_frac = df_role_comps["time:timestamp"].dt.hour + df_role_comps["time:timestamp"].dt.minute / 60.0
+
+        h_start = max(0, int(np.floor(np.percentile(start_frac, 5))))
+        h_end = min(24, int(np.ceil(np.percentile(comp_frac, 95))))
+        if h_end <= h_start:
+            h_start, h_end = 8, 20
+
+        role_calendars[r_name] = {
+            "work_days": active_days,
+            "hour_start": h_start,
+            "hour_end": h_end
+        }
+        days_str = ", ".join(day_labels.get(d, str(d)) for d in active_days)
+        print(f"      {r_name}: {h_start:02d}:00 - {h_end:02d}:00 ({days_str})")
+
     # Construct final manifest dictionary
     role_mapping_data = {
         "__metadata__": {
@@ -194,6 +234,7 @@ def discover_roles(cfg=None, threshold=None, force=False):
         "activity_to_role": activity_to_role,
         "role_to_workers": role_to_workers,
         "role_capacities": role_capacities,
+        "role_calendars": role_calendars,
         "worker_concurrencies": worker_concurrencies,
         "__all_resources__": all_resources,
         "__role_originator_importance__": role_originator_importance
@@ -209,13 +250,13 @@ def discover_roles(cfg=None, threshold=None, force=False):
     print(f"Successfully generated role manifest: {output_file}")
 
     # Generate Markdown Report
-    _write_markdown_report(report_file, th, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources)
+    _write_markdown_report(report_file, th, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources, role_calendars)
     print(f"Successfully generated discovery report: {report_file}")
 
     return role_mapping_data
 
 
-def _write_markdown_report(report_path, threshold, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources):
+def _write_markdown_report(report_path, threshold, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources, role_calendars=None):
     lines = [
         "# Organizational Role Discovery Report",
         "",
@@ -226,17 +267,24 @@ def _write_markdown_report(report_path, threshold, role_to_activities, role_to_w
         "",
         "---",
         "",
-        "## Discovered Organizational Departments",
+        "## Discovered Organizational Departments & Schedules",
         "",
-        "| Role / Department | Activities Assigned | Qualified Staff Count | Effective Concurrency Capacity |",
-        "| :--- | :--- | :---: | :---: |"
+        "| Role / Department | Activities Assigned | Qualified Staff Count | Concurrency ($C_{role}$) | Operating Shift Window | Active Days |",
+        "| :--- | :--- | :---: | :---: | :---: | :---: |"
     ]
 
+    day_labels = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
     for r_name, acts in role_to_activities.items():
         acts_str = "<br/>".join([f"`{a}`" for a in acts])
         staff_cnt = len(role_to_workers[r_name])
         cap = role_capacities.get(r_name, 1)
-        lines.append(f"| **{r_name}** | {acts_str} | {staff_cnt} workers | **{cap}** |")
+        cal = (role_calendars or {}).get(r_name, {})
+        h_s = cal.get("hour_start", 8)
+        h_e = cal.get("hour_end", 20)
+        days = cal.get("work_days", [0, 1, 2, 3, 4])
+        days_str = ", ".join(day_labels.get(d, str(d)) for d in days)
+        shift_str = f"`{h_s:02d}:00 - {h_e:02d}:00`"
+        lines.append(f"| **{r_name}** | {acts_str} | {staff_cnt} workers | **{cap}** | {shift_str} | {days_str} |")
 
     lines.extend([
         "",

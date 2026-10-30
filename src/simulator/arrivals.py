@@ -317,8 +317,23 @@ class ArrivalGenerator:
                 "but no valid event log was found."
             )
 
-        # 1. Extract historical case start times and aggregate into hourly counts
-        first_times = df_real.groupby("case:concept:name")["time:timestamp"].min().reset_index()
+        # 1. Extract historical case start times for valid process cases and aggregate into hourly counts
+        target_acts = set(self.cfg.get("target_activities", []))
+        proc_prefixes = tuple(self.cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
+        if target_acts:
+            w_mask = df_real["concept:name"].isin(target_acts)
+        elif proc_prefixes:
+            w_mask = df_real["concept:name"].str.startswith(proc_prefixes)
+        else:
+            w_mask = df_real["concept:name"].str.startswith("W_")
+        cases_with_w = set(df_real.loc[w_mask, "case:concept:name"].unique())
+
+        first_times = (
+            df_real[df_real["case:concept:name"].isin(cases_with_w)]
+            .groupby("case:concept:name")["time:timestamp"]
+            .min()
+            .reset_index()
+        )
         first_times.columns = ["case_id", "timestamp"]
         first_times["timestamp"] = pd.to_datetime(first_times["timestamp"])
         if hasattr(first_times["timestamp"].dt, "tz") and first_times["timestamp"].dt.tz is not None:
@@ -498,7 +513,9 @@ class ArrivalGenerator:
                         raw_val = float(np.random.triangular(low, mode, high))
                     else:
                         raw_val = mode
-                    hourly_expected = int(np.ceil(max(0.0, raw_val)))
+                    val_clean = max(0.0, raw_val)
+                    base_cnt = int(np.floor(val_clean))
+                    hourly_expected = base_cnt + (1 if random.random() < (val_clean - base_cnt) else 0)
                 elif sampling_method == "poisson":
                     hourly_expected = int(np.random.poisson(lam=max(0.0, yhat)))
                 else:  # "round" (deterministic baseline)

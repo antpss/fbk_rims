@@ -91,9 +91,7 @@ def main():
         print(f"Empirical Imputation Defaults for Case Attributes: {attr_imputation}")
 
     feature_mgr = FeatureManager(cfg)
-    calendar = CalendarManager.from_config(cfg)
     print(f"Prefix Window: {prefix_window}")
-    print(f"Calendar Active: {calendar.enabled} ({calendar.hour_start}:00 - {calendar.hour_end}:00, Days: {calendar.work_days})")
     print(f"Selected Feature Extractors ({len(feature_mgr.selected_features)}): {feature_mgr.selected_features}")
     print(f"Domain Case Attributes (Tier 2): {[c['feature_name'] for c in case_attrs]}")
     print(f"Domain Event Attributes (Tier 2): {event_attrs}")
@@ -143,6 +141,11 @@ def main():
     role_capacities = role_data.get("role_capacities", {r: 1 for r in role_names})
     print(f"Discovered Organizational Roles ({len(role_names)}): {role_names}")
     print(f"Role staffing capacities: {role_capacities}")
+
+    calendar = CalendarManager.from_config(cfg, activity_to_role=activity_to_role, role_mapping_path=role_file)
+    print(f"Calendar Active: {calendar.enabled} ({calendar.hour_start}:00 - {calendar.hour_end}:00, Days: {calendar.work_days})")
+    if calendar.role_calendars:
+        print(f"Role-specific calendars active: {list(calendar.role_calendars.keys())}")
     role_active = defaultdict(int)
 
     ac_wip = defaultdict(int)

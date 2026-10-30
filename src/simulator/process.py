@@ -67,7 +67,12 @@ class SharedWorkerPool:
         self.worker_in_cooldown = {w: False for w in self.all_workers}
         self.worker_cooldown_events = {}
         self.pending_requests = []
-        self._shift_alarm_active = False
+        self._active_shift_alarms = set()
+
+    @property
+    def _shift_alarm_active(self):
+        """Backward-compatibility property returning True if any shift alarm is armed."""
+        return bool(self._active_shift_alarms)
 
     def _get_capacity(self, worker_id):
         if worker_id in self.worker_concurrencies:
@@ -94,40 +99,72 @@ class SharedWorkerPool:
                     return w
         return None
 
-    def _is_working_now(self):
+    def _is_activity_working_now(self, activity=None):
+        """Checks if office is currently open for the specific activity's role (or global fallback)."""
         if not self.calendar or not getattr(self.calendar, "enabled", False):
             return True
-        curr_dt = self.calendar.to_datetime(self.env.now)
-        return self.calendar.is_working_hour(curr_dt)
+        cal = self.calendar.get_calendar(activity)
+        if not cal.enabled:
+            return True
+        curr_dt = cal.to_datetime(self.env.now)
+        return cal.is_working_hour(curr_dt)
 
-    def _ensure_shift_alarm(self):
+    def _is_working_now(self):
+        """Backward-compatibility check for global calendar shift."""
+        return self._is_activity_working_now(None)
+
+    def _ensure_shift_alarm(self, activity=None):
+        """Arms a non-blocking shift alarm for the activity's role calendar keyed by id(cal)."""
         if not self.calendar or not getattr(self.calendar, "enabled", False):
             return
-        if self._shift_alarm_active:
+        cal = self.calendar.get_calendar(activity)
+        if not cal.enabled:
             return
-        curr_dt = self.calendar.to_datetime(self.env.now)
-        if self.calendar.is_working_hour(curr_dt):
+        alarm_key = id(cal)
+        if alarm_key in self._active_shift_alarms:
             return
-        gap = self.calendar.get_gap_to_next_work_window(curr_dt)
+        curr_dt = cal.to_datetime(self.env.now)
+        if cal.is_working_hour(curr_dt):
+            return
+        gap = cal.get_gap_to_next_work_window(curr_dt)
         if gap > 0:
-            self._shift_alarm_active = True
-            self.env.process(self._shift_alarm_worker(gap))
+            self._active_shift_alarms.add(alarm_key)
+            self.env.process(self._role_shift_alarm_worker(max(1e-3, gap), alarm_key))
+
+    def _role_shift_alarm_worker(self, gap, alarm_key):
+        yield self.env.timeout(gap)
+        self._active_shift_alarms.discard(alarm_key)
+        self._dispatch_all_pending()
 
     def _shift_alarm_worker(self, gap):
+        """Backward compatibility helper for global shift alarm."""
         yield self.env.timeout(gap)
-        self._shift_alarm_active = False
+        self._active_shift_alarms.clear()
         self._dispatch_all_pending()
 
     def _dispatch_all_pending(self):
-        if not self._is_working_now():
-            self._ensure_shift_alarm()
-            return
-
+        """
+        Dispatches queued tickets to available multi-skilled staff using Longest-Idle-First (LIF).
+        Evaluates shift status on a per-request role basis so active shifts are never blocked by off-shift roles.
+        Skips scanning exhausted roles where no workers are free to prevent quadratic overhead.
+        """
+        exhausted_roles = set()
         i = 0
         while i < len(self.pending_requests):
             req = self.pending_requests[i]
             if req["event"].triggered:
                 self.pending_requests.pop(i)
+                continue
+
+            role_key = self.activity_to_role.get(req["activity"], req["activity"])
+            if role_key in exhausted_roles:
+                i += 1
+                continue
+
+            # Check if this request's activity/role is currently on shift
+            if not self._is_activity_working_now(req["activity"]):
+                self._ensure_shift_alarm(req["activity"])
+                i += 1
                 continue
 
             free_workers = [w for w in req["eligible"] if self._is_worker_free(w)]
@@ -148,6 +185,7 @@ class SharedWorkerPool:
                 self.worker_activity[chosen] = req["activity"]
                 req["event"].succeed(value=chosen)
             else:
+                exhausted_roles.add(role_key)
                 i += 1
 
     def get_role_occupancy(self, activities_list=None):
@@ -186,7 +224,7 @@ class SharedWorkerPool:
             eligible = self.activity_pools.get(activity, self.all_workers)
 
         free_workers = [w for w in eligible if self._is_worker_free(w)]
-        is_working = self._is_working_now()
+        is_working = self._is_activity_working_now(activity)
 
         # If no free workers, check if an eligible resting worker can be interrupted
         if is_working and not free_workers:
@@ -217,7 +255,7 @@ class SharedWorkerPool:
                 "req_time": self.env.now
             })
             if not is_working:
-                self._ensure_shift_alarm()
+                self._ensure_shift_alarm(activity)
             return ev
 
     def release_worker(self, worker_id, activity=None):
@@ -237,9 +275,11 @@ class SharedWorkerPool:
         cooldown_enabled = self.latency_cfg.get("enabled", True) if self.latency_cfg else False
         queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
 
-        # Check if any waiting task needs this worker right now
+        # Check if any waiting task needs this worker right now on an active shift
         has_pending_work = any(
-            worker_id in req["eligible"] and not req["event"].triggered
+            worker_id in req["eligible"]
+            and not req["event"].triggered
+            and self._is_activity_working_now(req["activity"])
             for req in self.pending_requests
         )
 
@@ -284,10 +324,6 @@ class SharedWorkerPool:
         self.worker_busy[worker_id] = not self._is_worker_free(worker_id)
         if self._is_worker_free(worker_id):
             self.worker_idle_since[worker_id] = self.env.now
-
-        if not self._is_working_now():
-            self._ensure_shift_alarm()
-            return
 
         self._dispatch_all_pending()
 
@@ -347,11 +383,14 @@ class SimulationProcess:
             )))
             print(f"Target activities: [Auto-discovered {len(self.target_activities)} activities from Petri Net]: {self.target_activities}")
 
+        # Paths
+        models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
+        role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+
         # Calendar Manager
-        self.calendar = CalendarManager.from_config(cfg)
+        self.calendar = CalendarManager.from_config(cfg, role_mapping_path=role_mapping_path)
 
         # Load Causal Delays
-        models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
         delay_manifest_path = os.path.join(PROJECT_ROOT, models_dir_rel, "delays/delay_manifest.json")
         self.delay_manifest = None
         self.external_delays = {}
@@ -382,10 +421,9 @@ class SimulationProcess:
                         if trig and res:
                             self.external_delays[(trig, res)] = d
 
-                    # Also register causal transition arcs if external (or if internal delays are enabled)
+                    # Register all causal transition arcs discovered by RIMS++
                     for d in self.delay_manifest.get("causal_transition_arcs", []):
-                        if use_all or d.get("is_external", False) or d.get("resume_activity") in self.ex_ante_delays:
-                            self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
+                        self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
 
             except Exception as e:
                 print(f"[!] Warning: Failed to load delay manifest: {e}")
@@ -440,7 +478,7 @@ class SimulationProcess:
             if not is_silent.get(t_name, False):
                 return trans_map.get(t_name, t_name)
             for p in out_arcs.get(t_name, []):
-                if p == "sink":
+                if p == "sink" or not out_arcs.get(p):
                     return "<END>"
                 for dt in out_arcs.get(p, []):
                     if not is_silent.get(dt, False):
@@ -493,9 +531,9 @@ class SimulationProcess:
                 val = float(st.lognorm.rvs(params["shape"], loc=params.get("loc", 0.0), scale=params["scale"]))
             else:
                 val = float(d.get("median_hours", 0.0) * 3600.0)
-            return max(0.0, val)
+            return min(max(0.0, val), 2592000.0)
         except Exception:
-            return max(0.0, float(d.get("median_hours", 0.0) * 3600.0))
+            return min(max(0.0, float(d.get("median_hours", 0.0) * 3600.0)), 2592000.0)
 
     def record_event(self, record_dict):
         """Appends an event execution record to the simulation trace buffer."""

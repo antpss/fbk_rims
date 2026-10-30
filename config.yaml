@@ -120,11 +120,14 @@ preprocessing:
 
   # Dynamic progression: milestones achieved when human tasks complete
   milestone_progression:
-    "W_Complete application": ["A_ACCEPTED", "O_SELECTED", "A_FINALIZED", "O_CREATED", "O_SENT"]
+    "W_Complete application":
+      "A_ACCEPTED": 1.0
+      "O_SELECTED": 1.0
+      "A_FINALIZED": 0.15
+      "O_CREATED": 0.15
+      "O_SENT": 0.15
     "W_Call after offers":
       "O_SENT_BACK": 0.15
-    "W_Validate application": ["A_APPROVED", "A_REGISTERED", "A_ACTIVATED", "O_ACCEPTED"]
-    "W_Handle leads": ["A_PREACCEPTED"]
 
   # Terminal outcome milestones excluded from decision routing to avoid target leakage
   excluded_milestones:
@@ -178,7 +181,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
-    inference_mode: "sample"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
+    inference_mode: "argmax"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
     mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival", "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest
@@ -188,6 +191,7 @@ tasks:
     # Optional decision places to force empirical branching probabilities (parity with legacy RIMS entry split)
     force_probability_places:
       - "exi_xor_1"
+      - "exi_W_Handle leads__loop_split"
 
 # ===================================================================
 # Model Strategy & Architecture (Step 04)
@@ -267,7 +271,7 @@ simulation:
     distribution: "exponential"   # Distribution for generative mode: "exponential", "uniform", "constant"
     scale: 300.0                  # Mean seconds between case arrivals (e.g. 300s = 5 min)
     start_timestamp: "2012-01-01 08:00:00"
-    calendar_bounded: true        # If true, new arrivals only spawn during office hours
+    calendar_bounded: false       # If true, new arrivals only spawn during office hours (false allows 24/7 natural customer submissions)
 
     # Facebook Prophet Time-Series Forecasting Settings (used when mode: "prophet")
     prophet:
@@ -288,21 +292,32 @@ simulation:
     work_days: [0, 1, 2, 3, 4]    # Monday (0) to Friday (4)
     hour_start: 8                 # 08:00
     hour_end: 20                  # 20:00
-    
-    # Optional Per-Role / Per-Activity Calendars (overrides global calendar for specific roles/activities)
-    # If not specified for a role/activity, it defaults to the global calendar above.
+
+    # 3-Tier Resolution Hierarchy:
+    # Tier 1 (Highest): Explicit per_role configuration below.
+    # Tier 2: Discovered role calendars from models/role_mapping.json (active if use_discovered_role_calendars: true).
+    # Tier 3 (Fallback): Global calendar (work_days, hour_start, hour_end above).
+    # IMPORTANT: Changing role calendars requires re-running Steps 02b, 03, and 04 so training features match simulation.
+    use_discovered_role_calendars: false
+
+    # Optional Per-Role / Per-Activity Calendars (Tier 1 overrides)
+    # If not specified for a role/activity, it defaults to Tier 2 (if enabled) or Tier 3 global calendar.
     per_role: {}
 
     # For example:
     # per_role:
-    #   "Emergency Triage":            # Healthcare activity
-    #     work_days: [0, 1, 2, 3, 4, 5, 6]
-    #     hour_start: 0
-    #     hour_end: 24                 # 24/7 ER shift
-    #   "Level 1 Support":             # Helpdesk role
+    #   "Role_0_FrontOffice_Processing":
     #     work_days: [0, 1, 2, 3, 4]
-    #     hour_start: 7
+    #     hour_start: 8
     #     hour_end: 20
+    #   "Role_1_Validation_Underwriting":
+    #     work_days: [0, 1, 2, 3, 4]
+    #     hour_start: 9
+    #     hour_end: 17
+    #   "Role_2_Fraud_Squad":
+    #     work_days: [0, 1, 2, 3, 4]
+    #     hour_start: 8
+    #     hour_end: 16
 
 
 

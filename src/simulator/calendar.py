@@ -7,7 +7,17 @@ Supports global business hours as well as per-role / per-activity calendar overr
 Ensures resources only perform work during configured operational windows.
 """
 
+import os
+import json
 from datetime import datetime, timedelta
+
+try:
+    from config_loader import PROJECT_ROOT
+except ImportError:
+    try:
+        from src.config_loader import PROJECT_ROOT
+    except ImportError:
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class CalendarManager:
@@ -16,13 +26,14 @@ class CalendarManager:
     Supports a global business shift as well as per-role / per-activity calendar overrides.
     Ensures human resources only perform work during configured office hours.
     """
-    def __init__(self, enabled=True, work_days=(0, 1, 2, 3, 4), hour_start=8, hour_end=20, ref_dt=None, per_role=None):
+    def __init__(self, enabled=True, work_days=(0, 1, 2, 3, 4), hour_start=8, hour_end=20, ref_dt=None, per_role=None, activity_to_role=None):
         self.enabled = enabled
         self.work_days = set(work_days)
         self.hour_start = hour_start
         self.hour_end = hour_end
         self.ref_dt = ref_dt or datetime(2011, 10, 1, 0, 0, 0)
         self.per_role_cfgs = per_role or {}
+        self.activity_to_role = dict(activity_to_role) if activity_to_role else {}
         self.role_calendars = {}
 
         # Instantiate specialized per-role / per-activity calendars
@@ -36,16 +47,61 @@ class CalendarManager:
             )
 
     @classmethod
-    def from_config(cls, cfg, ref_dt=None):
-        """Factory method constructing CalendarManager directly from central config.yaml dictionary."""
+    def from_config(cls, cfg, ref_dt=None, activity_to_role=None, role_mapping_path=None):
+        """
+        Factory method constructing CalendarManager directly from central config.yaml
+        with a strict 3-tier resolution hierarchy:
+          Tier 1 (Highest): Explicit config.yaml simulation.calendar.per_role overrides.
+          Tier 2: Discovered role_calendars from role_mapping.json (when use_discovered_role_calendars: true).
+          Tier 3 (Fallback): Global simulation.calendar settings.
+        """
         cal_cfg = cfg.get("simulation", {}).get("calendar", {})
+        enabled = cal_cfg.get("enabled", True)
+        global_work_days = cal_cfg.get("work_days", [0, 1, 2, 3, 4])
+        global_h_start = cal_cfg.get("hour_start", 8)
+        global_h_end = cal_cfg.get("hour_end", 20)
+        use_discovered = cal_cfg.get("use_discovered_role_calendars", False)
+        explicit_per_role = cal_cfg.get("per_role", {}) or {}
+
+        # Resolve role_mapping.json if needed
+        discovered_role_calendars = {}
+        if activity_to_role is None or use_discovered:
+            if role_mapping_path is None:
+                models_dir = cfg.get("paths", {}).get("models_dir", "models")
+                if not os.path.isabs(models_dir):
+                    role_mapping_path = os.path.join(PROJECT_ROOT, models_dir, "role_mapping.json")
+                else:
+                    role_mapping_path = os.path.join(models_dir, "role_mapping.json")
+
+            if os.path.exists(role_mapping_path):
+                try:
+                    with open(role_mapping_path, "r") as f:
+                        rm_data = json.load(f)
+                    if activity_to_role is None:
+                        activity_to_role = rm_data.get("activity_to_role", {})
+                    discovered_role_calendars = rm_data.get("role_calendars", {})
+                except Exception:
+                    pass
+
+        # 3-Tier Resolution:
+        # Tier 2: Discovered role calendars (active only if use_discovered_role_calendars is True)
+        effective_per_role = {}
+        if use_discovered and discovered_role_calendars:
+            for r_name, r_cal in discovered_role_calendars.items():
+                effective_per_role[r_name] = dict(r_cal)
+
+        # Tier 1: Explicit per_role config overrides (always take precedence)
+        for r_name, r_cal in explicit_per_role.items():
+            effective_per_role[r_name] = dict(r_cal)
+
         return cls(
-            enabled=cal_cfg.get("enabled", True),
-            work_days=cal_cfg.get("work_days", [0, 1, 2, 3, 4]),
-            hour_start=cal_cfg.get("hour_start", 8),
-            hour_end=cal_cfg.get("hour_end", 20),
+            enabled=enabled,
+            work_days=global_work_days,
+            hour_start=global_h_start,
+            hour_end=global_h_end,
             ref_dt=ref_dt,
-            per_role=cal_cfg.get("per_role", {})
+            per_role=effective_per_role,
+            activity_to_role=activity_to_role
         )
 
     def set_ref_dt(self, ref_dt):
@@ -56,8 +112,13 @@ class CalendarManager:
 
     def get_calendar(self, role_or_act=None):
         """Returns specialized calendar if configured for role/activity, otherwise global calendar."""
-        if role_or_act and role_or_act in self.role_calendars:
+        if not role_or_act:
+            return self
+        if role_or_act in self.role_calendars:
             return self.role_calendars[role_or_act]
+        role = self.activity_to_role.get(role_or_act)
+        if role and role in self.role_calendars:
+            return self.role_calendars[role]
         return self
 
     def to_datetime(self, sim_seconds):
@@ -93,8 +154,9 @@ class CalendarManager:
         Uses specialized per-role calendar if defined, otherwise falls back to global calendar.
         Returns total elapsed wall-clock seconds in the simulation.
         """
-        if role_or_act and role_or_act in self.role_calendars:
-            return self.role_calendars[role_or_act].calculate_calendar_duration(sim_seconds, duration_seconds)
+        cal = self.get_calendar(role_or_act)
+        if cal is not self:
+            return cal.calculate_calendar_duration(sim_seconds, duration_seconds)
 
         if not self.enabled or duration_seconds <= 0:
             return max(0.0, duration_seconds)
@@ -149,8 +211,9 @@ class CalendarManager:
         If allow_zero is True (e.g. for waiting times), zero net seconds across off-shift
         hours is returned without applying duration-specific overtime fallbacks.
         """
-        if role_or_act and role_or_act in self.role_calendars:
-            return self.role_calendars[role_or_act].calculate_net_working_seconds(start_dt, end_dt, allow_zero=allow_zero)
+        cal = self.get_calendar(role_or_act)
+        if cal is not self:
+            return cal.calculate_net_working_seconds(start_dt, end_dt, allow_zero=allow_zero)
 
         s_dt = start_dt.replace(tzinfo=None) if hasattr(start_dt, "tzinfo") and start_dt.tzinfo else start_dt
         e_dt = end_dt.replace(tzinfo=None) if hasattr(end_dt, "tzinfo") and end_dt.tzinfo else end_dt

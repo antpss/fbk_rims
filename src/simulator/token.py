@@ -47,12 +47,12 @@ class Token:
         else:
             self.milestones_seen = set()
 
-        if any(p.startswith("O_") for p in ms_prefixes):
-            self.offer_count = 1.0 if any(m.startswith("O_") for m in self.milestones_seen) else 0.0
-            self.has_offer = 1.0 if self.offer_count > 0 else 0.0
-        else:
-            self.offer_count = 0.0
-            self.has_offer = 0.0
+        self.offer_count = float(
+            sum(1 for m in self.milestones_seen if m.startswith("O_"))
+            if (any(m.startswith("O_") for m in self.milestones_seen) or any(p.startswith("O_") for p in ms_prefixes))
+            else 0.0
+        )
+        self.has_offer = 1.0 if self.offer_count > 0 else 0.0
 
         self.ms_states = ms_states or []
         self.events_done = 0
@@ -78,12 +78,6 @@ class Token:
                         self.milestones_seen.add(m)
             elif isinstance(item, (list, tuple, set)):
                 self.milestones_seen.update(item)
-
-        # Dynamic offer cycle progression on executing offer-generating activity
-        if any(p.startswith("O_") for p in ms_prefixes):
-            if act == "W_Complete application":
-                self.offer_count += 1.0
-                self.has_offer = 1.0
 
     def run(self):
         """
@@ -197,21 +191,14 @@ class Token:
 
             # 3. Chapela-Campa Transition-Arc Delay (specific) or Ex-Ante Extraneous Delay (generic fallback)
             ext_delay = 0.0
-            ext_delay_net = 0.0
             if self.prev_act and (self.prev_act, act) in self.process.external_delays:
-                ext_delay = self.process.sample_external_delay(self.prev_act, act) * loop_decay
+                ext_delay = self.process.sample_external_delay(self.prev_act, act)
+                if ext_delay > 0:
+                    yield self.env.timeout(ext_delay)
             elif self.process.has_ex_ante_delay(act):
-                ext_delay = self.process.sample_ex_ante_delay(act) * loop_decay
-
-            if ext_delay > 0:
-                t_before_ext = self.env.now
-                yield self.env.timeout(ext_delay)
-                t_after_ext = self.env.now
-                dt_before = self.process.calendar.to_datetime(t_before_ext)
-                dt_after = self.process.calendar.to_datetime(t_after_ext)
-                ext_delay_net = self.process.calendar.calculate_net_working_seconds(
-                    dt_before, dt_after, role_or_act=act, allow_zero=True
-                )
+                ext_delay = self.process.sample_ex_ante_delay(act)
+                if ext_delay > 0:
+                    yield self.env.timeout(ext_delay)
 
             # 4. Worklist Waiting Time (ML expectation: batching & uncoupled backlog)
             role_oc = self.process.workers.get_role_occupancy(self.process.target_activities)
@@ -224,16 +211,11 @@ class Token:
                     prev_dur=self.prev_dur,
                     case_attrs=self.case_attrs
                 )
-                # w_ml is net business hours wait; subtract net external delay to match units
-                w_worklist_net = max(0.0, w_ml * loop_decay - ext_delay_net)
-                if w_worklist_net > 0:
-                    actual_worklist_wait = self.process.calendar.calculate_calendar_duration(
-                        self.env.now, w_worklist_net, role_or_act=act
-                    )
-                    yield self.env.timeout(actual_worklist_wait)
-                    w_worklist = actual_worklist_wait
-                else:
-                    w_worklist = 0.0
+                act_occurrences = self.prefix.count(act)
+                loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
+                w_worklist = max(0.0, w_ml - ext_delay) * loop_decay
+                if w_worklist > 0:
+                    yield self.env.timeout(w_worklist)
             else:
                 w_worklist = 0.0
 
@@ -305,7 +287,9 @@ class Token:
             # Advance milestone state dynamically based on actual executed activity
             self.update_milestones(act)
 
-            self.has_offer = 1.0 if self.offer_count > 0 else 0.0
+            if any(p.startswith("O_") for p in ms_prefixes) or self.offer_count > 0:
+                self.offer_count = float(sum(1 for m in self.milestones_seen if m.startswith("O_")))
+                self.has_offer = 1.0 if self.offer_count > 0 else 0.0
 
         self.process.active_cases_count = max(0, self.process.active_cases_count - 1)
 

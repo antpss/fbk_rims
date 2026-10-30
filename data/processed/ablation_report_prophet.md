@@ -7,5 +7,5 @@
 | Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Run Time |
 |---|---|---|---|---|---|---|
 | **REAL HISTORICAL** | 11.3 days | 8.3 days | --- | --- | --- | --- |
-| `hybrid_residual` ★ (Best) | 16.6 days | 4.8 days | 5.3 days | 7.9 days | 881.06h | 2075.9s |
-| `pure_physics` | 13.9 days | 2.2 days | 2.6 days | 8.7 days | 819.93h | 1333.6s |
+| `hybrid_residual` ★ (Best) | 10.8 days | 3.0 days | 13.8 hours | 4.8 days | 135.47h | 238.0s |
+| `pure_physics` | 8.5 days | 4.3 hours | 2.8 days | 5.6 days | 88.36h | 127.0s |

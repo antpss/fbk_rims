@@ -28,6 +28,8 @@ import joblib
 import torch
 import xgboost as xgb
 
+torch.set_num_threads(1)
+
 try:
     from config_loader import PROJECT_ROOT
 except ImportError:
@@ -113,18 +115,37 @@ class ChampionPredictor:
                             f"Routing model file '{m_file}' for place '{p_id}' not found at '{m_path}'."
                         )
 
-        # Cache feature columns from training dataset
+        # Cache feature columns and empirical percentile training bounds to prevent OOD extrapolation
         self.feature_mgr = FeatureManager(cfg)
         dur_ds_path = os.path.join(cfg["paths"]["output_base_dir"], cfg["tasks"]["duration"]["output_file"])
-        sample_df = pd.read_csv(dur_ds_path, nrows=5)
+        wait_ds_path = os.path.join(cfg["paths"]["output_base_dir"], cfg["tasks"]["waiting_time"]["output_file"])
+        
+        dur_df_stats = pd.read_csv(dur_ds_path)
         ignored = {
             "Case_ID", "case_id", "Prefix", "Duration_Seconds", "Wait_Time_Seconds",
             "Target_Duration", "Sample_Weight", "Target_Activity"
         }
         if not self.feature_mgr.is_feature_active("resource_id"):
             ignored.add("Resource_ID")
-        self.feature_cols = [c for c in sample_df.columns if c not in ignored]
+        self.feature_cols = [c for c in dur_df_stats.columns if c not in ignored]
         self.all_milestones = [c.replace("Milestone_", "") for c in self.feature_cols if c.startswith("Milestone_")]
+
+        # 99th percentile feature bounds (prevents WIP / AC_WIP / Prev_Proc_Time runaway feedback loops)
+        self.feature_max_caps = {}
+        for c in ["WIP", "AC_WIP", "Prev_Proc_Time"]:
+            if c in dur_df_stats.columns:
+                self.feature_max_caps[c] = float(np.percentile(dur_df_stats[c].dropna(), 99))
+
+        # Per-activity 99th percentile prediction ceilings (in seconds)
+        self.dur_max_caps = dur_df_stats.groupby("Target_Activity")["Duration_Seconds"].quantile(0.99).to_dict()
+        self.dur_global_cap = float(dur_df_stats["Duration_Seconds"].quantile(0.99))
+        if os.path.exists(wait_ds_path):
+            wait_df_stats = pd.read_csv(wait_ds_path, usecols=["Target_Activity", "Wait_Time_Seconds"])
+            self.wait_max_caps = wait_df_stats.groupby("Target_Activity")["Wait_Time_Seconds"].quantile(0.99).to_dict()
+            self.wait_global_cap = float(wait_df_stats["Wait_Time_Seconds"].quantile(0.99))
+        else:
+            self.wait_max_caps = {}
+            self.wait_global_cap = 86400.0
 
     def _load_model_suite(self, base_dir, dispatch_dict):
         suite = {}
@@ -172,14 +193,20 @@ class ChampionPredictor:
         if act_categories:
             suite["prefix_cat_dtype"] = pd.CategoricalDtype(categories=act_categories + ["NONE"], ordered=False)
             suite["target_act_dtype"] = pd.CategoricalDtype(categories=act_categories, ordered=False)
+            suite["prefix_code_map"] = {c: float(i) for i, c in enumerate(act_categories + ["NONE"])}
+            suite["target_code_map"] = {c: float(i) for i, c in enumerate(act_categories)}
         else:
             suite["prefix_cat_dtype"] = None
             suite["target_act_dtype"] = None
+            suite["prefix_code_map"] = {}
+            suite["target_code_map"] = {}
 
         if res_categories:
             suite["resource_cat_dtype"] = pd.CategoricalDtype(categories=res_categories + ["UNKNOWN"], ordered=False)
+            suite["resource_code_map"] = {c: float(i) for i, c in enumerate(res_categories + ["UNKNOWN"])}
         else:
             suite["resource_cat_dtype"] = None
+            suite["resource_code_map"] = {}
 
         def _resolve_scaler(s_dir, num_feats):
             cand_scalers = []
@@ -221,7 +248,11 @@ class ChampionPredictor:
             if m_type == "xgboost":
                 booster = xgb.XGBRegressor()
                 booster.load_model(m_path)
-                suite["models"][act] = {"type": "xgboost", "model": booster}
+                suite["models"][act] = {
+                    "type": "xgboost",
+                    "model": booster,
+                    "booster": booster.get_booster()
+                }
             elif m_type == "tcn":
                 if DurationTCN is None:
                     raise ImportError("DurationTCN class could not be loaded from 04_train.")
@@ -321,25 +352,34 @@ class ChampionPredictor:
                     feats[col] = float(prev_dur)
                 else:
                     feats[col] = 0.0
+
+        # Clamp in-flight features to 99th percentile training bounds to prevent OOD extrapolation
+        for k, max_v in self.feature_max_caps.items():
+            if k in feats and isinstance(feats[k], (int, float)):
+                feats[k] = min(float(feats[k]), max_v)
         return feats
 
     def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
                          milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
                          case_attrs=None):
         """Predicts activity execution duration in seconds using champion model."""
-        return self._predict_time(self.dur_models, self.dur_dispatch, activity, prefix,
-                                  wip, ac_wip, dt, requested_amount, milestones_seen or set(),
-                                  offer_count, has_offer, role_oc_array or [], default_fallback=600.0,
-                                  worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+        val = self._predict_time(self.dur_models, self.dur_dispatch, activity, prefix,
+                                 wip, ac_wip, dt, requested_amount, milestones_seen or set(),
+                                 offer_count, has_offer, role_oc_array or [], default_fallback=600.0,
+                                 worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+        cap = self.dur_max_caps.get(activity, self.dur_global_cap)
+        return min(val, cap)
 
     def predict_waiting(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
                         milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
                         case_attrs=None):
         """Predicts activity waiting time in seconds using champion model."""
-        return self._predict_time(self.wait_models, self.wait_dispatch, activity, prefix,
-                                  wip, ac_wip, dt, requested_amount, milestones_seen or set(),
-                                  offer_count, has_offer, role_oc_array or [], default_fallback=3600.0,
-                                  worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+        val = self._predict_time(self.wait_models, self.wait_dispatch, activity, prefix,
+                                 wip, ac_wip, dt, requested_amount, milestones_seen or set(),
+                                 offer_count, has_offer, role_oc_array or [], default_fallback=3600.0,
+                                 worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+        cap = self.wait_max_caps.get(activity, self.wait_global_cap)
+        return min(val, cap)
 
     def _predict_time(self, suite, dispatch_table, activity, prefix, wip, ac_wip, dt,
                       requested_amount, milestones_seen, offer_count, has_offer,
@@ -396,9 +436,12 @@ class ChampionPredictor:
                         elif ec == "Daytime":
                             row_dict[ec] = (dt.hour * 3600 + dt.minute * 60 + dt.second) / 86400.0 if dt else 0.0
                         elif ec == "WIP":
-                            row_dict[ec] = float(wip)
+                            max_wip = self.feature_max_caps.get("WIP", 888.0)
+                            row_dict[ec] = min(float(wip), max_wip)
                         elif ec == "AC_WIP":
-                            row_dict[ec] = float(ac_wip.get(activity, 0)) if isinstance(ac_wip, dict) else 0.0
+                            max_ac = self.feature_max_caps.get("AC_WIP", 6.0)
+                            val_ac = float(ac_wip.get(activity, 0)) if isinstance(ac_wip, dict) else 0.0
+                            row_dict[ec] = min(val_ac, max_ac)
                         elif ec.startswith("Act_Minus_") or ec in ["Target_Activity", "Resource_ID"]:
                             row_dict[ec] = "NONE"
                         else:
@@ -407,27 +450,26 @@ class ChampionPredictor:
             else:
                 cols_to_use = [c for c in row_dict.keys() if c in self.feature_cols or c.startswith("Act_Minus_") or c == "Target_Activity"]
 
-            prefix_dtype = suite.get("prefix_cat_dtype")
-            target_dtype = suite.get("target_act_dtype")
-            resource_dtype = suite.get("resource_cat_dtype")
+            prefix_map = suite.get("prefix_code_map", {})
+            target_map = suite.get("target_code_map", {})
+            res_map = suite.get("resource_code_map", {})
 
-            col_dict = {}
+            row_vals = []
             for col in cols_to_use:
                 if col.startswith("Act_Minus_"):
-                    val = row_dict.get(col, "NONE")
-                    col_dict[col] = pd.Categorical([val], dtype=prefix_dtype) if prefix_dtype is not None else [val]
+                    row_vals.append(prefix_map.get(row_dict.get(col, "NONE"), np.nan))
                 elif col == "Target_Activity":
-                    val = row_dict.get(col, activity)
-                    col_dict[col] = pd.Categorical([val], dtype=target_dtype) if target_dtype is not None else [val]
+                    row_vals.append(target_map.get(row_dict.get(col, activity), np.nan))
                 elif col == "Resource_ID":
-                    val = row_dict.get(col, "UNKNOWN")
-                    col_dict[col] = pd.Categorical([val], dtype=resource_dtype) if resource_dtype is not None else pd.Categorical([val])
+                    row_vals.append(res_map.get(row_dict.get(col, "UNKNOWN"), np.nan))
                 else:
-                    col_dict[col] = [row_dict.get(col, 0.0)]
+                    row_vals.append(float(row_dict.get(col, 0.0)))
 
-            row_df = pd.DataFrame(col_dict)
-            pred_log1p = model.predict(row_df)[0]
-            val = float(np.expm1(np.clip(pred_log1p, 0.0, 15.0)))
+            x_arr = np.array([row_vals], dtype=np.float32)
+            booster_obj = entry.get("booster") or model.get_booster()
+            entry["booster"] = booster_obj
+            pred_log1p = float(booster_obj.inplace_predict(x_arr)[0])
+            val = float(np.expm1(np.clip(pred_log1p, 0.0, 20.0)))
             return max(1.0, val)
 
         elif m_type in ["tcn", "lstm"]:
@@ -533,7 +575,8 @@ class ChampionPredictor:
             return None
 
         # 1. ML Classifier Prediction
-        if p_info.get("strategy") == "machine_learning" and place_id in self.routing_models:
+        force_prob = set(self.cfg.get("tasks", {}).get("routing", {}).get("force_probability_places", []))
+        if place_id not in force_prob and p_info.get("strategy") == "machine_learning" and place_id in self.routing_models:
             clf = self.routing_models[place_id]
             feat_cols = p_info["features"]
 
@@ -610,6 +653,10 @@ class ChampionPredictor:
 
         # 2. Empirical Probability Fallback
         probs = p_info.get("probabilities", {})
+        if not probs and "classes_observed" in p_info:
+            tot = sum(p_info["classes_observed"].values())
+            if tot > 0:
+                probs = {k: v / tot for k, v in p_info["classes_observed"].items()}
         if probs:
             targets = list(probs.keys())
             weights = list(probs.values())
