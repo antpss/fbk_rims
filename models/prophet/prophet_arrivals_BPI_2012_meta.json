@@ -1,4 +1,5 @@
 {
+  "log_path": "/home/antonio/fbk_rims/data/processed/aligned_BPI_2012.xes",
   "log_mtime": 1791972796.911372,
   "log_size": 55388131,
   "hyperparams": {

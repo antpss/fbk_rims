@@ -92,7 +92,10 @@ class ChampionPredictor:
         self.wait_models = self._load_model_suite(wait_dir, self.wait_dispatch)
 
         # 3. Load XOR Routing Decision Classifiers
-        routing_dir = os.path.join(PROJECT_ROOT, cfg.get("tasks", {}).get("routing", {}).get("output_dir", "models/routing"))
+        routing_dir = os.path.join(
+            PROJECT_ROOT,
+            cfg.get("paths", {}).get("routing_models_dir") or cfg.get("tasks", {}).get("routing", {}).get("output_dir", "models/routing")
+        )
         routing_manifest_path = os.path.join(routing_dir, "routing_decisions.json")
         with open(routing_manifest_path) as f:
             self.routing_manifest = json.load(f)["decision_points"]
@@ -598,10 +601,7 @@ class ChampionPredictor:
                     row[k] = v
 
             for col in feat_cols:
-                if col.startswith("Milestone_"):
-                    m_name = col.replace("Milestone_", "")
-                    row[col] = 1.0 if (milestones_seen and m_name in milestones_seen) else 0.0
-                elif col.startswith("has_"):
+                if col.startswith("has_") and col != "has_offer":
                     act_name = col.replace("has_", "")
                     row[col] = 1.0 if (act_name in prefix or (milestones_seen and act_name in milestones_seen)) else 0.0
                 elif col not in row:

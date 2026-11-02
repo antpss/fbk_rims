@@ -26,7 +26,9 @@ def main():
         raise FileNotFoundError(f"Input log not found at: {input_log_path}")
     petri_nets_dir = os.path.join(PROJECT_ROOT, cfg["paths"].get("petri_nets_dir", "models/petri_nets"))
     os.makedirs(petri_nets_dir, exist_ok=True)
-    output_pnml_path = os.path.join(petri_nets_dir, "discovered_model_split.pnml")
+    pnml_rel = cfg.get("paths", {}).get("petri_net", os.path.join(petri_nets_dir, "discovered_model_split.pnml"))
+    output_pnml_path = pnml_rel if os.path.isabs(pnml_rel) else os.path.join(PROJECT_ROOT, pnml_rel)
+    os.makedirs(os.path.dirname(output_pnml_path), exist_ok=True)
 
     print(f"Loading event log from: {input_log_path}...")
     log = pm4py.read_xes(input_log_path)

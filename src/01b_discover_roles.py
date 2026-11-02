@@ -52,7 +52,7 @@ def _generate_descriptive_role_name(idx: int, activities: list) -> str:
     return f"Role_{idx}_{base}"
 
 
-def discover_roles(cfg=None, threshold=None, force=False):
+def discover_roles(cfg=None, threshold=None):
     cfg = cfg or load_config()
     res_cfg = cfg.get("resources", {})
     disc_cfg = res_cfg.get("discovery", {})
@@ -72,10 +72,16 @@ def discover_roles(cfg=None, threshold=None, force=False):
     if not isinstance(df, pd.DataFrame):
         df = pm4py.convert_to_dataframe(df)
 
-    # Filter out synthetic/system resources
-    df = df[df["org:resource"].notna()].copy()
-    df["org:resource"] = df["org:resource"].astype(str)
-    df = df[~df["org:resource"].str.upper().isin(["SYNTHETIC", "SYSTEM", "NONE", "NAN"])].copy()
+    # Check if valid org:resource column exists
+    has_resources = False
+    if "org:resource" in df.columns:
+        valid_res = df["org:resource"].dropna().astype(str)
+        valid_res = valid_res[~valid_res.str.upper().isin(["SYNTHETIC", "SYSTEM", "NONE", "NAN", "UNKNOWN", ""])]
+        if len(valid_res) > 0:
+            has_resources = True
+            df = df[df["org:resource"].notna()].copy()
+            df["org:resource"] = df["org:resource"].astype(str)
+            df = df[~df["org:resource"].str.upper().isin(["SYNTHETIC", "SYSTEM", "NONE", "NAN"])].copy()
 
     # Target activities
     target_activities = cfg.get("target_activities", [])
@@ -92,6 +98,48 @@ def discover_roles(cfg=None, threshold=None, force=False):
             else:
                 df_target = df.copy()
         target_activities = sorted(df_target["concept:name"].unique().tolist())
+
+    if not has_resources:
+        print("[!] Note: Event log contains no valid 'org:resource' column.")
+        print("    Synthesizing anonymous unconstrained enterprise staffing pool (1 pooled role, infinite capacity)...")
+        role_name = "Role_0_General_Operations"
+        activity_to_role = {act: role_name for act in target_activities}
+        role_to_activities = {role_name: sorted(target_activities)}
+        role_to_workers = {role_name: ["Worker_Generic"]}
+        role_originator_importance = {role_name: {"Worker_Generic": len(df)}}
+        all_resources = ["Worker_Generic"]
+        role_capacities = {role_name: 999}
+        worker_concurrencies = {"Worker_Generic": 999}
+        role_calendars = {role_name: {"work_days": list(range(7)), "hour_start": 0, "hour_end": 24}}
+
+        role_mapping_data = {
+            "__metadata__": {
+                "algorithm": "Anonymous_Fallback",
+                "threshold": th,
+                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "total_distinct_resources": 1,
+                "total_roles": 1
+            },
+            "__role_names__": [role_name],
+            "roles": role_to_activities,
+            "activity_to_role": activity_to_role,
+            "role_to_workers": role_to_workers,
+            "role_capacities": role_capacities,
+            "role_calendars": role_calendars,
+            "worker_concurrencies": worker_concurrencies,
+            "__all_resources__": all_resources,
+            "__role_originator_importance__": role_originator_importance
+        }
+        for act, r_name in activity_to_role.items():
+            role_mapping_data[act] = role_to_workers[r_name]
+
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        with open(output_file, "w") as f:
+            json.dump(role_mapping_data, f, indent=2)
+        print(f"Successfully generated role manifest: {output_file}")
+        _write_markdown_report(report_file, th, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources, role_calendars)
+        print(f"Successfully generated discovery report: {report_file}")
+        return role_mapping_data
 
     print(f"Running Sperduti Role Discovery (Burattin et al. 2013) on {len(target_activities)} activities with threshold θ={th}...")
     roles_discovered = roles_miner.apply(df_target, parameters={"roles_threshold_parameter": th})
@@ -316,8 +364,10 @@ def _write_markdown_report(report_path, threshold, role_to_activities, role_to_w
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Discover organizational roles using Sperduti algorithm.")
+    parser.add_argument("--config", "-c", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--threshold", "-t", type=float, default=None, help="Sperduti similarity threshold (default: 0.35)")
     args = parser.parse_args()
 
-    discover_roles(threshold=args.threshold)
+    cfg = load_config(args.config) if args.config else None
+    discover_roles(cfg=cfg, threshold=args.threshold)
 

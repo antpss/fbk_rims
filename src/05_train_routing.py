@@ -202,7 +202,15 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                 if treat_zero:
                     clean_s = clean_s[clean_s != 0]
                 clean_s = clean_s.dropna()
-                val_stat = float(clean_s.median()) if not clean_s.empty else float(attr.get("fill_value", 0.0))
+                strat = str(attr.get("fill_strategy", "median")).lower()
+                if clean_s.empty:
+                    val_stat = float(attr.get("fill_value", 0.0))
+                elif strat == "mean":
+                    val_stat = float(clean_s.mean())
+                elif strat == "mode":
+                    val_stat = float(clean_s.mode().iloc[0])
+                else:
+                    val_stat = float(clean_s.median())
             else:
                 clean_s = series.dropna()
                 val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
@@ -264,8 +272,8 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                 if ms_prefixes_tuple and log_label.startswith(ms_prefixes_tuple):
                     if log_label not in excluded_ms:
                         milestones_seen.add(log_label)
-                # count discrete offer instances (O_CREATED)
-                if log_label == "O_CREATED":
+                # count discrete offer milestone occurrences (O_ prefixes)
+                if any(p.startswith("O_") for p in ms_prefixes_tuple) and log_label.startswith("O_"):
                     offer_count += 1
 
             # 2. Skip if transition did not fire in Petri net
@@ -347,7 +355,6 @@ def main():
 
     cfg = load_config(args.config)
     seed = cfg["project"].get("random_seed", 42)
-    project_name = cfg["project"].get("name", "BPI_2012")
 
     routing_cfg = cfg.get("tasks", {}).get("routing", {})
     routing_mode = args.routing_mode or routing_cfg.get("mode", "payload")

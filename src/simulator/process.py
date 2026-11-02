@@ -40,10 +40,11 @@ class SharedWorkerPool:
     perform one task at a time across all business activities.
     Supports Kolmogorov-Smirnov fitted refractory latency cooldowns.
     """
-    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None):
+    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None, enable_concurrency_quotas=True):
         self.env = env
         self.latency_cfg = latency_cfg or {}
         self.calendar = calendar
+        self.enable_concurrency_quotas = enable_concurrency_quotas
         with open(role_mapping_path, "r") as f:
             data = json.load(f)
 
@@ -75,6 +76,8 @@ class SharedWorkerPool:
         return bool(self._active_shift_alarms)
 
     def _get_capacity(self, worker_id):
+        if not self.enable_concurrency_quotas:
+            return 1
         if worker_id in self.worker_concurrencies:
             return int(self.worker_concurrencies[worker_id])
         return int(self.resource_capacities.get(worker_id, 1))
@@ -134,12 +137,6 @@ class SharedWorkerPool:
     def _role_shift_alarm_worker(self, gap, alarm_key):
         yield self.env.timeout(gap)
         self._active_shift_alarms.discard(alarm_key)
-        self._dispatch_all_pending()
-
-    def _shift_alarm_worker(self, gap):
-        """Backward compatibility helper for global shift alarm."""
-        yield self.env.timeout(gap)
-        self._active_shift_alarms.clear()
         self._dispatch_all_pending()
 
     def _dispatch_all_pending(self):
@@ -435,7 +432,11 @@ class SimulationProcess:
         user_hl = cfg.get("simulation", {}).get("human_latency", {})
         if isinstance(user_hl, dict):
             latency_cfg.update(user_hl)
-        self.workers = SharedWorkerPool(self.env, role_mapping_path, latency_cfg=latency_cfg, calendar=self.calendar)
+        enable_quotas = cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True)
+        self.workers = SharedWorkerPool(
+            self.env, role_mapping_path, latency_cfg=latency_cfg, calendar=self.calendar,
+            enable_concurrency_quotas=enable_quotas
+        )
 
         # Runtime Champion Predictor
         self.predictor = ChampionPredictor(cfg)

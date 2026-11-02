@@ -79,16 +79,27 @@ def _extract_milestones(ctx: FeatureContext) -> Dict[str, float]:
     return res
 
 
-def _extract_case_attributes(ctx: FeatureContext) -> Dict[str, float]:
+def _extract_case_attributes(ctx: FeatureContext) -> Dict[str, Any]:
     res = {}
     if ctx.case_attrs:
         for k, v in ctx.case_attrs.items():
             try:
                 res[k] = float(v)
             except (ValueError, TypeError):
-                res[k] = 0.0
+                res[k] = str(v) if v is not None else "UNKNOWN"
     else:
         res["RequestedAmount"] = float(ctx.requested_amount)
+    return res
+
+
+def _extract_event_attributes(ctx: FeatureContext) -> Dict[str, Any]:
+    res = {}
+    if ctx.event_attrs:
+        for k, v in ctx.event_attrs.items():
+            try:
+                res[k] = float(v)
+            except (ValueError, TypeError):
+                res[k] = str(v) if v is not None else "UNKNOWN"
     return res
 
 
@@ -108,6 +119,7 @@ FEATURE_REGISTRY: Dict[str, Callable[[FeatureContext], Dict[str, Any]]] = {
     "has_offer": _extract_has_offer,
     "milestones": _extract_milestones,
     "case_attributes": _extract_case_attributes,
+    "event_attributes": _extract_event_attributes,
     "resource_id": _extract_resource_id,
 }
 
@@ -127,6 +139,8 @@ class FeatureManager:
             self.selected_features = [str(f).lower() for f in feat_cfg["selected_features"]]
             if feat_cfg.get("case_attributes", None) == [] and "case_attributes" in self.selected_features:
                 self.selected_features.remove("case_attributes")
+            if feat_cfg.get("event_attributes", None) == [] and "event_attributes" in self.selected_features:
+                self.selected_features.remove("event_attributes")
         else:
             # Priority 2: Backwards compatibility mapping from legacy config structure
             univ = feat_cfg.get("universal", {})
@@ -145,6 +159,8 @@ class FeatureManager:
             selected.extend(["offer_count", "has_offer", "milestones"])
             if feat_cfg.get("case_attributes", None) != []:
                 selected.append("case_attributes")
+            if feat_cfg.get("event_attributes", None):
+                selected.append("event_attributes")
 
             # Check if resource is requested in event_attributes
             ev_attrs = [str(x).lower() for x in feat_cfg.get("event_attributes", [])]

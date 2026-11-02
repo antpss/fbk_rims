@@ -75,7 +75,15 @@ class ArrivalGenerator:
                         if treat_zero:
                             clean_s = clean_s[clean_s != 0]
                         clean_s = clean_s.dropna()
-                        val_stat = float(clean_s.median()) if not clean_s.empty else float(attr.get("fill_value", 0.0))
+                        strat = str(attr.get("fill_strategy", "median")).lower()
+                        if clean_s.empty:
+                            val_stat = float(attr.get("fill_value", 0.0))
+                        elif strat == "mean":
+                            val_stat = float(clean_s.mean())
+                        elif strat == "mode":
+                            val_stat = float(clean_s.mode().iloc[0])
+                        else:
+                            val_stat = float(clean_s.median())
                     else:
                         clean_s = series.dropna()
                         val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
@@ -145,17 +153,6 @@ class ArrivalGenerator:
                 t_first = grp_sorted["time:timestamp"].iloc[0]
                 amt = grp_sorted[amt_col].iloc[0] if (amt_col and amt_col in grp_sorted.columns) else 0.0
 
-                ms_states = []
-                cur_ms = set()
-                if ms_prefixes:
-                    for _, r in grp_sorted.iterrows():
-                        act = str(r["concept:name"])
-                        trans = str(r.get("lifecycle:transition", "COMPLETE")).upper()
-                        if act.startswith(ms_prefixes):
-                            cur_ms.add(act)
-                        elif w_mask.get(r.name, False) and trans == "COMPLETE":
-                            ms_states.append(set(cur_ms))
-
                 init_ms = set()
                 if ms_prefixes:
                     for _, r in grp_sorted.iterrows():
@@ -196,7 +193,7 @@ class ArrivalGenerator:
                     "requested_amount": float(amt) if pd.notna(amt) else 0.0,
                     "case_attrs": extracted_case_attrs,
                     "init_ms": init_ms,
-                    "ms_states": ms_states
+                    "ms_states": []
                 })
 
             arrivals.sort(key=lambda x: x["arrival_time"])
@@ -325,7 +322,7 @@ class ArrivalGenerator:
         elif proc_prefixes:
             w_mask = df_real["concept:name"].str.startswith(proc_prefixes)
         else:
-            w_mask = df_real["concept:name"].str.startswith("W_")
+            w_mask = pd.Series(True, index=df_real.index)
         cases_with_w = set(df_real.loc[w_mask, "case:concept:name"].unique())
 
         first_times = (
@@ -407,7 +404,8 @@ class ArrivalGenerator:
             try:
                 with open(meta_cache_path, "r") as mf:
                     meta = json.load(mf)
-                if (meta.get("log_mtime") == log_mtime and
+                if (meta.get("log_path") == aligned_log_path and
+                    meta.get("log_mtime") == log_mtime and
                     meta.get("log_size") == log_size and
                     meta.get("hyperparams") == hyperparams):
                     with open(model_cache_path, "r") as pf:
@@ -454,6 +452,7 @@ class ArrivalGenerator:
                     with open(model_cache_path, "w") as pf:
                         json.dump(model_to_json(model), pf)
                     meta = {
+                        "log_path": aligned_log_path,
                         "log_mtime": log_mtime,
                         "log_size": log_size,
                         "hyperparams": hyperparams,

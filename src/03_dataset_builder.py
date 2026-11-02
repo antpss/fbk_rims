@@ -82,7 +82,15 @@ def main():
             if treat_zero:
                 clean_s = clean_s[clean_s != 0]
             clean_s = clean_s.dropna()
-            val_stat = float(clean_s.median()) if not clean_s.empty else float(attr.get("fill_value", 0.0))
+            strat = str(attr.get("fill_strategy", "median")).lower()
+            if clean_s.empty:
+                val_stat = float(attr.get("fill_value", 0.0))
+            elif strat == "mean":
+                val_stat = float(clean_s.mean())
+            elif strat == "mode":
+                val_stat = float(clean_s.mode().iloc[0])
+            else:
+                val_stat = float(clean_s.median())
         else:
             clean_s = series.dropna()
             val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
@@ -158,7 +166,6 @@ def main():
     case_milestones_seen = defaultdict(set)
     case_offer_count = defaultdict(int)
     case_prev_time = {}
-    case_last_complete = {}
     case_prev_end_time = {}
 
     all_rows = []
@@ -215,7 +222,6 @@ def main():
         if seen_events[case_id] == 0:
             active_cases.add(case_id)
             case_prev_time[case_id] = 0.0
-            case_last_complete[case_id] = timestamp
 
         seen_events[case_id] += 1
 
@@ -232,8 +238,8 @@ def main():
         # -------------------------------------------------------------
         if milestone_prefixes and activity_name.startswith(milestone_prefixes):
             case_milestones_seen[case_id].add(activity_name)
-            # count discrete offer instances (O_CREATED)
-            if any(p.startswith("O_") for p in milestone_prefixes) and activity_name == "O_CREATED":
+            # count discrete offer milestone occurrences (O_ prefixes)
+            if any(p.startswith("O_") for p in milestone_prefixes) and activity_name.startswith("O_"):
                 case_offer_count[case_id] += 1
 
         # -------------------------------------------------------------
@@ -251,12 +257,9 @@ def main():
                     role_active[act_role] += 1
                 case_start_times[case_id][activity_name].append(timestamp)
 
-                # Universal Net Queue Wait Calculation:
-                # Effective business working waiting time between previous task completion and current task start
+                # Queue wait calculation: raw elapsed wall-clock seconds matching SimPy timeout scale
                 if case_id in case_prev_end_time:
-                    current_wait = calendar.calculate_net_working_seconds(
-                        case_prev_end_time[case_id], timestamp, role_or_act=activity_name, allow_zero=True
-                    )
+                    current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
                 else:
                     current_wait = 0.0
 
@@ -281,7 +284,8 @@ def main():
                 )
                 feat_dict = feature_mgr.build_features(ctx)
                 feat_dict["Wait_Time_Seconds"] = current_wait
-                feat_dict["Prev_Proc_Time"] = case_prev_time[case_id]
+                if feature_mgr.is_feature_active("prev_duration"):
+                    feat_dict["Prev_Proc_Time"] = case_prev_time[case_id]
 
                 case_start_features[case_id][activity_name].append(feat_dict)
 
@@ -301,7 +305,6 @@ def main():
                     has_valid_start = False
 
                 case_prev_time[case_id] = duration
-                case_last_complete[case_id] = timestamp
                 case_prev_end_time[case_id] = timestamp
 
                 # Only emit valid human training samples
@@ -337,7 +340,6 @@ def main():
             if case_id in case_milestones_seen: del case_milestones_seen[case_id]
             if case_id in case_offer_count: del case_offer_count[case_id]
             if case_id in case_prev_time: del case_prev_time[case_id]
-            if case_id in case_last_complete: del case_last_complete[case_id]
             if case_id in case_prev_end_time: del case_prev_end_time[case_id]
 
     print(f"\nExtraction Summary:")

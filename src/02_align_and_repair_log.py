@@ -1,4 +1,5 @@
 import os
+import argparse
 from collections import defaultdict
 import pm4py
 import pandas as pd
@@ -6,7 +7,11 @@ from pm4py.objects.log.obj import EventLog, Trace, Event
 from config_loader import load_config, PROJECT_ROOT
 
 def main():
-    cfg = load_config()
+    parser = argparse.ArgumentParser(description="Align traces to Petri net and repair event log lifecycles.")
+    parser.add_argument("--config", "-c", type=str, default=None, help="Path to config.yaml")
+    args = parser.parse_args()
+
+    cfg = load_config(args.config)
     raw_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_filtered.xes")
     input_log_path = raw_rel if os.path.isabs(raw_rel) else os.path.join(PROJECT_ROOT, raw_rel)
     if not os.path.exists(input_log_path):

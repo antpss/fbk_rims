@@ -16,6 +16,7 @@ What the framework does:
 
 ```
 fbk_rims/
+├── run_pipeline.py                    # Master pipeline orchestrator (runs steps 00 through 06)
 ├── config.yaml                        # Central configuration (paths, miner, roles, features, models, simulation)
 ├── requirements.txt                   # Formal project dependencies (PyTorch, SimPy, PM4Py, Prophet, XGBoost)
 ├── context.md                         # Detailed project context, evolution, and architectural blueprint
@@ -71,7 +72,7 @@ fbk_rims/
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
 │   ├── features.py                    # Declarative Feature Registry & context builder
 │   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
-│   ├── benchmark_models.py            # Step 4b: Automated benchmarking & champion synthesis
+│   ├── 04b_benchmark_models.py        # Step 4b: Automated benchmarking & champion synthesis
 │   ├── 05_train_routing.py            # Step 5: White-Box XOR decision mining & Hyperopt tuning
 │   ├── 06_simulate.py                 # Step 6: Simulation CLI runner
 │   ├── simulator/                     # Modular OOP Simulation Package
@@ -115,6 +116,29 @@ Key dependencies:
 
 ---
 
+## Quick Start: Master Pipeline Runner (`run_pipeline.py`)
+
+RIMS++ provides an all-in-one orchestrator that reads [`config.yaml`](config.yaml) and executes the entire pipeline end-to-end with a single command:
+
+```bash
+# 1. Run the entire pipeline end-to-end (Steps 00 through 06)
+python run_pipeline.py
+
+# 2. Run with a custom configuration file
+python run_pipeline.py --config config.yaml
+
+# 3. Run specific stages only (e.g. skip discovery, train models & simulate)
+python run_pipeline.py --steps 3,4,4b,5,6
+
+# 4. Fast simulation run overriding case count
+python run_pipeline.py --steps 06 --cases 100
+
+# 5. Dry-run preview of planned stages
+python run_pipeline.py --dry-run
+```
+
+---
+
 ## Central Configuration (`config.yaml`)
 
 The entire operational pipeline is governed declaratively through [`config.yaml`](config.yaml).
@@ -150,12 +174,12 @@ Configures the Burattin–Sperduti role mining algorithm and runtime worker disp
 ```yaml
 resources:
   discovery:
-    algorithm: "sperduti"           # Options: "sperduti", "manual"
+    algorithm: "sperduti"           # Burattin–Sperduti role mining algorithm
     threshold: 0.35                 # Jaccard clustering threshold (0.35 -> macro departments; >= 0.60 -> 1 role per activity)
     output_file: "models/role_mapping.json"
     report_file: "models/role_discovery_report.md"
   simulation:
-    mode: "hybrid_sperduti"         # Options: "hybrid_sperduti", "legacy_anonymous", "activity_isolated"
+    mode: "hybrid_sperduti"         # Route by role, dispatch to multi-skilled named workers
     dispatch_policy: "longest_idle_first"
     enable_concurrency_quotas: true # Enables empirical multi-tasking quotas (C_w >= 1) mined from log
 ```
@@ -193,6 +217,20 @@ Handles activity standardization, lifecycle pairing, and optional stream partiti
 ```yaml
 preprocessing:
   input_log: "data/raw/<raw_event_log>.xes"
+
+  # Optional Column Mapping: maps custom column names in the raw log to internal standard attributes
+  # Defaults match standard IEEE XES names. Change if using custom CSV/XES logs.
+  columns:
+    case_id: "case:concept:name"
+    activity: "concept:name"
+    timestamp: "time:timestamp"
+    resource: "org:resource"
+    lifecycle: "lifecycle:transition"
+
+  # Optional Lifecycle Transition Value Mapping: maps custom values to standard START / COMPLETE
+  lifecycle_mapping:
+    start: ["START", "start", "begin", "open"]
+    complete: ["COMPLETE", "complete", "finish", "end", "close"]
   
   # Operational activities modeled for duration, waiting, and resource scheduling:
   # Leave empty [] to model ALL activities in standard single-lifecycle event logs.
@@ -251,22 +289,23 @@ simulation:
     estimator: "eclaw_plus"       # Chapela-Campa & Dumas estimators: "eclaw_plus", "eclaw", "naive"
     placement: "ex_ante"
   human_latency:
-    enabled: true
-    max_cooldown: 1800.0          # Max post-task refractory pause / break (seconds)
+    enabled: true                 # Simulate post-task refractory periods (coffee breaks)
+    queue_aware: true             # Queue-aware: only take break when queue has no pending tickets
+    max_cooldown_seconds: 1800.0  # Max cooldown ceiling
   arrival:
     mode: "prophet"               # Options: "prophet", "replay", "generative"
     prophet:
       growth: "logistic"
       cap_multiplier: 1.25
       sampling_method: "triangular"
-      diurnal_seasonality: true
+      daily_seasonality: true
       weekly_seasonality: true
-      cache_dir: "models/prophet"
+      model_cache_dir: "models/prophet"
   calendar:
-    business_hours:
-      start: 8
-      end: 20
+    enabled: true                 # If true, shifts work to business hours & pauses weekends
     work_days: [0, 1, 2, 3, 4]    # Monday to Friday
+    hour_start: 8                 # 08:00
+    hour_end: 20                  # 20:00
 ```
 
 ---
@@ -347,6 +386,9 @@ python src/01b_discover_roles.py --threshold 0.35
 * **Inputs**: `data/processed/aligned_<log_name>.xes` (or `<log_name>_filtered.xes`)
 * **Outputs**: `models/role_mapping.json` and `models/role_discovery_report.md`
 
+> [!TIP]
+> **Anonymous Staffing Fallback**: If an input event log completely lacks an `org:resource` column (or all resources are blank/unrecorded), `01b_discover_roles.py` automatically synthesizes an unconstrained enterprise staffing pool (`Role_0_General_Operations` with `Worker_Generic`), ensuring downstream training and simulation proceed smoothly without manual intervention.
+
 ---
 
 ### Step 2: Log Alignment & Replay Repair (`src/02_align_and_repair_log.py`)
@@ -422,7 +464,7 @@ python src/03_dataset_builder.py --task waiting_time
 
 ### Step 4: Predictive Modeling & Multi-Architecture Benchmark Suite
 
-The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/benchmark_models.py`) support **3 Exploration Modes** across **both duration and waiting time**:
+The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/04b_benchmark_models.py`) support **3 Exploration Modes** across **both duration and waiting time**:
 
 1. **`hybrid`** *(Recommended)*:
    Trains global and local candidates across architectures (`xgboost`, `tcn`, `lstm`) and automatically synthesizes a **Best-of-All-Worlds Hybrid Champion** dispatch configuration that routes each activity to its top-performing model.
@@ -433,21 +475,21 @@ The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/
 
 All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split** (partitioned by `Case_ID` to eliminate temporal data leakage).
 
-#### Automated Benchmarking (`src/benchmark_models.py`)
+#### Automated Benchmarking (`src/04b_benchmark_models.py`)
 
 ```bash
 # 1. Full Hybrid Benchmark (Duration)
-python src/benchmark_models.py --task duration --mode hybrid --run_all
+python src/04b_benchmark_models.py --task duration --mode hybrid --run_all
 
 # 2. Full Hybrid Benchmark (Waiting Time)
-python src/benchmark_models.py --task waiting_time --mode hybrid --run_all
+python src/04b_benchmark_models.py --task waiting_time --mode hybrid --run_all
 
 # 3. Global-Only Tournament
-python src/benchmark_models.py --task duration --mode global_tournament --run_all
+python src/04b_benchmark_models.py --task duration --mode global_tournament --run_all
 
 # 4. Re-compare & synthesize champion from existing trained models
-python src/benchmark_models.py --task duration --compare
-python src/benchmark_models.py --task waiting_time --compare
+python src/04b_benchmark_models.py --task duration --compare
+python src/04b_benchmark_models.py --task waiting_time --compare
 ```
 
 #### Step-by-Step Individual Training (`src/04_train.py`)
@@ -507,7 +549,7 @@ python src/05_train_routing.py --classifier xgboost
 
 The simulation engine is structured as a modular object-oriented package in `src/simulator/`, orchestrated via the CLI runner `src/06_simulate.py`:
 
-* **`Token` (`src/simulator/token.py`)**: Individual case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$), evaluating XOR decision trees with empirical probability fallback for enabled transitions, and applying loopback damping ($0.5^{\text{loop}}$).
+* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, applies loopback damping ($0.5^{\text{loop}}$), and provides safe deadlock detection warnings.
 * **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Coordinates the SimPy runtime environment and human resources using the **Hybrid Role-Resource Architecture**:
   * **Route by Role**: Tokens request resources from the activity's assigned organizational role (`activity_to_role`), querying qualified candidate workers.
   * **Zero Worker Ubiquity (Elimination of Phantom Staff)**: Tracks individual human workers as unique physical entities across the enterprise. If a multi-skilled worker is occupied with a task in Role A, they cannot be concurrently scheduled in Role B.

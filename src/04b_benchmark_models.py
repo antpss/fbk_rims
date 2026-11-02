@@ -186,6 +186,9 @@ def synthesize_champion_hybrid(models_dir, task="duration"):
         v_src = os.path.join(src_dir, "vocab.json")
         if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
             shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
+        c_src = os.path.join(src_dir, "categories.json")
+        if os.path.exists(c_src) and not os.path.exists(os.path.join(champion_dir, "categories.json")):
+            shutil.copy(c_src, os.path.join(champion_dir, "categories.json"))
         # Copy model binary file
         m_file = info.get("file")
         if m_file:
@@ -280,6 +283,9 @@ def synthesize_champion_global(models_dir, task="duration"):
     v_src = os.path.join(src_dir, "vocab.json")
     if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
         shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
+    c_src = os.path.join(src_dir, "categories.json")
+    if os.path.exists(c_src) and not os.path.exists(os.path.join(champion_dir, "categories.json")):
+        shutil.copy(c_src, os.path.join(champion_dir, "categories.json"))
     if model_file:
         m_src = os.path.join(src_dir, model_file)
         if os.path.exists(m_src):
@@ -466,7 +472,7 @@ def print_comparison_table(metrics_list, models_dir, task="duration"):
         f.write("\n".join(md_lines) + "\n")
     print(f"[✓] Saved comprehensive benchmark report to: {report_path}\n")
 
-def run_training_experiment(strategy, model_type, task="duration"):
+def run_training_experiment(strategy, model_type, task="duration", config_path=None):
     """
     Executes a single training run via python src/04_train.py.
     """
@@ -477,11 +483,14 @@ def run_training_experiment(strategy, model_type, task="duration"):
         "--strategy", strategy,
         "--model_type", model_type
     ]
+    if config_path:
+        cmd.extend(["--config", config_path])
     print(f"\n>>> Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
 def main():
     parser = argparse.ArgumentParser(description="RIMS++ Model Benchmarking & Comparison Suite")
+    parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Task to benchmark")
     parser.add_argument("--mode", type=str, default=None, choices=["hybrid", "global_tournament", "single_global"],
                         help="Exploration mode (hybrid, global_tournament, single_global). Defaults to config.yaml")
@@ -489,7 +498,7 @@ def main():
     parser.add_argument("--run_all", "--tournament", dest="run_all", action="store_true", help="Train candidate models, run tournament, and synthesize champion")
     args = parser.parse_args()
 
-    cfg = load_config()
+    cfg = load_config(args.config)
     strat_cfg = cfg.get("model_strategy", {})
     mode = args.mode or strat_cfg.get("mode", "hybrid")
 
@@ -504,7 +513,7 @@ def main():
 
         if mode == "single_global":
             engine = strat_cfg.get("single_global_engine", "xgboost")
-            run_training_experiment("global", engine, task=args.task)
+            run_training_experiment("global", engine, task=args.task, config_path=args.config)
         else:
             candidates_list = strat_cfg.get("candidates", {}).get(mode, [])
             if not candidates_list:
@@ -521,7 +530,7 @@ def main():
                         {"strategy": "local", "engine": "tcn"}
                     ]
             for cand in candidates_list:
-                run_training_experiment(cand["strategy"], cand["engine"], task=args.task)
+                run_training_experiment(cand["strategy"], cand["engine"], task=args.task, config_path=args.config)
 
     # Synthesize the Champion from available candidate models
     champion = synthesize_champion(models_dir, task=args.task, mode=mode)
