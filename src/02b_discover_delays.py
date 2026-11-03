@@ -274,16 +274,27 @@ class ChapelaDelayDiscoveryEngine:
         print(f"Discovered {len(oracle.concurrent_pairs)} concurrent activity relations.")
 
         # Reconstruct Worker Timelines & Slicing Arrays
-        resource_busy = defaultdict(list)
+        # For each worker, merge overlapping activity instances into disjoint busy intervals
+        resource_raw = defaultdict(list)
         for inst in instances:
             res = inst["res"]
             if res not in ("UNKNOWN", "nan", "None", "SYSTEM", "", "None") and inst["start"] < inst["end"]:
-                resource_busy[res].append((inst["start"], inst["end"]))
+                resource_raw[res].append((inst["start"], inst["end"]))
 
+        resource_busy = {}
         resource_busy_starts = {}
-        for res in resource_busy:
-            resource_busy[res].sort(key=lambda x: x[0])
-            resource_busy_starts[res] = [b[0] for b in resource_busy[res]]
+        resource_busy_ends = {}
+        for res, raw_intervals in resource_raw.items():
+            raw_intervals.sort(key=lambda x: x[0])
+            merged = []
+            for s, e in raw_intervals:
+                if not merged or s > merged[-1][1]:
+                    merged.append([s, e])
+                else:
+                    merged[-1][1] = max(merged[-1][1], e)
+            resource_busy[res] = [(s, e) for s, e in merged]
+            resource_busy_starts[res] = [s for s, e in merged]
+            resource_busy_ends[res] = [e for s, e in merged]
 
         print(f"Reconstructed active execution timelines for {len(resource_busy)} workers.")
 
@@ -343,11 +354,13 @@ class ChapelaDelayDiscoveryEngine:
 
                 # 1. Busy intervals of target worker
                 busy_list = resource_busy.get(res_t, [])
+                ends = resource_busy_ends.get(res_t, [])
                 starts = resource_busy_starts.get(res_t, [])
                 if busy_list:
-                    idx_r = bisect.bisect_right(starts, E)
-                    for b_s, b_e in busy_list[:idx_r]:
-                        if b_e > S:
+                    idx_l = bisect.bisect_right(ends, S)
+                    idx_r = bisect.bisect_left(starts, E)
+                    for b_s, b_e in busy_list[idx_l:idx_r + 1]:
+                        if b_s < E and b_e > S:
                             unavail.append((max(S, b_s), min(E, b_e)))
 
                 # 2. Calendar non-working periods NW(ρ) for target activity's role

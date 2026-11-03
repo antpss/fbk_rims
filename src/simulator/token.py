@@ -170,14 +170,17 @@ class Token:
         act = chosen_t.label
         self.events_done += 1
 
+        act_occurrences = self.prefix.count(act)
+        loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
+
         # 3. Chapela-Campa Transition-Arc Delay (specific) or Ex-Ante Extraneous Delay (generic fallback)
         ext_delay = 0.0
         if self.prev_act and (self.prev_act, act) in self.process.external_delays:
-            ext_delay = self.process.sample_external_delay(self.prev_act, act)
+            ext_delay = self.process.sample_external_delay(self.prev_act, act) * loop_decay
             if ext_delay > 0:
                 yield self.env.timeout(ext_delay)
         elif self.process.has_ex_ante_delay(act):
-            ext_delay = self.process.sample_ex_ante_delay(act)
+            ext_delay = self.process.sample_ex_ante_delay(act) * loop_decay
             if ext_delay > 0:
                 yield self.env.timeout(ext_delay)
 
@@ -192,9 +195,7 @@ class Token:
                 prev_dur=self.prev_dur,
                 case_attrs=self.case_attrs
             )
-            act_occurrences = self.prefix.count(act)
-            loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
-            w_worklist = max(0.0, w_ml - ext_delay) * loop_decay
+            w_worklist = max(0.0, w_ml * loop_decay - ext_delay)
             if w_worklist > 0:
                 yield self.env.timeout(w_worklist)
         else:

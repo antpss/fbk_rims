@@ -586,7 +586,7 @@ def main():
             # Hyperparameter optimization mirroring legacy RIMS (max_depth up to 21 across 100 evaluations)
             if HAS_HYPEROPT:
                 criterion_list = ["gini", "entropy", "log_loss"]
-                cw_list = [None, "balanced"]
+                cw_list = [None]
                 space = {
                     "max_depth": scope.int(hp.quniform("max_depth", 1, max_depth, 1)),
                     "min_samples_split": scope.int(hp.quniform("min_samples_split", 2, 20, 1)),
@@ -644,7 +644,7 @@ def main():
                     "min_samples_split": list(range(2, 21)),
                     "min_samples_leaf": list(range(1, 26)),
                     "criterion": ["gini", "entropy", "log_loss"],
-                    "class_weight": [None, "balanced"],
+                    "class_weight": [None],
                 }
                 n_iter_search = min(100, int(np.prod([len(v) for v in param_dist.values()])))
                 search = RandomizedSearchCV(

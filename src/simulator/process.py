@@ -418,9 +418,10 @@ class SimulationProcess:
                         if trig and res:
                             self.external_delays[(trig, res)] = d
 
-                    # Register all causal transition arcs discovered by RIMS++
+                    # Register causal transition arcs that passed the external delay test (or all if configured)
                     for d in self.delay_manifest.get("causal_transition_arcs", []):
-                        self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
+                        if use_all or d.get("is_external", False):
+                            self.external_delays[(d["trigger_activity"], d["resume_activity"])] = d
 
             except Exception as e:
                 print(f"[!] Warning: Failed to load delay manifest: {e}")
