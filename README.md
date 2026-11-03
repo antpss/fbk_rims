@@ -595,28 +595,44 @@ python src/06_simulate.py --duration 365 --arrival_mode generative
 
 ---
 
-## Validation Methodology & Evaluation Metrics
+## Validation Methodology & Multi-Perspective Evaluation Suite
 
-RIMS++ evaluates simulation fidelity across both **macro process cycle time metrics** and **micro timestamp event distribution metrics**:
+RIMS++ incorporates the full evaluation framework established by **Meneghello et al. (*Information Systems* 128, 2025)** and **Chapela-Campa et al. (*BPM* 2023)**, evaluating simulation fidelity across three foundational dimensions:
 
-### 1. Macroscopic Cycle Time Metrics
-* **Cycle Time MAE**: Mean Absolute Error between the simulated case durations and the ground-truth historical case durations.
-* **Mean & Median Cycle Time**: Validates whether the simulation accurately replicates overall business turnaround times without systemic under- or over-estimation.
-* **1D Wasserstein Distance (Earth Mover's Distance on Cycle Time)**: Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
+```
+                                  RIMS++ Evaluation Suite
+       ┌──────────────────────────────┼──────────────────────────────┐
+       ▼                              ▼                              ▼
+  Control-Flow                     Temporal                      Congestion
+  ├─ CFLD (Edit + Hungarian)       ├─ AED (Absolute Timeline)    ├─ CTD (Cycle Time 1WD)
+  ├─ NGD (2-Gram & 3-Gram)         ├─ CED (168h Circadian Week)  ├─ CAR (Case Arrival Rate 1WD)
+  └─ L_traces (Length Diff)        └─ RED (Relative Trace Start) └─ Mean, Median, MAE
+```
+
+### 1. Control-Flow Perspective
+* **Control-flow Log Distance (CFLD)**: Measures structural trace divergence by computing the normalized string edit distance (Levenshtein) between trace variants and solving the minimum-weight bipartite matching via the **Hungarian algorithm** (Kuhn 1955).
+* **Trace Length Error ($L^{traces}$)**: Average absolute difference in case length between paired traces in $\mathcal{L}_{sim}$ and $\mathcal{L}_{real}$ under optimal Hungarian matching.
+* **N-Gram Distribution Distance (NGD)**: Compares transition sequence probabilities for $N=2$ (2-Gram / Directly-Follows Graph) and $N=3$ (3-Gram) using Total Variation Distance / 1WD bounded in $[0.0, 1.0]$.
+
+### 2. Temporal Perspective
+* **Absolute Event Distribution (AED)**: Bins all event timestamps across the entire absolute calendar timeline into 1-hour intervals and computes the 1st Wasserstein Distance (1WD / Earth Mover's Distance in hours).
+* **Circadian Event Distribution (CED)**: Projects event timestamps onto a 168-hour weekly grid ($7 \text{ days} \times 24 \text{ hours}$) to evaluate whether human work shifts and diurnal rhythms match historical reality.
+* **Relative Event Distribution (RED)**: Evaluates intra-case pacing by calculating 1WD between event offsets relative to case origin ($t_{event} - t_{case\_start}$).
+
+### 3. Congestion & Cycle Time Perspective
+* **Cycle Time Distribution (CTD / 1WD)**: Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
   $$W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx$$
-  providing a robust, scale-sensitive distance metric between duration curves.
-
-### 2. Microscopic Event Distribution Metrics
-* **Relative Event Distribution Distance (RED / EMD)**: Evaluates the fine-grained temporal alignment of individual activity occurrences across the timeline. It partitions simulated and historical logs into discrete temporal bins (e.g. hourly or daily intervals) per activity and calculates the Earth Mover's Distance between their normalized event counts. A lower RED score indicates that activities occur at the realistic hours, days, and frequencies matching historical behavior.
+* **Case Arrival Rate (CAR)**: Evaluates arrival burstiness and concurrency by computing 1WD across binned case arrival timestamps.
+* **Cycle Time Mean, Median & MAE**: Macro turnaround statistics ensuring turnaround times are replicated without systemic under- or over-estimation.
 
 ### Illustrative Simulation Leaderboard Structure (`data/processed/ablation_report.md`)
 
-When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark, for example:
+When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark:
 
-| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Execution Time |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **REAL HISTORICAL** | *Ground Truth* | *Ground Truth* | — | — | — | — |
-| **`hybrid_residual` (ML + Physics)** | **Close to Truth** | **Close to Truth** | **Lowest MAE** | **Lowest Wasserstein** | **Lowest RED** | ~150–200s |
-| `pure_physics` (Contention Only) | Underestimated | Underestimated | Higher MAE | Higher Wasserstein | Higher RED | ~180–220s |
+| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **REAL HISTORICAL** | — | — | — | — | — | — | — | *Ground Truth* | — | — |
+| **`hybrid_residual` (ML + Physics)** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | ~150–200s |
+| `pure_physics` (Contention Only) | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | ~180–220s |
 
 

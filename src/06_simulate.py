@@ -110,45 +110,60 @@ def main():
             res = sim.run()
             results.append(res)
 
-        print("\n" + "=" * 131)
-        print("                                RIMS++ SIMULATION ABLATION LEADERBOARD")
-        print("=" * 131)
-        print(f"{'Simulation Mode':<30} | {'Mean Cycle':>14} | {'Median Cycle':>14} | {'Cycle Time MAE':>16} | {'Wasserstein':>16} | {'RED Dist':>12} | {'Run Time':>10}")
-        print("-" * 131)
+        print("\n" + "=" * 140)
+        print("                                RIMS++ MULTI-PERSPECTIVE BENCHMARK LEADERBOARD")
+        print("=" * 140)
+        print(f"{'Simulation Mode':<22} | {'CFLD':>8} | {'L_traces':>8} | {'2-Gram':>7} | {'AED (h)':>8} | {'CED (h)':>8} | {'RED (h)':>8} | {'CAR (h)':>8} | {'CTD (WD)':>14} | {'MAE Cycle':>14} | {'Run Time':>9}")
+        print("-" * 140)
         real_m = results[0]["real_mean"]
         real_med = results[0]["real_median"]
-        print(f"{'REAL HISTORICAL':<30} | {format_dur(real_m):>14} | {format_dur(real_med):>14} | {'---':>16} | {'---':>16} | {'---':>12} | {'---':>10}")
-        print("-" * 131)
+        print(f"{'REAL HISTORICAL':<22} | {'---':>8} | {'---':>8} | {'---':>7} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>14} | {'---':>14} | {'---':>9}")
+        print("-" * 140)
 
         # Sort by lowest Wasserstein distance (cycle time distribution fidelity)
         sorted_res = sorted(results, key=lambda x: x["wd"])
         best_mode = sorted_res[0]["mode"]
         for r in sorted_res:
-            mode_display = f"{r['mode']} ★ (Best Fit)" if r["mode"] == best_mode else r["mode"]
-            red_str = f"{r.get('red_dist', 0.0):.1f}h"
+            mode_display = f"{r['mode']} ★" if r["mode"] == best_mode else r["mode"]
+            cfld_str = f"{r.get('cfld', 0.0):.4f}"
+            len_str = f"{r.get('l_traces', 0.0):.2f}"
+            ng2_str = f"{r.get('ngram_2', 0.0):.4f}"
+            aed_str = f"{r.get('aed', 0.0):.1f}"
+            ced_str = f"{r.get('ced', 0.0):.1f}"
+            red_str = f"{r.get('red_dist', 0.0):.1f}"
+            car_str = f"{r.get('car', 0.0):.1f}"
             wd_str = f"{r['wd']/86400:.2f} days" if r["wd"] >= 86400 else format_dur(r["wd"])
-            print(f"{mode_display:<30} | {format_dur(r['sim_mean']):>14} | {format_dur(r['sim_median']):>14} | {format_dur(r['mae_cycle']):>16} | {wd_str:>16} | {red_str:>12} | {r['elapsed']:>9.1f}s")
-        print("-" * 131)
-        print("  ★ Note: Ranked by lowest Wasserstein Distance (Cycle Time distribution fidelity).")
-        print("=" * 131 + "\n")
+            mae_str = f"{r['mae_cycle']/86400:.2f} days" if r["mae_cycle"] >= 86400 else format_dur(r["mae_cycle"])
+            print(f"{mode_display:<22} | {cfld_str:>8} | {len_str:>8} | {ng2_str:>7} | {aed_str:>8} | {ced_str:>8} | {red_str:>8} | {car_str:>8} | {wd_str:>14} | {mae_str:>14} | {r['elapsed']:>8.1f}s")
+        print("-" * 140)
+        print("  ★ Note: Evaluated across Control-Flow, Temporal, and Congestion perspectives (Meneghello et al. 2025).")
+        print("=" * 140 + "\n")
 
         # Save Ablation Report
         for rep_name in ["ablation_report.md", f"ablation_report_{arrival_mode}.md"]:
             abl_path = os.path.join(PROJECT_ROOT, "data/processed", rep_name)
             with open(abl_path, "w") as f:
-                f.write(f"# RIMS++ Simulation Ablation Benchmark Report ({arrival_mode.upper()} ARRIVAL)\n\n")
+                f.write(f"# RIMS++ Multi-Perspective Simulation Benchmark Report ({arrival_mode.upper()} ARRIVAL)\n\n")
                 f.write(f"- **Arrival Mode:** `{arrival_mode}`\n")
                 f.write(f"- **Evaluated Cases per Mode:** {case_label}\n")
                 f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n")
-                f.write(f"- **Ranking Criterion:** Lowest Wasserstein Distance (overall cycle time distribution similarity)\n\n")
-                f.write("| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Run Time |\n")
-                f.write("|---|---|---|---|---|---|---|\n")
-                f.write(f"| **REAL HISTORICAL** | {format_dur(real_m)} | {format_dur(real_med)} | --- | --- | --- | --- |\n")
+                f.write(f"- **Evaluation Suite:** Meneghello et al. (Information Systems 2025) / Chapela-Campa et al. (BPM 2023)\n\n")
+                f.write("## Comparative Benchmark Leaderboard\n\n")
+                f.write("| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |\n")
+                f.write("|---|---|---|---|---|---|---|---|---|---|---|\n")
+                f.write(f"| **REAL HISTORICAL** | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
                 for r in sorted_res:
                     tag = " ★ (Best Fit)" if r["mode"] == best_mode else ""
-                    red_str = f"{r.get('red_dist', 0.0):.2f}h"
+                    cfld_str = f"{r.get('cfld', 0.0):.4f}"
+                    len_str = f"{r.get('l_traces', 0.0):.2f}"
+                    ng2_str = f"{r.get('ngram_2', 0.0):.4f}"
+                    aed_str = f"{r.get('aed', 0.0):.2f}"
+                    ced_str = f"{r.get('ced', 0.0):.2f}"
+                    red_str = f"{r.get('red_dist', 0.0):.2f}"
+                    car_str = f"{r.get('car', 0.0):.2f}"
                     wd_str = f"{r['wd']/86400:.2f} days" if r["wd"] >= 86400 else format_dur(r["wd"])
-                    f.write(f"| `{r['mode']}`{tag} | {format_dur(r['sim_mean'])} | {format_dur(r['sim_median'])} | {format_dur(r['mae_cycle'])} | {wd_str} | {red_str} | {r['elapsed']:.1f}s |\n")
+                    mae_str = f"{r['mae_cycle']/86400:.2f} days" if r["mae_cycle"] >= 86400 else format_dur(r["mae_cycle"])
+                    f.write(f"| `{r['mode']}`{tag} | {cfld_str} | {len_str} | {ng2_str} | {aed_str} | {ced_str} | {red_str} | {car_str} | {wd_str} | {mae_str} | {r['elapsed']:.1f}s |\n")
             print(f"[✓] Saved comprehensive ablation report to: {abl_path}\n")
 
     else:
