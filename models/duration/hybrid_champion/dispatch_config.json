@@ -1,0 +1,97 @@
+{
+  "strategy": "hybrid_champion",
+  "task": "duration",
+  "description": "Synthesized Best-of-All-Worlds Hybrid (dynamically selects champion model per activity)",
+  "source_candidates": [
+    "global_lstm",
+    "global_tcn",
+    "global_xgboost",
+    "local_lstm",
+    "local_tcn",
+    "local_xgboost"
+  ],
+  "dispatch": {
+    "__default__": {
+      "model_type": "tcn",
+      "source_dir": "global_tcn",
+      "file": "tcn_global.pth"
+    },
+    "Authorization Requested": {
+      "model_type": "lstm",
+      "source_dir": "local_lstm",
+      "file": "lstm_local_Authorization_Requested.pth",
+      "best_test_mae": 37757.86,
+      "best_test_smape": 134.28
+    },
+    "Back-Office Adjustment Requested": {
+      "model_type": "xgboost",
+      "source_dir": "global_xgboost",
+      "file": "xgboost_global.json",
+      "best_test_mae": 27871.51,
+      "best_test_smape": 76.7
+    },
+    "Evaluating Request (NO registered letter)": {
+      "model_type": "lstm",
+      "source_dir": "local_lstm",
+      "file": "lstm_local_Evaluating_Request_(NO_registered_letter).pth",
+      "best_test_mae": 27906.82,
+      "best_test_smape": 133.39
+    },
+    "Evaluating Request (WITH registered letter)": {
+      "model_type": "tcn",
+      "source_dir": "global_tcn",
+      "file": "tcn_global.pth",
+      "best_test_mae": 26125.06,
+      "best_test_smape": 127.56
+    },
+    "Network Adjustment Requested": {
+      "model_type": "lstm",
+      "source_dir": "local_lstm",
+      "file": null,
+      "best_test_mae": 54960.31,
+      "best_test_smape": 200.0
+    },
+    "Pending Liquidation Request": {
+      "model_type": "lstm",
+      "source_dir": "local_lstm",
+      "file": "lstm_local_Pending_Liquidation_Request.pth",
+      "best_test_mae": 2228.2,
+      "best_test_smape": 3.51
+    },
+    "Pending Request for Reservation Closure": {
+      "model_type": "xgboost",
+      "source_dir": "local_xgboost",
+      "file": "xgboost_local_Pending_Request_for_Reservation_Closure.json",
+      "best_test_mae": 1481.82,
+      "best_test_smape": 61.85
+    },
+    "Pending Request for acquittance of heirs": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 6246.44,
+      "best_test_smape": 58.5
+    },
+    "Request created": {
+      "model_type": "xgboost",
+      "source_dir": "global_xgboost",
+      "file": "xgboost_global.json",
+      "best_test_mae": 34974.61,
+      "best_test_smape": 91.92
+    },
+    "Service closure Request with BO responsibility": {
+      "model_type": "tcn",
+      "source_dir": "global_tcn",
+      "file": "tcn_global.pth",
+      "best_test_mae": 69399.85,
+      "best_test_smape": 81.07
+    },
+    "Service closure Request with network responsibility": {
+      "model_type": "lstm",
+      "source_dir": "local_lstm",
+      "file": "lstm_local_Service_closure_Request_with_network_responsibility.pth",
+      "best_test_mae": 15128.08,
+      "best_test_smape": 93.67
+    }
+  }
+}

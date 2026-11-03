@@ -1,0 +1,31 @@
+{
+  "activities": [
+    "Authorization Requested",
+    "Back-Office Adjustment Requested",
+    "Evaluating Request (NO registered letter)",
+    "Evaluating Request (WITH registered letter)",
+    "Network Adjustment Requested",
+    "Pending Liquidation Request",
+    "Pending Request for Network Information",
+    "Pending Request for Reservation Closure",
+    "Pending Request for acquittance of heirs",
+    "Request created",
+    "Service closure Request with BO responsibility",
+    "Service closure Request with network responsibility"
+  ],
+  "prefix_categories": [
+    "Authorization Requested",
+    "Back-Office Adjustment Requested",
+    "Evaluating Request (NO registered letter)",
+    "Evaluating Request (WITH registered letter)",
+    "Network Adjustment Requested",
+    "Pending Liquidation Request",
+    "Pending Request for Network Information",
+    "Pending Request for Reservation Closure",
+    "Pending Request for acquittance of heirs",
+    "Request created",
+    "Service closure Request with BO responsibility",
+    "Service closure Request with network responsibility",
+    "NONE"
+  ]
+}

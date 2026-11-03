@@ -1,0 +1,30 @@
+{
+  "vocab": {
+    "<PAD>": 0,
+    "<UNK>": 1,
+    "Authorization Requested": 2,
+    "Evaluating Request (NO registered letter)": 3,
+    "Evaluating Request (WITH registered letter)": 4,
+    "Network Adjustment Requested": 5,
+    "Pending Liquidation Request": 6,
+    "Pending Request for Network Information": 7,
+    "Pending Request for Reservation Closure": 8,
+    "Request created": 9,
+    "Service closure Request with BO responsibility": 10,
+    "Service closure Request with network responsibility": 11
+  },
+  "act_to_idx": {
+    "Authorization Requested": 0,
+    "Back-Office Adjustment Requested": 1,
+    "Evaluating Request (NO registered letter)": 2,
+    "Evaluating Request (WITH registered letter)": 3,
+    "Network Adjustment Requested": 4,
+    "Pending Liquidation Request": 5,
+    "Pending Request for Network Information": 6,
+    "Pending Request for Reservation Closure": 7,
+    "Pending Request for acquittance of heirs": 8,
+    "Request created": 9,
+    "Service closure Request with BO responsibility": 10,
+    "Service closure Request with network responsibility": 11
+  }
+}

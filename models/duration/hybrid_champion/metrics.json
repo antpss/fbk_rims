@@ -1,0 +1,78 @@
+{
+  "task": "duration",
+  "strategy": "hybrid",
+  "model_type": "champion",
+  "folder_name": "hybrid_champion",
+  "training_time_seconds": 1665.98,
+  "weighted_mae": 26678.96,
+  "weighted_smape": 77.45,
+  "macro_mae": 27643.69,
+  "activity_metrics": {
+    "Authorization Requested": {
+      "count": 2469,
+      "model_source": "local_lstm (LSTM)",
+      "mae": 37757.86,
+      "smape": 134.28
+    },
+    "Back-Office Adjustment Requested": {
+      "count": 516,
+      "model_source": "global_xgboost (XGBOOST)",
+      "mae": 27871.51,
+      "smape": 76.7
+    },
+    "Evaluating Request (NO registered letter)": {
+      "count": 2130,
+      "model_source": "local_lstm (LSTM)",
+      "mae": 27906.82,
+      "smape": 133.39
+    },
+    "Evaluating Request (WITH registered letter)": {
+      "count": 379,
+      "model_source": "global_tcn (TCN)",
+      "mae": 26125.06,
+      "smape": 127.56
+    },
+    "Network Adjustment Requested": {
+      "count": 249,
+      "model_source": "local_lstm (LSTM)",
+      "mae": 54960.31,
+      "smape": 200.0
+    },
+    "Pending Liquidation Request": {
+      "count": 5528,
+      "model_source": "local_lstm (LSTM)",
+      "mae": 2228.2,
+      "smape": 3.51
+    },
+    "Pending Request for Reservation Closure": {
+      "count": 5539,
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 1481.82,
+      "smape": 61.85
+    },
+    "Pending Request for acquittance of heirs": {
+      "count": 362,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 6246.44,
+      "smape": 58.5
+    },
+    "Request created": {
+      "count": 6487,
+      "model_source": "global_xgboost (XGBOOST)",
+      "mae": 34974.61,
+      "smape": 91.92
+    },
+    "Service closure Request with BO responsibility": {
+      "count": 5779,
+      "model_source": "global_tcn (TCN)",
+      "mae": 69399.85,
+      "smape": 81.07
+    },
+    "Service closure Request with network responsibility": {
+      "count": 4847,
+      "model_source": "local_lstm (LSTM)",
+      "mae": 15128.08,
+      "smape": 93.67
+    }
+  }
+}
