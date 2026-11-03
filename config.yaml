@@ -3,23 +3,20 @@
 # ===================================================================
 
 project:
-  name: "BPI_2012"
+  name: "BAC"
   random_seed: 42
 
 paths:
   # General Process & Duration / Waiting Time paths
-  raw_log: "data/processed/BPI_2012_filtered.xes"
-  aligned_log: "data/processed/aligned_BPI_2012.xes"
+  raw_log: "data/processed/BAC_filtered.xes"
+  aligned_log: "data/processed/aligned_BAC.xes"
   petri_net: "models/petri_nets/discovered_model_split.pnml"
   petri_nets_dir: "models/petri_nets"
   output_base_dir: "data/processed"
   models_dir: "models"
 
-  # Milestone Lifecycle Log (Step 00 export destination for milestone traces)
-  milestone_log: "data/processed/BPI_2012_A_only.xes"
-
   # Routing Decision Point paths (Step 05 Decision Mining)
-  routing_train_log: "data/processed/aligned_BPI_2012.xes"
+  routing_train_log: "data/processed/aligned_BAC.xes"
   routing_petri_net: "models/petri_nets/discovered_model_split.pnml"
   routing_models_dir: "models/routing"
 
@@ -69,8 +66,8 @@ features:
     - weekday
     - role_occupancy
     - prev_duration
-    - case_attributes
-    - milestones
+    # - case_attributes
+    # - milestones
     # - resource_id
 
   # Tier 1: Universal Features (Fallback if selected_features is omitted)
@@ -83,13 +80,7 @@ features:
 
   # Tier 2: Domain-Specific Attributes
   # Empty list [] will completely exclude domain attributes.
-  case_attributes:
-    - column: "case:AMOUNT_REQ"
-      feature_name: "RequestedAmount"
-      type: "continuous"
-      treat_zero_as_missing: true
-      fill_strategy: "median"
-      fill_value: 0.0
+  case_attributes: []
 
   # Event-level attributes (e.g. Resource_ID, cost, channel).
   event_attributes: []
@@ -98,7 +89,7 @@ features:
 # Preprocessing & Log Filtering (Step 00)
 # ===================================================================
 preprocessing:
-  input_log: "data/raw/BPI_Challenge_2012.xes"
+  input_log: "data/raw/BAC.xes"
 
   # Optional Column Mapping: maps custom column names in the raw log to internal standard attributes
   # Defaults match standard IEEE XES names. Change if using custom CSV/XES logs.
@@ -116,61 +107,23 @@ preprocessing:
 
   # Activities discovered in Petri Net & modeled for duration/waiting simulation
   # DEFAULT: Set to [] or omit to model ALL activities in the log.
-  # For BPI 2012: ["W_"] isolates human work items.
-  process_activity_prefixes:
-    - "W_"
+  process_activity_prefixes: []
+
   # Milestone activities preserved as business state context for routing classifiers
   # DEFAULT: Set to [] or omit if the log has no separate milestone events.
-  # For BPI 2012: ["A_", "O_"] captures application & offer business status.
-  milestone_prefixes:
-    - "A_"
-    - "O_"
+  milestone_prefixes: []
 
   # Empirical distribution of initial milestone profiles observed upon case submission
-  initial_milestones_distribution:
-    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED", "A_PREACCEPTED"]
-      probability: 0.35
-    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
-      probability: 0.65
+  initial_milestones_distribution: []
 
   # Dynamic progression: milestones achieved when human tasks complete
-  milestone_progression:
-    "W_Complete application":
-      "A_ACCEPTED": 1.0
-      "O_SELECTED": 1.0
-      "A_FINALIZED": 0.15
-      "O_CREATED": 0.15
-      "O_SENT": 0.15
-    "W_Call after offers":
-      "O_SENT_BACK": 0.15
-    "W_Handle leads":
-      "A_PREACCEPTED": 1.0
-    "W_Validate application":
-      "A_APPROVED": 1.0
-      "A_REGISTERED": 1.0
-      "A_ACTIVATED": 1.0
-      "O_ACCEPTED": 1.0
+  milestone_progression: {}
 
   # Terminal outcome milestones excluded from decision routing to avoid target leakage
-  excluded_milestones:
-    - "O_ACCEPTED"
-    - "A_DECLINED"
-    - "A_CANCELLED"
-    - "A_ACTIVATED"
-    - "A_APPROVED"
-    - "A_REGISTERED"
-    - "O_DECLINED"
-    - "O_CANCELLED"
+  excluded_milestones: []
 
   # Optional activity renaming/translation map. Empty {} applies no renaming.
-  activity_mapping:
-    "W_Afhandelen leads": "W_Handle leads"
-    "W_Completeren aanvraag": "W_Complete application"
-    "W_Valideren aanvraag": "W_Validate application"
-    "W_Nabellen offertes": "W_Call after offers"
-    "W_Beoordelen fraude": "W_Assess fraud"
-    "W_Wijzigen contractgegevens": "W_Change contract details"
-    "W_Nabellen incomplete dossiers": "W_Call after incomplete files"
+  activity_mapping: {}
 
 # Activities to model (Duration, Waiting Time, Routing)
 # If empty list [] or omitted, RIMS++ automatically discovers and models all activities in the log.
@@ -203,7 +156,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
-    inference_mode: "argmax"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
+    inference_mode: "sample"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
     mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival", "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest
@@ -211,9 +164,7 @@ tasks:
     min_f1_threshold: 0.60           # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
     output_dir: "models/routing"
     # Optional decision places to force empirical branching probabilities (parity with legacy RIMS entry split)
-    force_probability_places:
-      - "exi_xor_1"
-      - "exi_W_Handle leads__loop_split"
+    force_probability_places: []
 
 # ===================================================================
 # Model Strategy & Architecture (Step 04)
@@ -292,7 +243,7 @@ simulation:
     mode: "prophet"                   # Options: "replay" (replays from aligned_log), "generative" (statistical distribution), "prophet" (Facebook Prophet time-series)
     distribution: "exponential"   # Distribution for generative mode: "exponential", "uniform", "constant"
     scale: 300.0                  # Mean seconds between case arrivals (e.g. 300s = 5 min)
-    start_timestamp: "2012-01-01 08:00:00"
+    start_timestamp: "2017-06-01 08:00:00"
     calendar_bounded: false       # If true, new arrivals only spawn during office hours (false allows 24/7 natural customer submissions)
 
     # Facebook Prophet Time-Series Forecasting Settings (used when mode: "prophet")
