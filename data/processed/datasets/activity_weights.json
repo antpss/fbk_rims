@@ -1,8 +1,14 @@
 {
-  "W_Assess fraud": 0.9922224098968142,
-  "W_Call after incomplete files": 0.992577536039143,
-  "W_Call after offers": 1.004788677079395,
-  "W_Complete application": 1.0018879023931928,
-  "W_Handle leads": 0.992366241514573,
-  "W_Validate application": 0.9927576373437561
+  "Authorization Requested": 0.9998746783039746,
+  "Back-Office Adjustment Requested": 0.9998746783039745,
+  "Evaluating Request (NO registered letter)": 0.9998746783039746,
+  "Evaluating Request (WITH registered letter)": 0.9998746783039746,
+  "Network Adjustment Requested": 0.9998746783039745,
+  "Pending Liquidation Request": 0.9998746783039746,
+  "Pending Request for Network Information": 0.9998746783039745,
+  "Pending Request for Reservation Closure": 1.0006485951965685,
+  "Pending Request for acquittance of heirs": 0.9998746783039746,
+  "Request created": 0.9998746783039746,
+  "Service closure Request with BO responsibility": 0.9998746783039746,
+  "Service closure Request with network responsibility": 0.9998746783039746
 }
