@@ -459,9 +459,11 @@ def main():
             loc_xgb.save_model(loc_model_path)
             dispatch_table["dispatch"][act] = {"model_type": "xgboost", "file": os.path.basename(loc_model_path), "log1p_target": True}
 
-            preds = np.expm1(loc_xgb.predict(X_te))
-            test_predictions.loc[test_df['Target_Activity'] == act, 'Predicted'] = preds
-            test_predictions.loc[test_df['Target_Activity'] == act, 'Source_Model'] = f'Local XGBoost'
+            act_mask = (test_df['Target_Activity'] == act)
+            if act_mask.sum() > 0 and len(test_sub) > 0:
+                preds = np.expm1(loc_xgb.predict(X_te))
+                test_predictions.loc[act_mask, 'Predicted'] = preds
+                test_predictions.loc[act_mask, 'Source_Model'] = 'Local XGBoost'
 
     # =================================================================
     # EXECUTION: PYTORCH DEEP LEARNING (LSTM / TCN)
@@ -607,12 +609,14 @@ def main():
             torch.save(nn_loc.state_dict(), loc_path)
             dispatch_table["dispatch"][act] = {"model_type": model_type, "file": os.path.basename(loc_path), "log1p_target": True}
 
-            nn_loc.eval()
-            with torch.no_grad():
-                loader = DataLoader(te_ds, batch_size=batch_size, shuffle=False)
-                act_preds = np.concatenate([np.expm1(np.clip(nn_loc(s.to(device), a.to(device), f.to(device)).cpu().numpy(), 0.0, 25.0)) for s, a, f, _, _ in loader])
-            test_predictions.loc[test_df['Target_Activity'] == act, 'Predicted'] = act_preds
-            test_predictions.loc[test_df['Target_Activity'] == act, 'Source_Model'] = f'Local {model_type.upper()}'
+            act_mask = (test_df['Target_Activity'] == act)
+            if act_mask.sum() > 0 and len(te_sub) > 0:
+                nn_loc.eval()
+                with torch.no_grad():
+                    loader = DataLoader(te_ds, batch_size=batch_size, shuffle=False)
+                    act_preds = np.concatenate([np.expm1(np.clip(nn_loc(s.to(device), a.to(device), f.to(device)).cpu().numpy(), 0.0, 25.0)) for s, a, f, _, _ in loader])
+                test_predictions.loc[act_mask, 'Predicted'] = act_preds
+                test_predictions.loc[act_mask, 'Source_Model'] = f'Local {model_type.upper()}'
 
     total_training_time = time.time() - start_train_time
 
