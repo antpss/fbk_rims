@@ -1,0 +1,96 @@
+{
+  "task": "waiting_time",
+  "strategy": "hybrid",
+  "model_type": "champion",
+  "folder_name": "hybrid_champion",
+  "training_time_seconds": 2658.12,
+  "weighted_mae": 52587.07,
+  "weighted_smape": 102.03,
+  "macro_mae": 67394.73,
+  "activity_metrics": {
+    "Authorization Requested": {
+      "count": 2469,
+      "model_source": "local_lstm (LSTM)",
+      "mae": 44855.48,
+      "smape": 90.76
+    },
+    "Back-Office Adjustment Requested": {
+      "count": 516,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 31862.91,
+      "smape": 19.03
+    },
+    "Evaluating Request (NO registered letter)": {
+      "count": 2130,
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 526.2,
+      "smape": 198.82
+    },
+    "Evaluating Request (WITH registered letter)": {
+      "count": 379,
+      "model_source": "global_xgboost (XGBOOST)",
+      "mae": 6867.23,
+      "smape": 197.85
+    },
+    "Network Adjustment Requested": {
+      "count": 249,
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 201557.32,
+      "smape": 56.19
+    },
+    "Pending Liquidation Request": {
+      "count": 5528,
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 3391.98,
+      "smape": 58.82
+    },
+    "Pending Request for Reservation Closure": {
+      "count": 5543,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 188694.32,
+      "smape": 83.61
+    },
+    "Pending Request for acquittance of heirs": {
+      "count": 362,
+      "model_source": "global_tcn (TCN)",
+      "mae": 24773.66,
+      "smape": 18.11
+    },
+    "Request completed with account closure": {
+      "count": 5537,
+      "model_source": "local_xgboost (XGBOOST)",
+      "mae": 18478.12,
+      "smape": 14.44
+    },
+    "Request completed with customer recovery": {
+      "count": 12,
+      "model_source": "global_xgboost (XGBOOST)",
+      "mae": 281536.14,
+      "smape": 150.23
+    },
+    "Request created": {
+      "count": 6487,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 108.24
+    },
+    "Request deleted": {
+      "count": 938,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 199.85
+    },
+    "Service closure Request with BO responsibility": {
+      "count": 5779,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 107834.93,
+      "smape": 147.04
+    },
+    "Service closure Request with network responsibility": {
+      "count": 4847,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 33147.95,
+      "smape": 164.55
+    }
+  }
+}
