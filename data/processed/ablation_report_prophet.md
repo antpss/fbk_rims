@@ -1,12 +1,14 @@
-# RIMS++ Simulation Ablation Benchmark Report (PROPHET ARRIVAL)
+# RIMS++ Multi-Perspective Simulation Benchmark Report (PROPHET ARRIVAL)
 
 - **Arrival Mode:** `prophet`
-- **Evaluated Cases per Mode:** ALL
-- **Real Historical Mean Cycle Time:** 11.3 days
-- **Ranking Criterion:** Lowest Wasserstein Distance (overall cycle time distribution similarity)
+- **Evaluated Cases per Mode:** 1,000
+- **Real Historical Mean Cycle Time:** 15.5 days
+- **Evaluation Suite:** Meneghello et al. (Information Systems 2025) / Chapela-Campa et al. (BPM 2023)
 
-| Simulation Mode | Mean Cycle Time | Median Cycle Time | Cycle Time MAE | Wasserstein Dist | RED Dist (EMD) | Run Time |
-|---|---|---|---|---|---|---|
-| **REAL HISTORICAL** | 11.3 days | 8.3 days | --- | --- | --- | --- |
-| `hybrid_residual` ★ (Best Fit) | 13.5 days | 3.3 days | 2.1 days | 4.93 days | 175.62h | 180.4s |
-| `pure_physics` | 12.0 days | 19.0 hours | 15.5 hours | 5.04 days | 148.24h | 101.3s |
+## Comparative Benchmark Leaderboard
+
+| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **REAL HISTORICAL** | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `hybrid_residual` ★ (Best Fit) | 1.0000 | 5.17 | 1.0000 | 12.69 | 11.81 | 180.21 | 12.50 | 11.98 days | 11.98 days | 13.0s |
+| `pure_physics` | 0.0379 | 0.19 | 0.0121 | 12.70 | 10.86 | 193.99 | 12.50 | 14.64 days | 6.90 days | 20.9s |

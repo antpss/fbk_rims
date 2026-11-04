@@ -136,7 +136,6 @@ def main():
             mae_str = f"{r['mae_cycle']/86400:.2f} days" if r["mae_cycle"] >= 86400 else format_dur(r["mae_cycle"])
             print(f"{mode_display:<22} | {cfld_str:>8} | {len_str:>8} | {ng2_str:>7} | {aed_str:>8} | {ced_str:>8} | {red_str:>8} | {car_str:>8} | {wd_str:>14} | {mae_str:>14} | {r['elapsed']:>8.1f}s")
         print("-" * 140)
-        print("  ★ Note: Evaluated across Control-Flow, Temporal, and Congestion perspectives (Meneghello et al. 2025).")
         print("=" * 140 + "\n")
 
         # Save Ablation Report
@@ -147,7 +146,7 @@ def main():
                 f.write(f"- **Arrival Mode:** `{arrival_mode}`\n")
                 f.write(f"- **Evaluated Cases per Mode:** {case_label}\n")
                 f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n")
-                f.write(f"- **Evaluation Suite:** Meneghello et al. (Information Systems 2025) / Chapela-Campa et al. (BPM 2023)\n\n")
+                f.write(f"- **Evaluation:**\n\n")
                 f.write("## Comparative Benchmark Leaderboard\n\n")
                 f.write("| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |\n")
                 f.write("|---|---|---|---|---|---|---|---|---|---|---|\n")

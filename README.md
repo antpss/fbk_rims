@@ -84,13 +84,13 @@ fbk_rims/
 │   │   ├── arrivals.py                # ArrivalGenerator (Replay, Generative, Prophet time-series)
 │   │   └── metrics.py                 # SimulationEvaluator (IEEE XES/CSV export, Wasserstein, RED/EMD)
 │   └── config_loader.py               # Central config loader helper
-├── RIMS/                              # Cloned Reference / Legacy Repo (Meneghello et al. baseline, NOT the simulator)
+├── RIMS/                              # Cloned Reference / Legacy Repo (baseline, NOT the simulator)
 └── RIMS_tool/                         # Cloned Reference / Legacy Repo (BPM 2023 demo tool, NOT the simulator)
 ```
 
 > [!NOTE]
 > **Reference / Baseline Repositories (`RIMS/` & `RIMS_tool/`)**:
-> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes (Meneghello et al., using TensorFlow 1.x / Keras `.h5` LSTM models). **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS++ pipeline lives entirely in `src/`.
+> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes. **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS++ pipeline lives entirely in `src/`.
 
 ---
 

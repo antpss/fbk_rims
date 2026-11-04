@@ -467,7 +467,7 @@ class SimulationEvaluator:
             else:
                 f.write("\n")
 
-            f.write("## Multi-Perspective Quality Benchmark (Meneghello et al. 2025)\n\n")
+            f.write("## Multi-Perspective Quality Benchmark\n\n")
             f.write("| Dimension | Metric | Real Ground-Truth | Simulated RIMS++ | Benchmark Score |\n")
             f.write("|---|---|---|---|---|\n")
             real_cases_str = f"{len(real_cases):,}" if real_cases is not None else "N/A"
