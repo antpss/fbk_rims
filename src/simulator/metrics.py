@@ -213,8 +213,8 @@ class SimulationEvaluator:
         try:
             bin_sec = bin_size_hours * 3600.0
             t_col = "time:timestamp" if "time:timestamp" in df_real.columns else "start_timestamp"
-            r_ts = pd.to_datetime(df_real[t_col], utc=True).view("int64") // 10**9
-            s_ts = pd.to_datetime(df_sim["start_timestamp"], utc=True).view("int64") // 10**9
+            r_ts = pd.to_datetime(df_real[t_col], utc=True).astype("int64") // 10**9
+            s_ts = pd.to_datetime(df_sim["start_timestamp"], utc=True).astype("int64") // 10**9
 
             if len(r_ts) == 0 or len(s_ts) == 0:
                 return 0.0
@@ -260,8 +260,8 @@ class SimulationEvaluator:
             r_arrivals = df_real.groupby(c_col)[t_col].min()
             s_arrivals = df_sim.groupby("case_id")["start_timestamp"].min()
 
-            r_ts = pd.to_datetime(r_arrivals, utc=True).view("int64") // 10**9
-            s_ts = pd.to_datetime(s_arrivals, utc=True).view("int64") // 10**9
+            r_ts = pd.to_datetime(r_arrivals, utc=True).astype("int64") // 10**9
+            s_ts = pd.to_datetime(s_arrivals, utc=True).astype("int64") // 10**9
 
             if len(r_ts) == 0 or len(s_ts) == 0:
                 return 0.0

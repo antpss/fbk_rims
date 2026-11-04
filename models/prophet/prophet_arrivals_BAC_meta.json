@@ -1,0 +1,15 @@
+{
+  "log_path": "/home/antonio/fbk_rims/data/processed/aligned_BAC.xes",
+  "log_mtime": 1793695997.8622942,
+  "log_size": 161635183,
+  "hyperparams": {
+    "growth": "logistic",
+    "cap_multiplier": 1.25,
+    "changepoint_prior_scale": 0.05,
+    "seasonality_prior_scale": 10.0,
+    "daily_seasonality": true,
+    "weekly_seasonality": true
+  },
+  "cap_val": 102.5,
+  "trained_at": "2026-11-03T15:56:14.039742"
+}
