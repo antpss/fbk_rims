@@ -201,6 +201,30 @@ class Token:
         else:
             w_worklist = 0.0
 
+        act_type = self.process.activity_profiles.get(act, "HUMAN_WORK_ITEM")
+        if act_type == "AUTOMATED_TASK":
+            # Automated task: runs 24/7 without human worker allocation; duration is 0.0s
+            total_wait = ext_delay + w_worklist
+            t_comp = self.env.now
+            self._produce_tokens(chosen_t)
+            comp_ts = self.process.calendar.to_datetime(t_comp).strftime("%Y-%m-%d %H:%M:%S")
+            self.process.record_event({
+                "case_id": self.case_id,
+                "activity": act,
+                "start_timestamp": comp_ts,
+                "complete_timestamp": comp_ts,
+                "resource_id": "SYSTEM",
+                "duration_seconds": 0.0,
+                "wait_time_seconds": round(total_wait, 2),
+                "queue_wait_seconds": 0.0,
+                "wip": self.process.active_cases_count
+            })
+            self.prefix.append(act)
+            self.prev_act = act
+            self.prev_dur = 0.0
+            on_complete()
+            return
+
         # 5. Calendar Working Hours Gate: If office is closed, ticket waits in worklist queue until shift begins
         cal = self.process.calendar.get_calendar(act)
         if cal.enabled:
@@ -332,22 +356,27 @@ class Token:
                 silent_chain_guard = 0
                 act = chosen_t.label
 
-                proc_prefixes = self.process.proc_prefixes
-                ms_prefixes = self.process.ms_prefixes
-                if self.process.target_activities:
-                    is_work_item = (act in self.process.target_activities)
-                elif proc_prefixes:
-                    is_work_item = act.startswith(proc_prefixes)
-                elif ms_prefixes:
-                    is_work_item = not act.startswith(ms_prefixes)
-                else:
-                    is_work_item = True
+                # Check activity profile: INSTANT_GATEWAY vs. AUTOMATED_TASK vs. HUMAN_WORK_ITEM
+                act_type = getattr(self.process, "activity_profiles", {}).get(act)
+                if not act_type:
+                    proc_prefixes = self.process.proc_prefixes
+                    ms_prefixes = self.process.ms_prefixes
+                    if self.process.target_activities:
+                        is_work_item = (act in self.process.target_activities)
+                    elif proc_prefixes:
+                        is_work_item = act.startswith(proc_prefixes)
+                    elif ms_prefixes:
+                        is_work_item = not act.startswith(ms_prefixes)
+                    else:
+                        is_work_item = True
+                    act_type = "HUMAN_WORK_ITEM" if is_work_item else "INSTANT_GATEWAY"
 
-                if not is_work_item:
-                    # Instantaneous lifecycle milestone (e.g. A_ / O_ state transition)
+                if act_type == "INSTANT_GATEWAY":
+                    # Instantaneous lifecycle milestone (e.g. A_ / O_ state transition or instant gateway)
                     self.events_done += 1
                     self.milestones_seen.add(act)
-                    if any(p.startswith("O_") for p in ms_prefixes) and act.startswith("O_"):
+                    ms_prefixes = self.process.ms_prefixes
+                    if ms_prefixes and any(p.startswith("O_") for p in ms_prefixes) and act.startswith("O_"):
                         self.offer_count += 1.0
                         self.has_offer = 1.0
                     t_event = self.env.now
@@ -369,7 +398,7 @@ class Token:
                     self.prev_dur = 0.0
                     immediate_progress = True
                 else:
-                    # Observable work item: consume input tokens and launch concurrent worker
+                    # Observable work item or automated delayed task: consume input tokens and launch SimPy process
                     self._consume_tokens(chosen_t)
                     active_tasks += 1
                     self.env.process(self._execute_work_item(chosen_t, _on_task_complete))

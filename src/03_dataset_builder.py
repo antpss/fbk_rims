@@ -14,6 +14,10 @@ try:
     from simulator.calendar import CalendarManager
 except ImportError:
     from src.simulator.calendar import CalendarManager
+try:
+    from activity_profiler import load_or_discover_activity_profiles
+except ImportError:
+    from src.activity_profiler import load_or_discover_activity_profiles
 
 def build_dataset(cfg, task_name="duration"):
     if task_name not in cfg.get("tasks", {}):
@@ -162,6 +166,10 @@ def build_dataset(cfg, task_name="duration"):
     all_rows = []
     synthetic_skipped = 0
     missing_start_skipped = 0
+
+    profiles_data = load_or_discover_activity_profiles(cfg)
+    activity_types = profiles_data.get("activity_types", {})
+    print(f"Loaded activity profile classifications for {len(activity_types)} activities.")
 
     target_mode = task_cfg.get("target_mode", "raw_wait")
     residual_lookup = {}
@@ -337,39 +345,87 @@ def build_dataset(cfg, task_name="duration"):
                 if act_role and role_active[act_role] > 0:
                     role_active[act_role] -= 1
 
+                act_type = activity_types.get(activity_name, "HUMAN_WORK_ITEM")
+
                 if case_start_times[case_id][activity_name]:
                     start_ts = case_start_times[case_id][activity_name].pop(0)
                     duration = calendar.calculate_net_working_seconds(start_ts, timestamp, role_or_act=activity_name)
                     has_valid_start = True
+                    feat = case_start_features[case_id][activity_name].pop(0) if case_start_features[case_id][activity_name] else None
+                elif act_type in ("AUTOMATED_TASK", "INSTANT_GATEWAY"):
+                    # Non-human automated/instant activity with single completion event
+                    duration = 0.0
+                    has_valid_start = True
+
+                    if case_id in case_prev_end_time:
+                        raw_wait = max(0.0, float((timestamp - case_prev_end_time[case_id]).total_seconds()))
+                    else:
+                        raw_wait = 0.0
+
+                    if task_name == "waiting_time" and target_mode == "residual_delay" and residual_lookup:
+                        epoch = int(timestamp.timestamp()) if hasattr(timestamp, "timestamp") else int(pd.to_datetime(timestamp).timestamp())
+                        key = (str(case_id), str(activity_name), epoch)
+                        if key in residual_lookup:
+                            current_wait = residual_lookup[key]
+                            matched_residuals += 1
+                        elif case_id not in case_prev_end_time:
+                            current_wait = 0.0
+                            initial_case_events += 1
+                        else:
+                            current_wait = raw_wait
+                            fallback_residuals += 1
+                    else:
+                        current_wait = raw_wait
+
+                    ctx = FeatureContext(
+                        target_act=activity_name,
+                        wip=wip,
+                        ac_wip=ac_wip,
+                        dt=timestamp,
+                        role_oc=rp_oc_array,
+                        role_names=role_names,
+                        prev_dur=case_prev_time[case_id],
+                        offer_count=case_offer_count[case_id],
+                        has_offer=1.0 if case_offer_count[case_id] > 0 else 0.0,
+                        milestones_seen=case_milestones_seen[case_id],
+                        all_milestones=all_milestones,
+                        activities=activities,
+                        case_attrs=extracted_case_attrs,
+                        event_attrs=extracted_event_attrs,
+                        worker_id=row.get("org:resource", "SYSTEM")
+                    )
+                    feat = feature_mgr.build_features(ctx)
+                    feat["Wait_Time_Seconds"] = current_wait
+                    if feature_mgr.is_feature_active("prev_duration"):
+                        feat["Prev_Proc_Time"] = case_prev_time[case_id]
                 else:
                     duration = 0.0
                     has_valid_start = False
+                    feat = None
 
                 case_prev_time[case_id] = duration
                 case_prev_end_time[case_id] = timestamp
 
-                # Only emit valid human training samples
-                if not has_valid_start:
+                # Only emit valid human training samples or profiled automated/instant events
+                if not has_valid_start or feat is None:
                     missing_start_skipped += 1
                     if case_start_features[case_id][activity_name]:
                         case_start_features[case_id][activity_name].pop(0)
                 else:
-                    feat = case_start_features[case_id][activity_name].pop(0) if case_start_features[case_id][activity_name] else None
-                    if feat is not None:
-                        row_dict = {
-                            "Case_ID": case_id,
-                            "Target_Activity": activity_name,
-                            "Prefix": json.dumps(case_prefixes[case_id][-prefix_window:]),
-                            "Duration_Seconds": duration,
-                            "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
-                        }
+                    row_dict = {
+                        "Case_ID": case_id,
+                        "Target_Activity": activity_name,
+                        "Prefix": json.dumps(case_prefixes[case_id][-prefix_window:]),
+                        "Duration_Seconds": duration,
+                        "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
+                    }
 
-                        # Merge all dynamically extracted features
-                        for k, v in feat.items():
-                            if k not in row_dict:
-                                row_dict[k] = v
+                    # Merge all dynamically extracted features
+                    for k, v in feat.items():
+                        if k not in row_dict:
+                            row_dict[k] = v
 
-                        all_rows.append(row_dict)
+                    all_rows.append(row_dict)
 
                 case_prefixes[case_id].append(activity_name)
 

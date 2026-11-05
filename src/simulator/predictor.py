@@ -65,6 +65,16 @@ class ChampionPredictor:
         self.target_acts = cfg.get("target_activities", [])
         self.max_seq_len = cfg.get("features", {}).get("prefix_window_size", 10)
 
+        # Load Activity Profiles (Human Work Items vs. Automated Tasks vs. Instant Gateways)
+        prof_file = os.path.join(PROJECT_ROOT, self.models_dir, "activity_profiles.json")
+        self.activity_profiles = {}
+        if os.path.exists(prof_file):
+            try:
+                with open(prof_file, "r") as f:
+                    self.activity_profiles = json.load(f).get("activity_types", {})
+            except Exception:
+                self.activity_profiles = {}
+
         # 1. Load Duration Models (hybrid_champion or active candidate directory)
         dur_base = os.path.join(self.models_dir, "duration")
         dur_dir = os.path.join(dur_base, "hybrid_champion")
@@ -366,6 +376,10 @@ class ChampionPredictor:
                          milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
                          case_attrs=None):
         """Predicts activity execution duration in seconds using champion model."""
+        act_type = self.activity_profiles.get(activity)
+        if act_type in ("AUTOMATED_TASK", "INSTANT_GATEWAY"):
+            return 0.0
+
         val = self._predict_time(self.dur_models, self.dur_dispatch, activity, prefix,
                                  wip, ac_wip, dt, requested_amount, milestones_seen or set(),
                                  offer_count, has_offer, role_oc_array or [], default_fallback=600.0,
@@ -377,6 +391,10 @@ class ChampionPredictor:
                         milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
                         case_attrs=None):
         """Predicts activity waiting time in seconds using champion model."""
+        act_type = self.activity_profiles.get(activity)
+        if act_type == "INSTANT_GATEWAY":
+            return 0.0
+
         val = self._predict_time(self.wait_models, self.wait_dispatch, activity, prefix,
                                  wip, ac_wip, dt, requested_amount, milestones_seen or set(),
                                  offer_count, has_offer, role_oc_array or [], default_fallback=3600.0,

@@ -40,6 +40,15 @@ resources:
     dispatch_policy: "longest_idle_first"
     enable_concurrency_quotas: true # Allows multi-tasking (C_w >= 1) mined from log to prevent artificial serialization
 
+# Activity Behavioral Profiling (Automated Tasks, Instant Gateways, Human Work Items)
+activity_profiling:
+  enabled: true
+  zero_duration_threshold: 0.95
+  min_automated_wait_seconds: 60.0
+  output_file: "models/activity_profiles.json"
+  report_file: "models/activity_profiles_report.md"
+  overrides: {}  # Leave empty {} for pure data-driven discovery, or map "Activity": "automated_task" | "human_work_item" | "instant_gateway"
+
 
 # Feature Engineering Settings
 features:

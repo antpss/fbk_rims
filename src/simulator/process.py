@@ -384,6 +384,16 @@ class SimulationProcess:
         models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
         role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
 
+        # Activity Profiles (Human Work Item vs. Automated Task vs. Instant Gateway)
+        prof_file = os.path.join(PROJECT_ROOT, models_dir_rel, "activity_profiles.json")
+        self.activity_profiles = {}
+        if os.path.exists(prof_file):
+            try:
+                with open(prof_file, "r") as f:
+                    self.activity_profiles = json.load(f).get("activity_types", {})
+            except Exception:
+                self.activity_profiles = {}
+
         # Calendar Manager
         self.calendar = CalendarManager.from_config(cfg, role_mapping_path=role_mapping_path)
 
