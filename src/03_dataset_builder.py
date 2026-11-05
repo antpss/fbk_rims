@@ -44,12 +44,6 @@ def build_dataset(cfg, task_name="duration"):
     else:
         print(f"Target activities ({len(activities)} configured): {activities}")
 
-    all_milestones = cfg.get("features", {}).get("milestones_to_track", [])
-    if all_milestones:
-        print(f"Discovered {len(all_milestones)} business milestone activities for context: {all_milestones}")
-    else:
-        all_milestones = []
-
     # Feature extraction settings
     feat_cfg = cfg.get("features", {})
     prefix_window = feat_cfg.get("prefix_window_size", 10)
@@ -148,10 +142,9 @@ def build_dataset(cfg, task_name="duration"):
     seen_events = {case_id: 0 for case_id in case_event_counts}
 
     case_prefixes = {}
+    case_history = defaultdict(lambda: defaultdict(int))
     case_start_times = defaultdict(lambda: defaultdict(list))
     case_start_features = defaultdict(lambda: defaultdict(list))
-    case_milestones_seen = defaultdict(set)
-    case_offer_count = defaultdict(int)
     case_prev_time = {}
     case_prev_end_time = {}
 
@@ -162,6 +155,21 @@ def build_dataset(cfg, task_name="duration"):
     profiles_data = load_or_discover_activity_profiles(cfg)
     activity_types = profiles_data.get("activity_types", {})
     print(f"Loaded activity profile classifications for {len(activity_types)} activities.")
+
+    # Determine tracked activities for trace_history
+    th_cfg = feat_cfg.get("trace_history", {})
+    th_mode = th_cfg.get("mode", "profile_aware")
+    if th_mode == "whitelist":
+        tracked_activities = th_cfg.get("whitelist", [])
+    elif th_mode == "all_activities":
+        tracked_activities = sorted(df['concept:name'].dropna().unique().tolist())
+    else:  # "profile_aware"
+        tracked_activities = sorted([
+            act for act, p_type in activity_types.items()
+            if p_type in ("INSTANT_GATEWAY", "AUTOMATED_TASK")
+        ])
+    if feature_mgr.is_feature_active("trace_history"):
+        print(f"Trace History ({th_mode}): tracking {len(tracked_activities)} activities: {tracked_activities}")
 
     target_mode = task_cfg.get("target_mode", "raw_wait")
     residual_lookup = {}
@@ -267,9 +275,7 @@ def build_dataset(cfg, task_name="duration"):
             if is_synthetic:
                 synthetic_skipped += 1
                 case_prefixes[case_id].append(activity_name)
-                case_milestones_seen[case_id].add(activity_name)
-                if activity_name.startswith("O_"):
-                    case_offer_count[case_id] += 1
+                case_history[case_id][activity_name] += 1
 
             elif transition == "START":
                 ac_wip[activity_name] += 1
@@ -308,11 +314,9 @@ def build_dataset(cfg, task_name="duration"):
                     role_oc=rp_oc_array,
                     role_names=role_names,
                     prev_dur=case_prev_time[case_id],
-                    offer_count=case_offer_count[case_id],
-                    has_offer=1.0 if case_offer_count[case_id] > 0 else 0.0,
-                    milestones_seen=case_milestones_seen[case_id],
-                    all_milestones=all_milestones,
                     activities=activities,
+                    trace_history=dict(case_history[case_id]),
+                    tracked_activities=tracked_activities,
                     case_attrs=extracted_case_attrs,
                     event_attrs=extracted_event_attrs,
                     worker_id=row.get("org:resource", "UNKNOWN")
@@ -371,11 +375,9 @@ def build_dataset(cfg, task_name="duration"):
                         role_oc=rp_oc_array,
                         role_names=role_names,
                         prev_dur=case_prev_time[case_id],
-                        offer_count=case_offer_count[case_id],
-                        has_offer=1.0 if case_offer_count[case_id] > 0 else 0.0,
-                        milestones_seen=case_milestones_seen[case_id],
-                        all_milestones=all_milestones,
                         activities=activities,
+                        trace_history=dict(case_history[case_id]),
+                        tracked_activities=tracked_activities,
                         case_attrs=extracted_case_attrs,
                         event_attrs=extracted_event_attrs,
                         worker_id=row.get("org:resource", "SYSTEM")
@@ -414,17 +416,14 @@ def build_dataset(cfg, task_name="duration"):
                     all_rows.append(row_dict)
 
                 case_prefixes[case_id].append(activity_name)
-                case_milestones_seen[case_id].add(activity_name)
-                if activity_name.startswith("O_"):
-                    case_offer_count[case_id] += 1
+                case_history[case_id][activity_name] += 1
 
         if seen_events[case_id] == case_event_counts[case_id]:
             active_cases.discard(case_id)
             if case_id in case_prefixes: del case_prefixes[case_id]
+            if case_id in case_history: del case_history[case_id]
             if case_id in case_start_times: del case_start_times[case_id]
             if case_id in case_start_features: del case_start_features[case_id]
-            if case_id in case_milestones_seen: del case_milestones_seen[case_id]
-            if case_id in case_offer_count: del case_offer_count[case_id]
             if case_id in case_prev_time: del case_prev_time[case_id]
             if case_id in case_prev_end_time: del case_prev_end_time[case_id]
 

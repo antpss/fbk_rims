@@ -124,7 +124,7 @@ def discover_xor_decision_points(pnml_path):
 def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload"):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
-    Extracts prefix history, loop counts, milestone business state, offer counts,
+    Extracts prefix history, loop counts, case attributes (payload), inter-arrival times,
     case attributes (payload), inter-arrival times, and temporal features at each XOR split encounter.
     """
     print(f"Loading Petri net: {pnml_path}...")
@@ -249,18 +249,13 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         inter_arr = case_inter_arrivals.get(str(case_id), 0.0)
 
         prefix_labels = []
-        offer_count = 0
         dp_counts = defaultdict(int)
 
         for move in trace_res["alignment"]:
             log_label = move[1][0]
             model_t_id = move[0][1]
 
-            # 1. Track log offer events
-            if log_label != ">>" and str(log_label).startswith("O_"):
-                offer_count += 1
-
-            # 2. Skip if transition did not fire in Petri net
+            # 1. Skip if transition did not fire in Petri net
             if model_t_id == ">>":
                 continue
 
@@ -276,8 +271,6 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                         "weekday": weekday,
                         "prev_activity": prefix_labels[-1] if prefix_labels else "<START>",
                         "loop_count": float(dp_counts[p_id]),
-                        "offer_count": float(offer_count),
-                        "has_offer": 1.0 if offer_count > 0 else 0.0,
                     }
 
                     # Include payload features (case attributes) if requested

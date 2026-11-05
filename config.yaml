@@ -63,9 +63,7 @@ features:
   #   - weekday          (One-hot weekday indicators Weekday_0..6)
   #   - role_occupancy   (Concurrent role/activity utilization vector Role_*_OC)
   #   - prev_duration    (Duration of previous activity in trace)
-  #   - offer_count      (Business milestone offer count)
-  #   - has_offer        (Binary indicator if case has an offer)
-  #   - milestones       (Binary indicators for milestones seen)
+  #   - trace_history    (Cumulative past activity presence indicators has_*)
   #   - case_attributes  (Domain-specific case attributes, e.g. RequestedAmount)
   #   - resource_id      (Worker/resource identity)
   selected_features:
@@ -75,9 +73,15 @@ features:
     - weekday
     - role_occupancy
     - prev_duration
+    # - trace_history
     # - case_attributes
-    # - milestones
     # - resource_id
+
+  # Cumulative Trace History Settings
+  trace_history:
+    mode: "profile_aware"         # Options: "profile_aware" (auto INSTANT_GATEWAY/AUTOMATED_TASK), "all_activities", "whitelist"
+    include_counts: false         # true = count_* frequency counts, false = binary has_* only
+    whitelist: []                 # Specific activity names to track if mode is "whitelist"
 
   # Tier 1: Universal Features (Fallback if selected_features is omitted)
   universal:

@@ -36,10 +36,7 @@ class Token:
 
         # Prefix and state tracking
         self.prefix = []
-        self.milestones_seen = set(init_ms) if init_ms is not None else set()
-        self.offer_count = 0.0
-        self.has_offer = 0.0
-
+        self.trace_history = defaultdict(int)
         self.events_done = 0
         self.prev_act = None
         self.prev_dur = 0.0
@@ -75,8 +72,8 @@ class Token:
             loop_count = float(self.dp_counts[dp])
             self.dp_counts[dp] += 1
             predicted_target = self.process.predictor.predict_routing(
-                dp, self.prefix, self.requested_amount, self.milestones_seen,
-                self.offer_count, self.has_offer,
+                dp, self.prefix, self.requested_amount,
+                trace_history=dict(self.trace_history),
                 curr_dt=self.arrival_dt,
                 loop_count=loop_count,
                 inter_arrival_seconds=self.inter_arrival_seconds,
@@ -154,8 +151,9 @@ class Token:
             w_ml = self.process.predictor.predict_waiting(
                 act, self.prefix, self.process.active_cases_count,
                 self.process.ac_wip, curr_dt, self.requested_amount,
-                self.milestones_seen, self.offer_count, self.has_offer, role_oc,
+                role_oc,
                 prev_dur=self.prev_dur,
+                trace_history=dict(self.trace_history),
                 case_attrs=self.case_attrs
             )
             w_worklist = max(0.0, w_ml * loop_decay - ext_delay)
@@ -182,7 +180,7 @@ class Token:
                 "queue_wait_seconds": 0.0,
                 "wip": self.process.active_cases_count
             })
-            self.milestones_seen.add(act)
+            self.trace_history[act] += 1
             self.prefix.append(act)
             self.prev_act = act
             self.prev_dur = 0.0
@@ -215,9 +213,10 @@ class Token:
         dur_pred = self.process.predictor.predict_duration(
             act, self.prefix, self.process.active_cases_count,
             self.process.ac_wip, curr_dt, self.requested_amount,
-            self.milestones_seen, self.offer_count, self.has_offer, role_oc,
+            role_oc,
             worker_id=worker_id,
             prev_dur=self.prev_dur,
+            trace_history=dict(self.trace_history),
             case_attrs=self.case_attrs
         )
 
@@ -249,7 +248,7 @@ class Token:
             "wip": self.process.active_cases_count
         })
 
-        self.milestones_seen.add(act)
+        self.trace_history[act] += 1
         self.prefix.append(act)
         self.prev_act = act
         self.prev_dur = dur_pred
@@ -328,7 +327,6 @@ class Token:
                 if act_type == "INSTANT_GATEWAY":
                     # Instantaneous lifecycle milestone / instant gateway
                     self.events_done += 1
-                    self.milestones_seen.add(act)
                     t_event = self.env.now
                     self.marking = semantics.execute(chosen_t, self.process.net, self.marking)
                     event_ts = self.process.calendar.to_datetime(t_event).strftime("%Y-%m-%d %H:%M:%S")
@@ -343,6 +341,7 @@ class Token:
                         "queue_wait_seconds": 0.0,
                         "wip": self.process.active_cases_count
                     })
+                    self.trace_history[act] += 1
                     self.prefix.append(act)
                     self.prev_act = act
                     self.prev_dur = 0.0
