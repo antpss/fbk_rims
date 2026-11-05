@@ -1,0 +1,167 @@
+{
+  "__metadata__": {
+    "generated_at": "2026-11-05 11:45:15",
+    "zero_duration_threshold": 0.95,
+    "min_automated_wait_seconds": 60.0,
+    "total_activities": 15,
+    "summary": {
+      "human_work_items": 12,
+      "automated_tasks": 2,
+      "instant_gateways": 1
+    }
+  },
+  "activity_types": {
+    "Authorization Requested": "HUMAN_WORK_ITEM",
+    "Back-Office Adjustment Requested": "HUMAN_WORK_ITEM",
+    "Evaluating Request (NO registered letter)": "HUMAN_WORK_ITEM",
+    "Evaluating Request (WITH registered letter)": "HUMAN_WORK_ITEM",
+    "Network Adjustment Requested": "HUMAN_WORK_ITEM",
+    "Pending Liquidation Request": "HUMAN_WORK_ITEM",
+    "Pending Request for Network Information": "HUMAN_WORK_ITEM",
+    "Pending Request for Reservation Closure": "HUMAN_WORK_ITEM",
+    "Pending Request for acquittance of heirs": "HUMAN_WORK_ITEM",
+    "Request completed with account closure": "AUTOMATED_TASK",
+    "Request completed with customer recovery": "AUTOMATED_TASK",
+    "Request created": "HUMAN_WORK_ITEM",
+    "Request deleted": "INSTANT_GATEWAY",
+    "Service closure Request with BO responsibility": "HUMAN_WORK_ITEM",
+    "Service closure Request with network responsibility": "HUMAN_WORK_ITEM"
+  },
+  "profiles": {
+    "Authorization Requested": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 12491,
+      "p_zero_duration": 0.0,
+      "median_duration_seconds": 2822.0,
+      "median_wait_seconds": 150.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Back-Office Adjustment Requested": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 3217,
+      "p_zero_duration": 0.0,
+      "median_duration_seconds": 47117.0,
+      "median_wait_seconds": 143725.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Evaluating Request (NO registered letter)": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 11091,
+      "p_zero_duration": 0.0014,
+      "median_duration_seconds": 1791.0,
+      "median_wait_seconds": 0.0,
+      "human_resource_ratio": 0.9986,
+      "has_start_lifecycle": true
+    },
+    "Evaluating Request (WITH registered letter)": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 2064,
+      "p_zero_duration": 0.0,
+      "median_duration_seconds": 2784.0,
+      "median_wait_seconds": 0.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Network Adjustment Requested": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 2075,
+      "p_zero_duration": 0.0,
+      "median_duration_seconds": 79764.0,
+      "median_wait_seconds": 530460.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Pending Liquidation Request": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 29031,
+      "p_zero_duration": 0.0011,
+      "median_duration_seconds": 141870.0,
+      "median_wait_seconds": 133.0,
+      "human_resource_ratio": 0.9989,
+      "has_start_lifecycle": true
+    },
+    "Pending Request for Network Information": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 881,
+      "p_zero_duration": 0.0568,
+      "median_duration_seconds": 1303573.0,
+      "median_wait_seconds": 0.0,
+      "human_resource_ratio": 0.9432,
+      "has_start_lifecycle": true
+    },
+    "Pending Request for Reservation Closure": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 29132,
+      "p_zero_duration": 0.0025,
+      "median_duration_seconds": 130.0,
+      "median_wait_seconds": 262743.0,
+      "human_resource_ratio": 0.999,
+      "has_start_lifecycle": true
+    },
+    "Pending Request for acquittance of heirs": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 2119,
+      "p_zero_duration": 0.0,
+      "median_duration_seconds": 26028.0,
+      "median_wait_seconds": 143983.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Request completed with account closure": {
+      "type": "AUTOMATED_TASK",
+      "total_events": 29031,
+      "p_zero_duration": 1.0,
+      "median_duration_seconds": 0.0,
+      "median_wait_seconds": 140088.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Request completed with customer recovery": {
+      "type": "AUTOMATED_TASK",
+      "total_events": 86,
+      "p_zero_duration": 1.0,
+      "median_duration_seconds": 0.0,
+      "median_wait_seconds": 151857.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Request created": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 32429,
+      "p_zero_duration": 0.0016,
+      "median_duration_seconds": 61.0,
+      "median_wait_seconds": 0.0,
+      "human_resource_ratio": 0.9984,
+      "has_start_lifecycle": true
+    },
+    "Request deleted": {
+      "type": "INSTANT_GATEWAY",
+      "total_events": 3312,
+      "p_zero_duration": 1.0,
+      "median_duration_seconds": 0.0,
+      "median_wait_seconds": 0.0,
+      "human_resource_ratio": 1.0,
+      "has_start_lifecycle": true
+    },
+    "Service closure Request with BO responsibility": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 30225,
+      "p_zero_duration": 0.0031,
+      "median_duration_seconds": 261342.0,
+      "median_wait_seconds": 2607.0,
+      "human_resource_ratio": 0.9969,
+      "has_start_lifecycle": true
+    },
+    "Service closure Request with network responsibility": {
+      "type": "HUMAN_WORK_ITEM",
+      "total_events": 28150,
+      "p_zero_duration": 0.1116,
+      "median_duration_seconds": 100.0,
+      "median_wait_seconds": 0.0,
+      "human_resource_ratio": 0.8884,
+      "has_start_lifecycle": true
+    }
+  }
+}
