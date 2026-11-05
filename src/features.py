@@ -23,15 +23,13 @@ class FeatureContext:
     ac_wip: Dict[str, int] = field(default_factory=dict)
     dt: Optional[datetime] = None
     requested_amount: float = 0.0
-    milestones_seen: Set[str] = field(default_factory=set)
-    offer_count: float = 0.0
-    has_offer: float = 0.0
     role_oc: List[float] = field(default_factory=list)
     role_names: List[str] = field(default_factory=list)
     prev_dur: float = 0.0
     worker_id: str = "UNKNOWN"
-    all_milestones: List[str] = field(default_factory=list)
     activities: List[str] = field(default_factory=list)
+    trace_history: Dict[str, int] = field(default_factory=dict)
+    tracked_activities: List[str] = field(default_factory=list)
     case_attrs: Dict[str, Any] = field(default_factory=dict)
     event_attrs: Dict[str, Any] = field(default_factory=dict)
 
@@ -64,21 +62,6 @@ def _extract_prev_duration(ctx: FeatureContext) -> Dict[str, float]:
     return {"Prev_Proc_Time": float(ctx.prev_dur)}
 
 
-def _extract_offer_count(ctx: FeatureContext) -> Dict[str, float]:
-    return {"Offer_Count": float(ctx.offer_count)}
-
-
-def _extract_has_offer(ctx: FeatureContext) -> Dict[str, float]:
-    return {"Has_Offer": float(ctx.has_offer)}
-
-
-def _extract_milestones(ctx: FeatureContext) -> Dict[str, float]:
-    res = {}
-    for m in ctx.all_milestones:
-        res[f"Milestone_{m}"] = 1.0 if m in ctx.milestones_seen else 0.0
-    return res
-
-
 def _extract_case_attributes(ctx: FeatureContext) -> Dict[str, Any]:
     res = {}
     if ctx.case_attrs:
@@ -107,6 +90,15 @@ def _extract_resource_id(ctx: FeatureContext) -> Dict[str, str]:
     return {"Resource_ID": str(ctx.worker_id) if ctx.worker_id else "UNKNOWN"}
 
 
+def _extract_trace_history(ctx: FeatureContext) -> Dict[str, float]:
+    res = {}
+    for act in ctx.tracked_activities:
+        clean_name = act.replace(" ", "_").replace("-", "_")
+        cnt = ctx.trace_history.get(act, 0)
+        res[f"has_{clean_name}"] = 1.0 if cnt > 0 else 0.0
+    return res
+
+
 # Central Registry of modular feature extractors
 FEATURE_REGISTRY: Dict[str, Callable[[FeatureContext], Dict[str, Any]]] = {
     "wip": _extract_wip,
@@ -115,9 +107,7 @@ FEATURE_REGISTRY: Dict[str, Callable[[FeatureContext], Dict[str, Any]]] = {
     "weekday": _extract_weekday,
     "role_occupancy": _extract_role_occupancy,
     "prev_duration": _extract_prev_duration,
-    "offer_count": _extract_offer_count,
-    "has_offer": _extract_has_offer,
-    "milestones": _extract_milestones,
+    "trace_history": _extract_trace_history,
     "case_attributes": _extract_case_attributes,
     "event_attributes": _extract_event_attributes,
     "resource_id": _extract_resource_id,
@@ -156,7 +146,6 @@ class FeatureManager:
             if univ.get("use_prev_duration", True):
                 selected.append("prev_duration")
 
-            selected.extend(["offer_count", "has_offer", "milestones"])
             if feat_cfg.get("case_attributes", None) != []:
                 selected.append("case_attributes")
             if feat_cfg.get("event_attributes", None):

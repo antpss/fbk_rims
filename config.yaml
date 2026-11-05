@@ -3,23 +3,20 @@
 # ===================================================================
 
 project:
-  name: "BPI_2012"
+  name: "BAC"
   random_seed: 42
 
 paths:
   # General Process & Duration / Waiting Time paths
-  raw_log: "data/processed/BPI_2012_filtered.xes"
-  aligned_log: "data/processed/aligned_BPI_2012.xes"
+  raw_log: "data/processed/BAC_filtered.xes"
+  aligned_log: "data/processed/aligned_BAC.xes"
   petri_net: "models/petri_nets/discovered_model_split.pnml"
   petri_nets_dir: "models/petri_nets"
   output_base_dir: "data/processed"
   models_dir: "models"
 
-  # Milestone Lifecycle Log (Step 00 export destination for milestone traces)
-  milestone_log: "data/processed/BPI_2012_A_only.xes"
-
   # Routing Decision Point paths (Step 05 Decision Mining)
-  routing_train_log: "data/processed/aligned_BPI_2012.xes"
+  routing_train_log: "data/processed/aligned_BAC.xes"
   routing_petri_net: "models/petri_nets/discovered_model_split.pnml"
   routing_models_dir: "models/routing"
 
@@ -66,9 +63,7 @@ features:
   #   - weekday          (One-hot weekday indicators Weekday_0..6)
   #   - role_occupancy   (Concurrent role/activity utilization vector Role_*_OC)
   #   - prev_duration    (Duration of previous activity in trace)
-  #   - offer_count      (Business milestone offer count)
-  #   - has_offer        (Binary indicator if case has an offer)
-  #   - milestones       (Binary indicators for milestones seen)
+  #   - trace_history    (Cumulative past activity presence indicators has_*)
   #   - case_attributes  (Domain-specific case attributes, e.g. RequestedAmount)
   #   - resource_id      (Worker/resource identity)
   selected_features:
@@ -78,9 +73,15 @@ features:
     - weekday
     - role_occupancy
     - prev_duration
-    - case_attributes
-    - milestones
+    # - trace_history
+    # - case_attributes
     # - resource_id
+
+  # Cumulative Trace History Settings
+  trace_history:
+    mode: "profile_aware"         # Options: "profile_aware" (auto INSTANT_GATEWAY/AUTOMATED_TASK), "all_activities", "whitelist"
+    include_counts: false         # true = count_* frequency counts, false = binary has_* only
+    whitelist: []                 # Specific activity names to track if mode is "whitelist"
 
   # Tier 1: Universal Features (Fallback if selected_features is omitted)
   universal:
@@ -92,13 +93,7 @@ features:
 
   # Tier 2: Domain-Specific Attributes
   # Empty list [] will completely exclude domain attributes.
-  case_attributes:
-    - column: "case:AMOUNT_REQ"
-      feature_name: "RequestedAmount"
-      type: "continuous"
-      treat_zero_as_missing: true
-      fill_strategy: "median"
-      fill_value: 0.0
+  case_attributes: []
 
   # Event-level attributes (e.g. Resource_ID, cost, channel).
   event_attributes: []
@@ -107,7 +102,7 @@ features:
 # Preprocessing & Log Filtering (Step 00)
 # ===================================================================
 preprocessing:
-  input_log: "data/raw/BPI_Challenge_2012.xes"
+  input_log: "data/raw/BAC.xes"
 
   # Optional Column Mapping: maps custom column names in the raw log to internal standard attributes
   # Defaults match standard IEEE XES names. Change if using custom CSV/XES logs.
@@ -123,63 +118,8 @@ preprocessing:
     start: ["START", "start", "begin", "open"]
     complete: ["COMPLETE", "complete", "finish", "end", "close"]
 
-  # Activities discovered in Petri Net & modeled for duration/waiting simulation
-  # DEFAULT: Set to [] or omit to model ALL activities in the log.
-  # For BPI 2012: ["W_"] isolates human work items.
-  process_activity_prefixes:
-    - "W_"
-  # Milestone activities preserved as business state context for routing classifiers
-  # DEFAULT: Set to [] or omit if the log has no separate milestone events.
-  # For BPI 2012: ["A_", "O_"] captures application & offer business status.
-  milestone_prefixes:
-    - "A_"
-    - "O_"
-
-  # Empirical distribution of initial milestone profiles observed upon case submission
-  initial_milestones_distribution:
-    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED", "A_PREACCEPTED"]
-      probability: 0.35
-    - milestones: ["A_SUBMITTED", "A_PARTLYSUBMITTED"]
-      probability: 0.65
-
-  # Dynamic progression: milestones achieved when human tasks complete
-  milestone_progression:
-    "W_Complete application":
-      "A_ACCEPTED": 1.0
-      "O_SELECTED": 1.0
-      "A_FINALIZED": 0.15
-      "O_CREATED": 0.15
-      "O_SENT": 0.15
-    "W_Call after offers":
-      "O_SENT_BACK": 0.15
-    "W_Handle leads":
-      "A_PREACCEPTED": 1.0
-    "W_Validate application":
-      "A_APPROVED": 1.0
-      "A_REGISTERED": 1.0
-      "A_ACTIVATED": 1.0
-      "O_ACCEPTED": 1.0
-
-  # Terminal outcome milestones excluded from decision routing to avoid target leakage
-  excluded_milestones:
-    - "O_ACCEPTED"
-    - "A_DECLINED"
-    - "A_CANCELLED"
-    - "A_ACTIVATED"
-    - "A_APPROVED"
-    - "A_REGISTERED"
-    - "O_DECLINED"
-    - "O_CANCELLED"
-
   # Optional activity renaming/translation map. Empty {} applies no renaming.
-  activity_mapping:
-    "W_Afhandelen leads": "W_Handle leads"
-    "W_Completeren aanvraag": "W_Complete application"
-    "W_Valideren aanvraag": "W_Validate application"
-    "W_Nabellen offertes": "W_Call after offers"
-    "W_Beoordelen fraude": "W_Assess fraud"
-    "W_Wijzigen contractgegevens": "W_Change contract details"
-    "W_Nabellen incomplete dossiers": "W_Call after incomplete files"
+  activity_mapping: {}
 
 # Activities to model (Duration, Waiting Time, Routing)
 # If empty list [] or omitted, RIMS++ automatically discovers and models all activities in the log.
@@ -204,7 +144,7 @@ tasks:
   waiting_time:
     description: "Queue / waiting time before activity starts"
     target_column: "Wait_Time_Seconds"
-    target_mode: "residual_delay"   # Options: "residual_delay" (Fix 2: uncoupled ML worklist batching), "raw_wait" (legacy total wait)
+    target_mode: "residual_delay"   # Options: "residual_delay", "raw_wait" (legacy total wait)
     output_file: "datasets/dataset_waiting_time_global.csv"
     filter_zero_duration: false   # Zero waiting time is physically valid (immediate pickup)
     sample_weighting:
@@ -213,7 +153,7 @@ tasks:
   routing:
     description: "White-Box XOR decision point routing classifiers"
     classifier_type: "decision_tree" # Default: "decision_tree" (white-box), options: "decision_tree", "random_forest", "xgboost"
-    inference_mode: "argmax"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
+    inference_mode: "sample"         # Options: "sample" (probabilistic leaf sampling), "argmax" (deterministic rule execution)
     mode: "payload"                  # Options: "payload" (RequestedAmount), "inter_arrival", "both"
     max_depth: 21                    # Depth search ceiling for hyperparameter optimization (RIMS space: 1..21)
     rf_trees: 5                      # Number of trees for random_forest
@@ -221,9 +161,7 @@ tasks:
     min_f1_threshold: 0.60           # Quality threshold: Macro F1 >= 0.60 saves ML model; < 0.60 falls back to empirical branching probabilities
     output_dir: "models/routing"
     # Optional decision places to force empirical branching probabilities (parity with legacy RIMS entry split)
-    force_probability_places:
-      - "exi_xor_1"
-      - "exi_W_Handle leads__loop_split"
+    force_probability_places: []
 
 # ===================================================================
 # Model Strategy & Architecture (Step 04)
@@ -302,7 +240,7 @@ simulation:
     mode: "prophet"                   # Options: "replay" (replays from aligned_log), "generative" (statistical distribution), "prophet" (Facebook Prophet time-series)
     distribution: "exponential"   # Distribution for generative mode: "exponential", "uniform", "constant"
     scale: 300.0                  # Mean seconds between case arrivals (e.g. 300s = 5 min)
-    start_timestamp: "2012-01-01 08:00:00"
+    start_timestamp: "2017-06-01 08:00:00"
     calendar_bounded: false       # If true, new arrivals only spawn during office hours (false allows 24/7 natural customer submissions)
 
     # Facebook Prophet Time-Series Forecasting Settings (used when mode: "prophet")

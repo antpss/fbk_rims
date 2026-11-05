@@ -11,6 +11,7 @@ powered by the official `log-distance-measures` library (Chapela-Campa et al. BP
 """
 
 import unittest
+import tempfile
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
@@ -124,10 +125,10 @@ class TestMetrics(unittest.TestCase):
         ]
         df_sim = pd.DataFrame(sim_events)
 
-        cfg = {"target_activities": ["A", "B"], "paths": {"output_base_dir": "data/processed"}}
-        evaluator = SimulationEvaluator(cfg, export_xes=False)
-
-        results = evaluator.evaluate(df_real, df_sim)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cfg = {"target_activities": ["A", "B"], "paths": {"output_base_dir": tmp_dir}}
+            evaluator = SimulationEvaluator(cfg, export_xes=False)
+            results = evaluator.evaluate(df_real, df_sim)
 
         # Check all perspectives are present
         self.assertIn("cfld", results)

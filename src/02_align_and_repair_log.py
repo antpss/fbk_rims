@@ -21,9 +21,7 @@ def main():
 
     os.makedirs(os.path.dirname(output_log_path), exist_ok=True)
 
-    prep_cfg = cfg.get("preprocessing", {})
-    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", []))
-    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", []))
+    target_acts = set(cfg.get("target_activities", []))
 
     print(f"Loading log: {input_log_path}")
     df = pm4py.read_xes(input_log_path)
@@ -32,13 +30,19 @@ def main():
     print(f"Loading Petri net model: {input_pnml_path}")
     net, initial_marking, final_marking = pm4py.read_pnml(input_pnml_path)
 
-    #isolate process activity COMPLETE events for alignment
-    #PM4Py Petri net transitions correspond to process activity completions.
-    print(f"Preparing control-flow log on COMPLETE events of process activities ({proc_prefixes})...")
-    if proc_prefixes:
-        df_proc_comp = df[(df["concept:name"].str.startswith(proc_prefixes)) & (df["lifecycle:transition"] == "COMPLETE")].copy()
+    # Isolate COMPLETE events for alignment
+    # PM4Py Petri net transitions correspond to activity completions.
+    print("Preparing control-flow log on COMPLETE events...")
+    if target_acts:
+        if "lifecycle:transition" in df.columns:
+            df_proc_comp = df[(df["concept:name"].isin(target_acts)) & (df["lifecycle:transition"] == "COMPLETE")].copy()
+        else:
+            df_proc_comp = df[df["concept:name"].isin(target_acts)].copy()
     else:
-        df_proc_comp = df[df["lifecycle:transition"] == "COMPLETE"].copy()
+        if "lifecycle:transition" in df.columns:
+            df_proc_comp = df[df["lifecycle:transition"] == "COMPLETE"].copy()
+        else:
+            df_proc_comp = df.copy()
     
     # Build alignment event log with case:concept:name as trace concept:name
     log_for_align = EventLog()
@@ -57,7 +61,7 @@ def main():
     print("Alignments calculated successfully.")
 
     #reconstruct repaired log
-    print("Reconstructing repaired event log preserving START/COMPLETE lifecycles and business milestones...")
+    print("Reconstructing repaired event log preserving START/COMPLETE lifecycles and aligned events...")
     repaired_log = EventLog()
     
     total_model_moves = 0
@@ -76,8 +80,7 @@ def main():
                 clean_key = col[5:]
                 trace_attrs[clean_key] = grp_sorted[col].iloc[0]
 
-        # Separate milestones vs process activity executions
-        milestones = []
+        # Separate events into work items
         work_items = []
         pending_start = defaultdict(list)
 
@@ -87,22 +90,26 @@ def main():
             row_dict = {k: v for k, v in row.items() if not k.startswith("case:") and pd.notna(v)}
             evt = Event(row_dict)
 
-            is_ms = bool(milestone_prefixes) and act.startswith(milestone_prefixes)
-            is_wi = (act.startswith(proc_prefixes)) if proc_prefixes else (not is_ms)
+            if target_acts and act not in target_acts:
+                continue
 
-            if is_ms:
-                milestones.append(evt)
-            elif is_wi:
-                if trans == "START":
-                    pending_start[act].append(evt)
-                elif trans == "COMPLETE":
-                    start_evt = pending_start[act].pop(0) if pending_start[act] else None
-                    wi = {
-                        "act": act,
-                        "start": start_evt,
-                        "complete": evt
-                    }
-                    work_items.append(wi)
+            if trans == "START":
+                pending_start[act].append(evt)
+            elif trans == "COMPLETE":
+                start_evt = pending_start[act].pop(0) if pending_start[act] else None
+                wi = {
+                    "act": act,
+                    "start": start_evt,
+                    "complete": evt
+                }
+                work_items.append(wi)
+            else:
+                wi = {
+                    "act": act,
+                    "start": None,
+                    "complete": evt
+                }
+                work_items.append(wi)
 
         repaired_events = []
         alignment = alignments_by_case.get(cid_str)
@@ -153,9 +160,6 @@ def main():
                 if wi["start"] is not None:
                     repaired_events.append(wi["start"])
                 repaired_events.append(wi["complete"])
-
-        # Preserve all business milestone events (A_, O_)
-        repaired_events.extend(milestones)
 
         # Sort all events chronologically (stable sort)
         repaired_events.sort(key=lambda e: e["time:timestamp"])

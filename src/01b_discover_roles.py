@@ -88,15 +88,7 @@ def discover_roles(cfg=None, threshold=None):
     if target_activities:
         df_target = df[df["concept:name"].isin(target_activities)].copy()
     else:
-        proc_prefixes = tuple(cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
-        if proc_prefixes:
-            df_target = df[df["concept:name"].str.startswith(proc_prefixes)].copy()
-        else:
-            ms_prefixes = tuple(cfg.get("preprocessing", {}).get("milestone_prefixes", []))
-            if ms_prefixes:
-                df_target = df[~df["concept:name"].str.startswith(ms_prefixes)].copy()
-            else:
-                df_target = df.copy()
+        df_target = df.copy()
         target_activities = sorted(df_target["concept:name"].unique().tolist())
 
     if not has_resources:

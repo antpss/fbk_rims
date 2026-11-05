@@ -16,47 +16,103 @@
       "source_dir": "global_lstm",
       "file": "lstm_global.pth"
     },
-    "W_Assess fraud": {
-      "model_type": "tcn",
-      "source_dir": "global_tcn",
-      "file": "tcn_global.pth",
-      "best_test_mae": 40993.74,
-      "best_test_smape": 155.31
+    "Authorization Requested": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 2155.64,
+      "best_test_smape": 185.95
     },
-    "W_Call after incomplete files": {
+    "Back-Office Adjustment Requested": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 196.65
+    },
+    "Evaluating Request (NO registered letter)": {
       "model_type": "xgboost",
       "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Call_after_incomplete_files.json",
-      "best_test_mae": 45944.29,
-      "best_test_smape": 118.14
+      "file": "xgboost_local_Evaluating_Request_(NO_registered_letter).json",
+      "best_test_mae": 210.18,
+      "best_test_smape": 199.89
     },
-    "W_Call after offers": {
-      "model_type": "tcn",
-      "source_dir": "local_tcn",
-      "file": "tcn_local_W_Call_after_offers.pth",
-      "best_test_mae": 219165.57,
-      "best_test_smape": 122.12
-    },
-    "W_Complete application": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_W_Complete_application.json",
-      "best_test_mae": 46820.54,
-      "best_test_smape": 135.05
-    },
-    "W_Handle leads": {
+    "Evaluating Request (WITH registered letter)": {
       "model_type": "xgboost",
       "source_dir": "global_xgboost",
       "file": "xgboost_global.json",
-      "best_test_mae": 696.55,
-      "best_test_smape": 185.07
+      "best_test_mae": 6039.68,
+      "best_test_smape": 199.86
     },
-    "W_Validate application": {
+    "Network Adjustment Requested": {
       "model_type": "lstm",
-      "source_dir": "local_lstm",
-      "file": "lstm_local_W_Validate_application.pth",
-      "best_test_mae": 86796.62,
-      "best_test_smape": 98.9
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 8501.32,
+      "best_test_smape": 194.53
+    },
+    "Pending Liquidation Request": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 189.29
+    },
+    "Pending Request for Reservation Closure": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 191.66
+    },
+    "Pending Request for acquittance of heirs": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 193.24
+    },
+    "Request completed with account closure": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 190.33
+    },
+    "Request completed with customer recovery": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 20568.58,
+      "best_test_smape": 196.66
+    },
+    "Request created": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 182.65
+    },
+    "Request deleted": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 196.14
+    },
+    "Service closure Request with BO responsibility": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 5.44,
+      "best_test_smape": 180.46
+    },
+    "Service closure Request with network responsibility": {
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 22209.15,
+      "best_test_smape": 193.32
     }
   }
 }

@@ -75,6 +75,19 @@ class ChampionPredictor:
             except Exception:
                 self.activity_profiles = {}
 
+        # Trace history tracked activities
+        th_cfg = cfg.get("features", {}).get("trace_history", {})
+        th_mode = th_cfg.get("mode", "profile_aware")
+        if th_mode == "whitelist":
+            self.tracked_activities = th_cfg.get("whitelist", [])
+        elif th_mode == "all_activities":
+            self.tracked_activities = list(self.activity_profiles.keys())
+        else:  # "profile_aware"
+            self.tracked_activities = [
+                a for a, t in self.activity_profiles.items()
+                if t in ("INSTANT_GATEWAY", "AUTOMATED_TASK")
+            ]
+
         # 1. Load Duration Models (hybrid_champion or active candidate directory)
         dur_base = os.path.join(self.models_dir, "duration")
         dur_dir = os.path.join(dur_base, "hybrid_champion")
@@ -141,7 +154,6 @@ class ChampionPredictor:
         if not self.feature_mgr.is_feature_active("resource_id"):
             ignored.add("Resource_ID")
         self.feature_cols = [c for c in dur_df_stats.columns if c not in ignored]
-        self.all_milestones = [c.replace("Milestone_", "") for c in self.feature_cols if c.startswith("Milestone_")]
 
         # 99th percentile feature bounds (prevents WIP / AC_WIP / Prev_Proc_Time runaway feedback loops)
         self.feature_max_caps = {}
@@ -317,8 +329,8 @@ class ChampionPredictor:
         return suite
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
-                            milestones_seen, offer_count, has_offer, role_oc_array, worker_id=None, prev_dur=0.0,
-                            case_attrs=None):
+                            role_oc_array, worker_id=None, prev_dur=0.0,
+                            trace_history=None, case_attrs=None):
         ctx = FeatureContext(
             target_act=target_act,
             prefix=prefix,
@@ -326,12 +338,10 @@ class ChampionPredictor:
             ac_wip=ac_wip,
             dt=dt,
             requested_amount=requested_amount,
-            milestones_seen=milestones_seen,
-            offer_count=offer_count,
-            has_offer=has_offer,
             role_oc=role_oc_array,
             worker_id=worker_id or "UNKNOWN",
-            all_milestones=self.all_milestones,
+            trace_history=trace_history or {},
+            tracked_activities=getattr(self, "tracked_activities", []),
             prev_dur=float(prev_dur),
             case_attrs=case_attrs or {},
         )
@@ -345,9 +355,6 @@ class ChampionPredictor:
                 except (ValueError, TypeError):
                     feats[k] = v
 
-        # Ensure universal context variables are available in feats dictionary
-        feats.setdefault("Offer_Count", float(offer_count))
-        feats.setdefault("Has_Offer", float(has_offer))
         if self.feature_mgr.is_feature_active("case_attributes") or "RequestedAmount" in self.feature_cols:
             feats.setdefault("RequestedAmount", float(requested_amount))
         feats["Prev_Proc_Time"] = float(prev_dur)
@@ -356,10 +363,7 @@ class ChampionPredictor:
 
         for col in self.feature_cols:
             if col not in feats:
-                if col.startswith("Milestone_"):
-                    m_name = col.replace("Milestone_", "")
-                    feats[col] = 1.0 if m_name in milestones_seen else 0.0
-                elif col == "Resource_ID":
+                if col == "Resource_ID":
                     feats[col] = str(worker_id) if worker_id else "UNKNOWN"
                 elif col == "Prev_Proc_Time":
                     feats[col] = float(prev_dur)
@@ -373,38 +377,40 @@ class ChampionPredictor:
         return feats
 
     def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
-                         milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
-                         case_attrs=None):
+                         role_oc_array=None, worker_id=None, prev_dur=0.0,
+                         trace_history=None, case_attrs=None):
         """Predicts activity execution duration in seconds using champion model."""
         act_type = self.activity_profiles.get(activity)
         if act_type in ("AUTOMATED_TASK", "INSTANT_GATEWAY"):
             return 0.0
 
         val = self._predict_time(self.dur_models, self.dur_dispatch, activity, prefix,
-                                 wip, ac_wip, dt, requested_amount, milestones_seen or set(),
-                                 offer_count, has_offer, role_oc_array or [], default_fallback=600.0,
-                                 worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+                                 wip, ac_wip, dt, requested_amount,
+                                 role_oc_array or [], default_fallback=600.0,
+                                 worker_id=worker_id, prev_dur=prev_dur,
+                                 trace_history=trace_history, case_attrs=case_attrs)
         cap = self.dur_max_caps.get(activity, self.dur_global_cap)
         return min(val, cap)
 
     def predict_waiting(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
-                        milestones_seen=None, offer_count=0.0, has_offer=0.0, role_oc_array=None, worker_id=None, prev_dur=0.0,
-                        case_attrs=None):
+                        role_oc_array=None, worker_id=None, prev_dur=0.0,
+                        trace_history=None, case_attrs=None):
         """Predicts activity waiting time in seconds using champion model."""
         act_type = self.activity_profiles.get(activity)
         if act_type == "INSTANT_GATEWAY":
             return 0.0
 
         val = self._predict_time(self.wait_models, self.wait_dispatch, activity, prefix,
-                                 wip, ac_wip, dt, requested_amount, milestones_seen or set(),
-                                 offer_count, has_offer, role_oc_array or [], default_fallback=3600.0,
-                                 worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+                                 wip, ac_wip, dt, requested_amount,
+                                 role_oc_array or [], default_fallback=3600.0,
+                                 worker_id=worker_id, prev_dur=prev_dur,
+                                 trace_history=trace_history, case_attrs=case_attrs)
         cap = self.wait_max_caps.get(activity, self.wait_global_cap)
         return min(val, cap)
 
     def _predict_time(self, suite, dispatch_table, activity, prefix, wip, ac_wip, dt,
-                      requested_amount, milestones_seen, offer_count, has_offer,
-                      role_oc_array, default_fallback, worker_id=None, prev_dur=0.0, case_attrs=None):
+                      requested_amount, role_oc_array, default_fallback, worker_id=None, prev_dur=0.0,
+                      trace_history=None, case_attrs=None):
         entry = suite["models"].get(activity) or suite["models"].get("__default__")
         if not entry:
             return default_fallback
@@ -412,8 +418,9 @@ class ChampionPredictor:
         m_type = entry["type"]
         model = entry["model"]
         f_dict = self._build_feature_dict(activity, prefix, wip, ac_wip, dt, requested_amount,
-                                          milestones_seen, offer_count, has_offer, role_oc_array,
-                                          worker_id=worker_id, prev_dur=prev_dur, case_attrs=case_attrs)
+                                          role_oc_array,
+                                          worker_id=worker_id, prev_dur=prev_dur,
+                                          trace_history=trace_history, case_attrs=case_attrs)
 
         if m_type == "xgboost":
             p_features = prefix[-self.max_seq_len:] if len(prefix) > self.max_seq_len else prefix + ["NONE"] * (self.max_seq_len - len(prefix))
@@ -439,10 +446,7 @@ class ChampionPredictor:
             if expected_cols:
                 for ec in expected_cols:
                     if ec not in row_dict:
-                        if ec.startswith("Milestone_"):
-                            m_name = ec[len("Milestone_"):]
-                            row_dict[ec] = 1.0 if m_name in milestones_seen else 0.0
-                        elif ec.startswith("Role_") and ec.endswith("_OC"):
+                        if ec.startswith("Role_") and ec.endswith("_OC"):
                             try:
                                 r_idx = int(ec.split("_")[1])
                                 row_dict[ec] = float(role_oc_array[r_idx]) if r_idx < len(role_oc_array) else 0.0
@@ -541,13 +545,6 @@ class ChampionPredictor:
                 for c in cols:
                     if c in f_dict:
                         feat_raw.append(float(f_dict[c]))
-                    elif c.startswith("Milestone_"):
-                        m_name = c[len("Milestone_"):]
-                        feat_raw.append(1.0 if m_name in milestones_seen else 0.0)
-                    elif c == "Offer_Count":
-                        feat_raw.append(float(offer_count))
-                    elif c == "Has_Offer":
-                        feat_raw.append(float(has_offer))
                     else:
                         feat_raw.append(0.0)
                 feat_arr = (np.array([feat_raw], dtype=np.float32) - entry["scaler_mean"]) / entry["scaler_scale"]
@@ -557,13 +554,6 @@ class ChampionPredictor:
                 for c in cols:
                     if c in f_dict:
                         feat_dict[c] = f_dict[c]
-                    elif c.startswith("Milestone_"):
-                        m_name = c[len("Milestone_"):]
-                        feat_dict[c] = 1.0 if m_name in milestones_seen else 0.0
-                    elif c == "Offer_Count":
-                        feat_dict[c] = float(offer_count)
-                    elif c == "Has_Offer":
-                        feat_dict[c] = float(has_offer)
                     else:
                         feat_dict[c] = 0.0
                 feat_df = pd.DataFrame([feat_dict])[cols]
@@ -587,8 +577,7 @@ class ChampionPredictor:
 
         return default_fallback
 
-    def predict_routing(self, place_id, prefix, requested_amount=0.0, milestones_seen=None,
-                        offer_count=0.0, has_offer=0.0, curr_dt=None, loop_count=0.0,
+    def predict_routing(self, place_id, prefix, requested_amount=0.0, trace_history=None, curr_dt=None, loop_count=0.0,
                         inter_arrival_seconds=0.0, case_attrs=None):
         """Predicts outgoing transition branch at an XOR split place."""
         p_info = self.routing_manifest.get(place_id)
@@ -603,10 +592,6 @@ class ChampionPredictor:
 
             row = {
                 "RequestedAmount": float(requested_amount),
-                "Offer_Count": float(offer_count),
-                "Has_Offer": float(has_offer),
-                "offer_count": float(offer_count),
-                "has_offer": float(has_offer),
                 "loop_count": float(loop_count),
                 "prev_activity": prefix[-1] if prefix else "<START>",
                 "hour": curr_dt.hour if curr_dt is not None else 12,
@@ -619,9 +604,26 @@ class ChampionPredictor:
                     row[k] = v
 
             for col in feat_cols:
-                if col.startswith("has_") and col != "has_offer":
+                if col.startswith("has_"):
                     act_name = col.replace("has_", "")
-                    row[col] = 1.0 if (act_name in prefix or (milestones_seen and act_name in milestones_seen)) else 0.0
+                    act_clean = act_name.replace(" ", "_").replace("-", "_")
+                    has_fired = (
+                        act_name in prefix
+                        or act_clean in prefix
+                        or (trace_history and (
+                            trace_history.get(act_name, 0) > 0
+                            or trace_history.get(act_clean, 0) > 0
+                            or trace_history.get(col[4:], 0) > 0
+                        ))
+                    )
+                    row[col] = 1.0 if has_fired else 0.0
+                elif col.startswith("count_"):
+                    act_name = col.replace("count_", "")
+                    act_clean = act_name.replace(" ", "_").replace("-", "_")
+                    cnt = prefix.count(act_name)
+                    if trace_history:
+                        cnt = max(cnt, trace_history.get(act_name, 0), trace_history.get(act_clean, 0))
+                    row[col] = float(cnt)
                 elif col not in row:
                     row[col] = 0.0
 

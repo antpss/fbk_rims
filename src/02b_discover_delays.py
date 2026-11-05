@@ -303,7 +303,6 @@ class ChapelaDelayDiscoveryEngine:
         # -------------------------------------------------------------
         print(f"\n[Step 3/4] Estimating extraneous delays via Chapela-Campa [{self.estimator.upper()}]...")
         target_activities = set(self.cfg.get("target_activities", []))
-        proc_prefixes = tuple(self.cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
 
         cal_global = self.calendar_mgr.get_calendar(role_or_act=None)
         print(f"      Global Calendar: {cal_global.hour_start}:00 - {cal_global.hour_end}:00 (Active: {cal_global.enabled})")
@@ -320,13 +319,7 @@ class ChapelaDelayDiscoveryEngine:
 
             for idx, inst_t in enumerate(insts_sorted):
                 act_t = inst_t["act"]
-                is_target = True
                 if target_activities and act_t not in target_activities:
-                    is_target = False
-                elif not target_activities and proc_prefixes and not act_t.startswith(proc_prefixes):
-                    is_target = False
-
-                if not is_target:
                     continue
 
                 # Find valid causal predecessors

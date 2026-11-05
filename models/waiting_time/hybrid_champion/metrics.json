@@ -3,46 +3,94 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "training_time_seconds": 488.38,
-  "weighted_mae": 107042.58,
-  "weighted_smape": 127.33,
-  "macro_mae": 73402.88,
+  "training_time_seconds": 2535.14,
+  "weighted_mae": 2896.36,
+  "weighted_smape": 188.69,
+  "macro_mae": 4263.57,
   "activity_metrics": {
-    "W_Assess fraud": {
-      "count": 63,
-      "model_source": "global_tcn (TCN)",
-      "mae": 40993.74,
-      "smape": 155.31
+    "Authorization Requested": {
+      "count": 2469,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 2155.64,
+      "smape": 185.95
     },
-    "W_Call after incomplete files": {
-      "count": 2319,
+    "Back-Office Adjustment Requested": {
+      "count": 516,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 196.65
+    },
+    "Evaluating Request (NO registered letter)": {
+      "count": 2130,
       "model_source": "local_xgboost (XGBOOST)",
-      "mae": 45944.29,
-      "smape": 118.14
+      "mae": 210.18,
+      "smape": 199.89
     },
-    "W_Call after offers": {
-      "count": 4622,
-      "model_source": "local_tcn (TCN)",
-      "mae": 219165.57,
-      "smape": 122.12
-    },
-    "W_Complete application": {
-      "count": 4586,
-      "model_source": "local_xgboost (XGBOOST)",
-      "mae": 46820.54,
-      "smape": 135.05
-    },
-    "W_Handle leads": {
-      "count": 692,
+    "Evaluating Request (WITH registered letter)": {
+      "count": 379,
       "model_source": "global_xgboost (XGBOOST)",
-      "mae": 696.55,
-      "smape": 185.07
+      "mae": 6039.68,
+      "smape": 199.86
     },
-    "W_Validate application": {
-      "count": 1117,
-      "model_source": "local_lstm (LSTM)",
-      "mae": 86796.62,
-      "smape": 98.9
+    "Network Adjustment Requested": {
+      "count": 249,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 8501.32,
+      "smape": 194.53
+    },
+    "Pending Liquidation Request": {
+      "count": 5528,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 189.29
+    },
+    "Pending Request for Reservation Closure": {
+      "count": 5543,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 191.66
+    },
+    "Pending Request for acquittance of heirs": {
+      "count": 362,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 193.24
+    },
+    "Request completed with account closure": {
+      "count": 5537,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 190.33
+    },
+    "Request completed with customer recovery": {
+      "count": 12,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 20568.58,
+      "smape": 196.66
+    },
+    "Request created": {
+      "count": 6487,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 182.65
+    },
+    "Request deleted": {
+      "count": 938,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 0.0,
+      "smape": 196.14
+    },
+    "Service closure Request with BO responsibility": {
+      "count": 5779,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 5.44,
+      "smape": 180.46
+    },
+    "Service closure Request with network responsibility": {
+      "count": 4847,
+      "model_source": "global_lstm (LSTM)",
+      "mae": 22209.15,
+      "smape": 193.32
     }
   }
 }

@@ -34,26 +34,9 @@ class Token:
         self.inter_arrival_seconds = float(inter_arrival_seconds)
         self.arrival_dt = self.process.calendar.to_datetime(self.arrival_offset)
 
-        # Prefix and milestone state tracking
+        # Prefix and state tracking
         self.prefix = []
-        ms_prefixes = self.process.ms_prefixes
-        cfg_init_ms = set(self.process.cfg.get("preprocessing", {}).get("initial_milestones", []))
-        if init_ms is not None:
-            self.milestones_seen = set(init_ms)
-        elif cfg_init_ms:
-            self.milestones_seen = set(cfg_init_ms)
-        elif any(m.startswith("A_") for m in ms_prefixes):
-            self.milestones_seen = {"A_SUBMITTED", "A_PARTLYSUBMITTED"}
-        else:
-            self.milestones_seen = set()
-
-        self.offer_count = float(
-            sum(1 for m in self.milestones_seen if m.startswith("O_"))
-            if (any(m.startswith("O_") for m in self.milestones_seen) or any(p.startswith("O_") for p in ms_prefixes))
-            else 0.0
-        )
-        self.has_offer = 1.0 if self.offer_count > 0 else 0.0
-
+        self.trace_history = defaultdict(int)
         self.events_done = 0
         self.prev_act = None
         self.prev_dur = 0.0
@@ -61,29 +44,6 @@ class Token:
 
         # Initialize marking at source place(s)
         self.marking = self.process.im.copy()
-
-    def update_milestones(self, act):
-        """Updates milestone progress context dynamically based on config rules."""
-        ms_prefixes = self.process.ms_prefixes
-        if not ms_prefixes:
-            return
-
-        prog = self.process.cfg.get("preprocessing", {}).get("milestone_progression", {})
-        if prog and act in prog:
-            item = prog[act]
-            if isinstance(item, dict):
-                for m, prob in item.items():
-                    if random.random() < float(prob):
-                        self.milestones_seen.add(m)
-                        if any(p.startswith("O_") for p in ms_prefixes) and m.startswith("O_"):
-                            self.offer_count += 1.0
-                            self.has_offer = 1.0
-            elif isinstance(item, (list, tuple, set)):
-                for m in item:
-                    self.milestones_seen.add(m)
-                    if any(p.startswith("O_") for p in ms_prefixes) and m.startswith("O_"):
-                        self.offer_count += 1.0
-                        self.has_offer = 1.0
 
     def _consume_tokens(self, transition):
         """Removes input tokens for transition from marking."""
@@ -112,8 +72,8 @@ class Token:
             loop_count = float(self.dp_counts[dp])
             self.dp_counts[dp] += 1
             predicted_target = self.process.predictor.predict_routing(
-                dp, self.prefix, self.requested_amount, self.milestones_seen,
-                self.offer_count, self.has_offer,
+                dp, self.prefix, self.requested_amount,
+                trace_history=dict(self.trace_history),
                 curr_dt=self.arrival_dt,
                 loop_count=loop_count,
                 inter_arrival_seconds=self.inter_arrival_seconds,
@@ -191,8 +151,9 @@ class Token:
             w_ml = self.process.predictor.predict_waiting(
                 act, self.prefix, self.process.active_cases_count,
                 self.process.ac_wip, curr_dt, self.requested_amount,
-                self.milestones_seen, self.offer_count, self.has_offer, role_oc,
+                role_oc,
                 prev_dur=self.prev_dur,
+                trace_history=dict(self.trace_history),
                 case_attrs=self.case_attrs
             )
             w_worklist = max(0.0, w_ml * loop_decay - ext_delay)
@@ -219,6 +180,7 @@ class Token:
                 "queue_wait_seconds": 0.0,
                 "wip": self.process.active_cases_count
             })
+            self.trace_history[act] += 1
             self.prefix.append(act)
             self.prev_act = act
             self.prev_dur = 0.0
@@ -251,9 +213,10 @@ class Token:
         dur_pred = self.process.predictor.predict_duration(
             act, self.prefix, self.process.active_cases_count,
             self.process.ac_wip, curr_dt, self.requested_amount,
-            self.milestones_seen, self.offer_count, self.has_offer, role_oc,
+            role_oc,
             worker_id=worker_id,
             prev_dur=self.prev_dur,
+            trace_history=dict(self.trace_history),
             case_attrs=self.case_attrs
         )
 
@@ -285,13 +248,10 @@ class Token:
             "wip": self.process.active_cases_count
         })
 
+        self.trace_history[act] += 1
         self.prefix.append(act)
         self.prev_act = act
         self.prev_dur = dur_pred
-
-        # Advance milestone state dynamically based on actual executed activity
-        self.update_milestones(act)
-        self.has_offer = 1.0 if self.offer_count > 0 else 0.0
 
         on_complete()
 
@@ -359,26 +319,14 @@ class Token:
                 # Check activity profile: INSTANT_GATEWAY vs. AUTOMATED_TASK vs. HUMAN_WORK_ITEM
                 act_type = getattr(self.process, "activity_profiles", {}).get(act)
                 if not act_type:
-                    proc_prefixes = self.process.proc_prefixes
-                    ms_prefixes = self.process.ms_prefixes
                     if self.process.target_activities:
-                        is_work_item = (act in self.process.target_activities)
-                    elif proc_prefixes:
-                        is_work_item = act.startswith(proc_prefixes)
-                    elif ms_prefixes:
-                        is_work_item = not act.startswith(ms_prefixes)
+                        act_type = "HUMAN_WORK_ITEM" if (act in self.process.target_activities) else "INSTANT_GATEWAY"
                     else:
-                        is_work_item = True
-                    act_type = "HUMAN_WORK_ITEM" if is_work_item else "INSTANT_GATEWAY"
+                        act_type = "HUMAN_WORK_ITEM"
 
                 if act_type == "INSTANT_GATEWAY":
-                    # Instantaneous lifecycle milestone (e.g. A_ / O_ state transition or instant gateway)
+                    # Instantaneous lifecycle milestone / instant gateway
                     self.events_done += 1
-                    self.milestones_seen.add(act)
-                    ms_prefixes = self.process.ms_prefixes
-                    if ms_prefixes and any(p.startswith("O_") for p in ms_prefixes) and act.startswith("O_"):
-                        self.offer_count += 1.0
-                        self.has_offer = 1.0
                     t_event = self.env.now
                     self.marking = semantics.execute(chosen_t, self.process.net, self.marking)
                     event_ts = self.process.calendar.to_datetime(t_event).strftime("%Y-%m-%d %H:%M:%S")
@@ -393,6 +341,7 @@ class Token:
                         "queue_wait_seconds": 0.0,
                         "wip": self.process.active_cases_count
                     })
+                    self.trace_history[act] += 1
                     self.prefix.append(act)
                     self.prev_act = act
                     self.prev_dur = 0.0
