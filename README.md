@@ -27,7 +27,6 @@ fbk_rims/
 │   ├── raw/                           # Raw input event logs (.xes / .csv)
 │   ├── processed/                     # Cleaned logs, training tables, and benchmark reports
 │   │   ├── <log_name>_filtered.xes    # Preprocessed and standardized event log
-│   │   ├── <log_name>_milestones.xes  # Optional lifecycle milestone log (for multi-stream logs)
 │   │   ├── aligned_<log_name>.xes     # Repaired & aligned log (100% synchronous moves)
 │   │   ├── datasets/                  # Feature-engineered tabular datasets
 │   │   │   ├── dataset_duration_global.csv     # Duration dataset (0-duration filtered)
@@ -39,6 +38,8 @@ fbk_rims/
 │       ├── csv/simulated_log.csv      # Output simulated event log (flat CSV)
 │       └── xes/simulated_log.xes      # Output simulated event log (standard IEEE XES)
 ├── models/                            # Trained model artifacts and manifests
+│   ├── activity_profiles.json         # Data-driven activity behavior profiles (Human vs. Automated vs. Instant)
+│   ├── activity_profiles_report.md    # Activity profiling statistical breakdown report
 │   ├── role_mapping.json              # Discovered organizational role partition, rosters, and capacities
 │   ├── role_discovery_report.md       # Organizational role discovery markdown report
 │   ├── petri_nets/                    # Discovered Petri nets (.pnml) and visual diagrams (.png)
@@ -63,13 +64,14 @@ fbk_rims/
 │       ├── prophet_arrivals_*.json    # Serialized model checkpoint for sub-second startup
 │       └── prophet_arrivals_*_meta.json # Training metadata, log timestamp, and carrying capacity
 ├── src/                               # Active RIMS++ Core Pipeline & Simulator Package
-│   ├── 00_filter_log.py               # Step 0: Raw event log preprocessing, cleaning & prefix partitioning
+│   ├── 00_filter_log.py               # Step 0: Raw event log preprocessing, cleaning & standardization
 │   ├── 01_process_discovery.py        # Step 1: Petri net discovery (Split Miner)
 │   ├── 01b_discover_roles.py          # Step 1b: Organizational role mining
 │   ├── view_models.py                 # Step 1c: Petri net visualization (.png export)
 │   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair (PM4Py A* state space)
 │   ├── 02b_discover_delays.py         # Step 2b: Causal external delay & worker latency discovery
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
+│   ├── activity_profiler.py           # Activity behavioral profiling (Human vs. Automated vs. Gateway)
 │   ├── features.py                    # Declarative Feature Registry & context builder
 │   ├── 04_train.py                    # Step 4: Multi-architecture training engine (XGB, TCN, LSTM)
 │   ├── 04b_benchmark_models.py        # Step 4b: Automated benchmarking & champion synthesis
@@ -184,8 +186,20 @@ resources:
     enable_concurrency_quotas: true # Enables empirical multi-tasking quotas (C_w >= 1) mined from log
 ```
 
-### 4. Feature Engineering Registry
-Controls the dynamic state features extracted chronologically from the event log:
+### 4. Activity Behavioral Profiling
+Configures automatic classification of activities into operational archetypes based on empirical duration and queue characteristics:
+```yaml
+activity_profiling:
+  enabled: true
+  zero_duration_threshold: 0.95   # Fraction of zero-duration instances to qualify as automated/instant
+  min_automated_wait_seconds: 60.0 # Waiting time boundary distinguishing automated tasks from instant gateways
+  output_file: "models/activity_profiles.json"
+  report_file: "models/activity_profiles_report.md"
+  overrides: {}                   # Optional explicit manual overrides {"Activity_Name": "human_work_item" | "automated_task" | "instant_gateway"}
+```
+
+### 5. Feature Engineering Registry
+Controls dynamic state features extracted chronologically from the event log without future data leakage:
 ```yaml
 features:
   prefix_window_size: 10          # History window of past activities (trace prefix)
@@ -196,9 +210,15 @@ features:
     - weekday                     # One-hot weekday indicators Weekday_0..6
     - role_occupancy              # Real-time departmental utilization vector (Role_*_OC)
     - prev_duration               # Processing duration of immediately preceding activity
+    - trace_history               # Cumulative past activity presence indicators (has_*)
     - case_attributes             # Domain-specific case payload attributes
-    - milestones                  # Dynamic state flags (for multi-stream logs)
     # - resource_id               # Worker identity (optional)
+
+  # Cumulative Trace History Settings
+  trace_history:
+    mode: "profile_aware"         # Options: "profile_aware" (auto INSTANT_GATEWAY/AUTOMATED_TASK), "all_activities", "whitelist"
+    include_counts: false         # true = count_* frequency counts, false = binary has_* only
+    whitelist: []                 # Specific activity names to track if mode is "whitelist"
 
   # Declarative Case Attributes
   case_attributes:
@@ -212,8 +232,8 @@ features:
   event_attributes: []
 ```
 
-### 5. Log Preprocessing & Multi-Stream Filtering
-Handles activity standardization, lifecycle pairing, and optional stream partitioning:
+### 6. Log Preprocessing & Standardization
+Handles activity standardization, lifecycle pairing, and attribute mapping:
 ```yaml
 preprocessing:
   input_log: "data/raw/<raw_event_log>.xes"
@@ -231,25 +251,24 @@ preprocessing:
   lifecycle_mapping:
     start: ["START", "start", "begin", "open"]
     complete: ["COMPLETE", "complete", "finish", "end", "close"]
-  
-  # Operational activities modeled for duration, waiting, and resource scheduling:
-  # Leave empty [] to model ALL activities in standard single-lifecycle event logs.
-  process_activity_prefixes: []
-
-  # Milestone activities tracked strictly as contextual business state:
-  # Leave empty [] if the log does not separate milestone states from operational tasks.
-  milestone_prefixes: []
 
   # Optional activity renaming dictionary (e.g. translation or normalization):
   activity_mapping: {}
+
+# Activities to model (Duration, Waiting Time, Routing)
+# If empty list [] or omitted, RIMS++ automatically discovers and models all activities in the log.
+target_activities: []
 ```
 
 > [!NOTE]
-> **Understanding Prefix Filtering (Standard Logs vs. Multi-Stream Logs)**:
-> * **Standard Single-Lifecycle Logs (Default)**: In the vast majority of event logs all recorded events represent operational tasks. In this setting, simply leave `process_activity_prefixes: []` and `milestone_prefixes: []`. Every activity in the log is modeled directly in the Petri net, trained for duration/waiting time, and assigned to organizational roles.
-> * **Multi-Stream Event Logs (e.g., BPI Challenge 2012 / 2017)**: Certain enterprise logs record multiple interleaved event streams within the same trace — for instance, transactional human work items (e.g., prefixed with `W_`) alongside asynchronous case status milestones (e.g., application milestones prefixed with `A_` or offer updates prefixed with `O_`). For these logs, configuring `process_activity_prefixes: ["W_"]` and `milestone_prefixes: ["A_", "O_"]` cleanly decouples human work items for Petri net execution while transforming the asynchronous milestone streams into dynamic contextual features (`Milestone_<NAME>`).
+> **Universal Log-Agnostic Modeling & Automated Task Discovery**:
+> RIMS++ is 100% event log agnostic and models the entire operational process in a unified Petri net without artificial prefix carving or manual filtering rules.
+> Rather than discarding instant status events or hardcoding milestone prefixes (e.g. `W_`, `A_`, `O_`), the data-driven **`ActivityProfiler`** analyzes historical execution durations and waiting times across all activities, categorizing them into:
+> 1. **`HUMAN_WORK_ITEM`**: Operations with measurable processing duration requiring human workforce capacity and constrained by business operating shifts.
+> 2. **`AUTOMATED_TASK`**: Automated system operations with $0.0\text{s}$ duration that run 24/7 without consuming human staff capacity, but may exhibit external or batching queue delays.
+> 3. **`INSTANT_GATEWAY`**: Pure routing/decision markers or status milestones with $0.0\text{s}$ duration and negligible delay ($\le 60\text{s}$) that advance the Petri net marking instantaneously.
 
-### 6. Config-Driven Task Specifications
+### 7. Config-Driven Task Specifications
 ```yaml
 tasks:
   duration:
@@ -278,7 +297,7 @@ tasks:
     output_dir: "models/routing"
 ```
 
-### 7. Simulation Strategy & Environment
+### 8. Simulation Strategy & Environment
 ```yaml
 simulation:
   mode: "hybrid_residual"         # Options: "hybrid_residual" (ML + physics) or "pure_physics"
@@ -320,17 +339,16 @@ source venv/bin/activate
 
 ---
 
-### Step 0: Log Preprocessing & Filtering (`src/00_filter_log.py`)
+### Step 0: Log Preprocessing & Standardization (`src/00_filter_log.py`)
 
-Preprocesses raw event logs, standardizes activity names via configurable mappings, handles lifecycle transitions (`start` / `complete` event pairing to calculate processing duration and waiting times), and optionally partitions multi-stream logs:
+Preprocesses raw event logs, standardizes activity names via configurable mappings, and handles lifecycle transitions (`start` / `complete` event pairing to calculate processing duration and waiting times):
 
 ```bash
 python src/00_filter_log.py
 ```
 * **Input**: `data/raw/<raw_event_log>.xes`
-* **Outputs**:
+* **Output**:
   * `data/processed/<log_name>_filtered.xes` (clean operational event log)
-  * `data/processed/<log_name>_milestones.xes` (optional milestone log when milestone prefixes are defined)
 
 ---
 
@@ -391,6 +409,23 @@ python src/01b_discover_roles.py --threshold 0.35
 
 ---
 
+### Step 1c: Activity Behavioral Profiling (`src/activity_profiler.py`)
+
+Automatically classifies every activity in the log into behavioral archetypes based on empirical duration and waiting times, eliminating hardcoded activity prefixes and enabling log-agnostic simulation:
+
+* **`HUMAN_WORK_ITEM`**: Operations with positive processing duration ($> 0\text{s}$) that consume human worker capacity from discovered organizational roles and are subject to operational shift hours.
+* **`AUTOMATED_TASK`**: Automated system operations with $0.0\text{s}$ duration that execute 24/7 without consuming human staff capacity, while retaining external/batch queue delays.
+* **`INSTANT_GATEWAY`**: Pure routing/decision markers or status milestones with $0.0\text{s}$ duration and negligible wait time ($\le 60\text{s}$) that advance the Petri net marking instantaneously.
+
+```bash
+# Profile activity execution behaviors and generate classification manifest
+python src/activity_profiler.py
+```
+* **Inputs**: `data/processed/aligned_<log_name>.xes` (or `<log_name>_filtered.xes`)
+* **Outputs**: `models/activity_profiles.json` and `models/activity_profiles_report.md`
+
+---
+
 ### Step 2: Log Alignment & Replay Repair (`src/02_align_and_repair_log.py`)
 
 Replays the event log against the discovered Petri net using $A^*$ state-space alignment to produce a repaired log containing strictly synchronous moves. This guarantees that every trace in the dataset can be replayed inside the simulation model without deadlock:
@@ -443,8 +478,8 @@ $$
   providing ML regressors with continuous macro-level departmental congestion signals.
 * **Declarative Case & Event Attributes**:
   Extracts case-level attributes (e.g. case category, cost, requested amount, customer tier) with empirical median/mode imputation governed by `treat_zero_as_missing`.
-* **Dynamic Milestone Tracking**:
-  For multi-stream logs, tracks historical milestone indicators (`Milestone_<NAME>`) recording whether asynchronous lifecycle events have completed prior to time $t$.
+* **Cumulative Trace History (`trace_history`)**:
+  Tracks strictly causal, leak-free presence indicators (`has_<activity>`) for activities executed within the case prior to time $t$. Configured via `mode: "profile_aware"`, RIMS++ automatically monitors past occurrences of non-human activities (`INSTANT_GATEWAY` and `AUTOMATED_TASK`) discovered by the `ActivityProfiler`, providing downstream ML models (e.g. routing decision trees or duration predictors) with structural process context.
 * **Task-Specific Filtering**:
   * **Duration Dataset**: Filters out 0.0s events (automated transitions) and applies smoothed inverse sample weights (`activity_weights.json`).
   * **Waiting Time Dataset**: Preserves 0.0s events (representing immediate resource pickups from queue).
@@ -526,6 +561,7 @@ python src/04_train.py --task waiting_time --strategy local --model_type lstm
 Discovers all XOR split places in the Petri net, extracts decision contexts from aligned event traces on `COMPLETE` events, and trains interpretable decision models with Hyperopt Bayesian optimization:
 
 * **White-Box Interpretability**: Uses `DecisionTreeClassifier` with human-readable decision rules (`tree.export_text`) printed directly to stdout.
+* **Data & History-Aware Features**: Classifiers leverage case payload attributes, inter-arrival time intervals, and dynamic trace history (`has_<activity>` presence flags of prior gateways and automated tasks) to capture business decision logic.
 * **Hyperparameter Optimization**: Employs `hyperopt` with Tree-structured Parzen Estimator (TPE) across 100 iterations (`max_depth: 1..21`, `min_samples_split: 2..20`, `min_samples_leaf: 1..25`, `criterion`, `class_weight`).
 * **Robust Empirical Fallback**: If $\text{Macro F1} < 0.60$ or an enabled transition has zero training samples, the router automatically falls back to empirical branching probabilities observed in the historical log.
 
@@ -549,7 +585,12 @@ python src/05_train_routing.py --classifier xgboost
 
 The simulation engine is structured as a modular object-oriented package in `src/simulator/`, orchestrated via the CLI runner `src/06_simulate.py`:
 
-* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, applies loopback damping ($0.5^{\text{loop}}$), and provides safe deadlock detection warnings.
+* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, applies loopback damping ($0.5^{\text{loop}}$), and provides safe deadlock detection warnings:
+  * **3-Way Archetype Execution**: Coordinates with `ActivityProfiler` to execute transitions according to their operational archetype:
+    * `INSTANT_GATEWAY`: Fires in $0.0\text{s}$ SimPy time without requesting workers or shift checks, advancing marking immediately.
+    * `AUTOMATED_TASK`: Runs 24/7 without consuming human staff capacity, evaluating external/batch waiting time distributions while executing with $0.0\text{s}$ duration.
+    * `HUMAN_WORK_ITEM`: Queues for human worker capacity from the mapped role, subject to operational shift calendars, multi-tasking limits, and empirical cooldown latencies.
+  * **Causal Trace History Tracking**: Dynamically increments token-level history (`token.trace_history`) upon activity execution, ensuring decision routing and ML time predictors receive accurate, leak-free case state.
 * **`SimulationProcess` & `SharedWorkerPool` (`src/simulator/process.py`)**: Coordinates the SimPy runtime environment and human resources using the **Hybrid Role-Resource Architecture**:
   * **Route by Role**: Tokens request resources from the activity's assigned organizational role (`activity_to_role`), querying qualified candidate workers.
   * **Zero Worker Ubiquity (Elimination of Phantom Staff)**: Tracks individual human workers as unique physical entities across the enterprise. If a multi-skilled worker is occupied with a task in Role A, they cannot be concurrently scheduled in Role B.
