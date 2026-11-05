@@ -1,6 +1,6 @@
 {
   "source_log": "/home/antonio/fbk_rims/data/processed/aligned_BAC.xes",
-  "discovery_timestamp": "2026-11-03 13:48:29",
+  "discovery_timestamp": "2026-11-05 10:03:45",
   "engine": "RIMS++ & Chapela-Campa Causal Delay",
   "estimator": "eclaw_plus",
   "placement": "ex_ante",

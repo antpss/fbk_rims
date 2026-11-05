@@ -148,6 +148,7 @@ tasks:
   waiting_time:
     description: "Queue / waiting time before activity starts"
     target_column: "Wait_Time_Seconds"
+    target_mode: "residual_delay"   # Options: "residual_delay", "raw_wait" (legacy total wait)
     output_file: "datasets/dataset_waiting_time_global.csv"
     filter_zero_duration: false   # Zero waiting time is physically valid (immediate pickup)
     sample_weighting:

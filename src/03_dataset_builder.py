@@ -15,16 +15,7 @@ try:
 except ImportError:
     from src.simulator.calendar import CalendarManager
 
-def main():
-    parser = argparse.ArgumentParser(description="Config-Driven Dataset Creation for RIMS++")
-    parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
-    parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"],
-                        help="Task-specific dataset to generate ('duration' or 'waiting_time')")
-    args = parser.parse_args()
-
-    cfg = load_config(args.config)
-    task_name = args.task
-    
+def build_dataset(cfg, task_name="duration"):
     if task_name not in cfg.get("tasks", {}):
         raise ValueError(f"Task '{task_name}' is not configured in config.yaml under 'tasks'")
         
@@ -171,6 +162,42 @@ def main():
     all_rows = []
     synthetic_skipped = 0
     missing_start_skipped = 0
+
+    target_mode = task_cfg.get("target_mode", "raw_wait")
+    residual_lookup = {}
+    matched_residuals = 0
+    initial_case_events = 0
+    fallback_residuals = 0
+
+    if task_name == "waiting_time" and target_mode == "residual_delay":
+        out_base = cfg.get("paths", {}).get("output_base_dir", "data/processed")
+        inst_parquet = os.path.join(PROJECT_ROOT, out_base, "causal_delays_instance_level.parquet")
+        inst_csv = os.path.join(PROJECT_ROOT, out_base, "causal_delays_instance_level.csv.gz")
+
+        df_inst = None
+        if os.path.exists(inst_parquet):
+            try:
+                df_inst = pd.read_parquet(inst_parquet)
+            except Exception:
+                df_inst = None
+        if df_inst is None and os.path.exists(inst_csv):
+            try:
+                df_inst = pd.read_csv(inst_csv)
+            except Exception:
+                df_inst = None
+
+        if df_inst is not None:
+            print(f"Loaded {len(df_inst):,} instance-level residual delay records from Step 02b.")
+            for r in df_inst.itertuples(index=False):
+                epoch = getattr(r, "start_timestamp_epoch", None)
+                if epoch is None:
+                    epoch = int(pd.to_datetime(getattr(r, "start_timestamp")).timestamp())
+                key = (str(getattr(r, "case_id")), str(getattr(r, "target_act")), int(epoch))
+                residual_lookup[key] = float(getattr(r, "residual_delay_seconds"))
+        else:
+            print(f"[!] Warning: target_mode is 'residual_delay' but neither {inst_parquet} nor {inst_csv} exists.")
+            print(f"    Please run Step 02b first: python src/02b_discover_delays.py --config config.yaml")
+
     print("Sweeping log chronologically to construct state vectors...")
 
     base_cols = [
@@ -257,13 +284,27 @@ def main():
                     role_active[act_role] += 1
                 case_start_times[case_id][activity_name].append(timestamp)
 
-                # Queue wait calculation: raw elapsed wall-clock seconds matching SimPy timeout scale
+                # Queue wait calculation
                 if case_id in case_prev_end_time:
-                    current_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
+                    raw_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
                 else:
-                    current_wait = 0.0
+                    raw_wait = 0.0
+                raw_wait = max(0.0, float(raw_wait))
 
-                current_wait = max(0.0, float(current_wait))
+                if task_name == "waiting_time" and target_mode == "residual_delay" and residual_lookup:
+                    epoch = int(timestamp.timestamp()) if hasattr(timestamp, "timestamp") else int(pd.to_datetime(timestamp).timestamp())
+                    key = (str(case_id), str(activity_name), epoch)
+                    if key in residual_lookup:
+                        current_wait = residual_lookup[key]
+                        matched_residuals += 1
+                    elif case_id not in case_prev_end_time:
+                        current_wait = 0.0
+                        initial_case_events += 1
+                    else:
+                        current_wait = raw_wait
+                        fallback_residuals += 1
+                else:
+                    current_wait = raw_wait
 
                 ctx = FeatureContext(
                     target_act=activity_name,
@@ -346,6 +387,10 @@ def main():
     print(f"  - Extracted valid rows: {len(all_rows)}")
     print(f"  - Synthetic model moves skipped: {synthetic_skipped}")
     print(f"  - Incomplete work items (missing START) skipped: {missing_start_skipped}")
+    if task_name == "waiting_time" and target_mode == "residual_delay" and residual_lookup:
+        print(f"  - Residual Delays Matched: {matched_residuals:,}")
+        print(f"  - Initial Case Events (0.0s wait): {initial_case_events:,}")
+        print(f"  - Fallback to Raw Elapsed Wait: {fallback_residuals:,}")
 
     task_df = pd.DataFrame(all_rows)
     total_before = len(task_df)
@@ -420,6 +465,19 @@ def main():
     task_df.to_csv(out_path, index=False)
     print(f"\nSaved [{task_name}] dataset to: {out_path} ({len(task_df)} rows)")
     print(f"Dataset creation for task '{task_name}' complete.\n")
+    return task_df
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Config-Driven Dataset Creation for RIMS++")
+    parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
+    parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"],
+                        help="Task-specific dataset to generate ('duration' or 'waiting_time')")
+    args = parser.parse_args()
+
+    cfg = load_config(args.config)
+    build_dataset(cfg, task_name=args.task)
+
 
 if __name__ == "__main__":
     main()

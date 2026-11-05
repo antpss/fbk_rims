@@ -5,7 +5,7 @@
 - **Placement:** `EX_ANTE`
 - **Concurrency Threshold (ζ):** `0.2`
 - **Outlier Threshold (δ):** `0.05`
-- **Generated:** `2026-11-03 13:48:29`
+- **Generated:** `2026-11-05 10:03:45`
 
 ## 1. Discovered External Uncoupled Delays (EUD)
 

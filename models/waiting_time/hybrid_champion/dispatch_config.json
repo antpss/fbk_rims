@@ -18,101 +18,101 @@
     },
     "Authorization Requested": {
       "model_type": "lstm",
-      "source_dir": "local_lstm",
-      "file": "lstm_local_Authorization_Requested.pth",
-      "best_test_mae": 44855.48,
-      "best_test_smape": 90.76
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 2155.64,
+      "best_test_smape": 185.95
     },
     "Back-Office Adjustment Requested": {
       "model_type": "lstm",
       "source_dir": "global_lstm",
       "file": "lstm_global.pth",
-      "best_test_mae": 31862.91,
-      "best_test_smape": 19.03
+      "best_test_mae": 0.0,
+      "best_test_smape": 196.65
     },
     "Evaluating Request (NO registered letter)": {
       "model_type": "xgboost",
       "source_dir": "local_xgboost",
       "file": "xgboost_local_Evaluating_Request_(NO_registered_letter).json",
-      "best_test_mae": 526.2,
-      "best_test_smape": 198.82
+      "best_test_mae": 210.18,
+      "best_test_smape": 199.89
     },
     "Evaluating Request (WITH registered letter)": {
       "model_type": "xgboost",
       "source_dir": "global_xgboost",
       "file": "xgboost_global.json",
-      "best_test_mae": 6867.23,
-      "best_test_smape": 197.85
+      "best_test_mae": 6039.68,
+      "best_test_smape": 199.86
     },
     "Network Adjustment Requested": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_Network_Adjustment_Requested.json",
-      "best_test_mae": 201557.32,
-      "best_test_smape": 56.19
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 8501.32,
+      "best_test_smape": 194.53
     },
     "Pending Liquidation Request": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_Pending_Liquidation_Request.json",
-      "best_test_mae": 3391.98,
-      "best_test_smape": 58.82
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 189.29
     },
     "Pending Request for Reservation Closure": {
       "model_type": "lstm",
       "source_dir": "global_lstm",
       "file": "lstm_global.pth",
-      "best_test_mae": 188694.32,
-      "best_test_smape": 83.61
+      "best_test_mae": 0.0,
+      "best_test_smape": 191.66
     },
     "Pending Request for acquittance of heirs": {
-      "model_type": "tcn",
-      "source_dir": "global_tcn",
-      "file": "tcn_global.pth",
-      "best_test_mae": 24773.66,
-      "best_test_smape": 18.11
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 193.24
     },
     "Request completed with account closure": {
-      "model_type": "xgboost",
-      "source_dir": "local_xgboost",
-      "file": "xgboost_local_Request_completed_with_account_closure.json",
-      "best_test_mae": 18478.12,
-      "best_test_smape": 14.44
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 0.0,
+      "best_test_smape": 190.33
     },
     "Request completed with customer recovery": {
-      "model_type": "xgboost",
-      "source_dir": "global_xgboost",
-      "file": "xgboost_global.json",
-      "best_test_mae": 281536.14,
-      "best_test_smape": 150.23
+      "model_type": "lstm",
+      "source_dir": "global_lstm",
+      "file": "lstm_global.pth",
+      "best_test_mae": 20568.58,
+      "best_test_smape": 196.66
     },
     "Request created": {
       "model_type": "lstm",
       "source_dir": "global_lstm",
       "file": "lstm_global.pth",
       "best_test_mae": 0.0,
-      "best_test_smape": 108.24
+      "best_test_smape": 182.65
     },
     "Request deleted": {
       "model_type": "lstm",
       "source_dir": "global_lstm",
       "file": "lstm_global.pth",
       "best_test_mae": 0.0,
-      "best_test_smape": 199.85
+      "best_test_smape": 196.14
     },
     "Service closure Request with BO responsibility": {
       "model_type": "lstm",
       "source_dir": "global_lstm",
       "file": "lstm_global.pth",
-      "best_test_mae": 107834.93,
-      "best_test_smape": 147.04
+      "best_test_mae": 5.44,
+      "best_test_smape": 180.46
     },
     "Service closure Request with network responsibility": {
       "model_type": "lstm",
       "source_dir": "global_lstm",
       "file": "lstm_global.pth",
-      "best_test_mae": 33147.95,
-      "best_test_smape": 164.55
+      "best_test_mae": 22209.15,
+      "best_test_smape": 193.32
     }
   }
 }
