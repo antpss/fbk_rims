@@ -110,15 +110,15 @@ def main():
             res = sim.run()
             results.append(res)
 
-        print("\n" + "=" * 140)
-        print("                                RIMS++ MULTI-PERSPECTIVE BENCHMARK LEADERBOARD")
-        print("=" * 140)
-        print(f"{'Simulation Mode':<22} | {'CFLD':>8} | {'L_traces':>8} | {'2-Gram':>7} | {'AED (h)':>8} | {'CED (h)':>8} | {'RED (h)':>8} | {'CAR (h)':>8} | {'CTD (WD)':>14} | {'MAE Cycle':>14} | {'Run Time':>9}")
-        print("-" * 140)
+        print("\n" + "=" * 152)
+        print("                                     RIMS++ MULTI-PERSPECTIVE BENCHMARK LEADERBOARD")
+        print("=" * 152)
+        print(f"{'Simulation Mode':<22} | {'CFLD':>8} | {'L_traces':>8} | {'2-Gram':>7} | {'AED (h)':>8} | {'CED (h)':>8} | {'CWD (h)':>8} | {'RED (h)':>8} | {'CAR (h)':>8} | {'CTD (WD)':>14} | {'MAE Cycle':>14} | {'Run Time':>9}")
+        print("-" * 152)
         real_m = results[0]["real_mean"]
         real_med = results[0]["real_median"]
-        print(f"{'REAL HISTORICAL':<22} | {'---':>8} | {'---':>8} | {'---':>7} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>14} | {'---':>14} | {'---':>9}")
-        print("-" * 140)
+        print(f"{'REAL HISTORICAL':<22} | {'---':>8} | {'---':>8} | {'---':>7} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>14} | {'---':>14} | {'---':>9}")
+        print("-" * 152)
 
         # Sort by lowest Wasserstein distance (cycle time distribution fidelity)
         sorted_res = sorted(results, key=lambda x: x["wd"])
@@ -130,13 +130,14 @@ def main():
             ng2_str = f"{r.get('ngram_2', 0.0):.4f}"
             aed_str = f"{r.get('aed', 0.0):.1f}"
             ced_str = f"{r.get('ced', 0.0):.1f}"
+            cwd_str = f"{r.get('cwd', 0.0):.1f}"
             red_str = f"{r.get('red_dist', 0.0):.1f}"
             car_str = f"{r.get('car', 0.0):.1f}"
             wd_str = f"{r['wd']/86400:.2f} days" if r["wd"] >= 86400 else format_dur(r["wd"])
             mae_str = f"{r['mae_cycle']/86400:.2f} days" if r["mae_cycle"] >= 86400 else format_dur(r["mae_cycle"])
-            print(f"{mode_display:<22} | {cfld_str:>8} | {len_str:>8} | {ng2_str:>7} | {aed_str:>8} | {ced_str:>8} | {red_str:>8} | {car_str:>8} | {wd_str:>14} | {mae_str:>14} | {r['elapsed']:>8.1f}s")
-        print("-" * 140)
-        print("=" * 140 + "\n")
+            print(f"{mode_display:<22} | {cfld_str:>8} | {len_str:>8} | {ng2_str:>7} | {aed_str:>8} | {ced_str:>8} | {cwd_str:>8} | {red_str:>8} | {car_str:>8} | {wd_str:>14} | {mae_str:>14} | {r['elapsed']:>8.1f}s")
+        print("-" * 152)
+        print("=" * 152 + "\n")
 
         # Save Ablation Report
         for rep_name in ["ablation_report.md", f"ablation_report_{arrival_mode}.md"]:
@@ -148,9 +149,9 @@ def main():
                 f.write(f"- **Real Historical Mean Cycle Time:** {format_dur(real_m)}\n")
                 f.write(f"- **Evaluation:**\n\n")
                 f.write("## Comparative Benchmark Leaderboard\n\n")
-                f.write("| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |\n")
-                f.write("|---|---|---|---|---|---|---|---|---|---|---|\n")
-                f.write(f"| **REAL HISTORICAL** | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+                f.write("| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | CWD (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |\n")
+                f.write("|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+                f.write(f"| **REAL HISTORICAL** | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
                 for r in sorted_res:
                     tag = " ★ (Best Fit)" if r["mode"] == best_mode else ""
                     cfld_str = f"{r.get('cfld', 0.0):.4f}"
@@ -158,11 +159,12 @@ def main():
                     ng2_str = f"{r.get('ngram_2', 0.0):.4f}"
                     aed_str = f"{r.get('aed', 0.0):.2f}"
                     ced_str = f"{r.get('ced', 0.0):.2f}"
+                    cwd_str = f"{r.get('cwd', 0.0):.2f}"
                     red_str = f"{r.get('red_dist', 0.0):.2f}"
                     car_str = f"{r.get('car', 0.0):.2f}"
                     wd_str = f"{r['wd']/86400:.2f} days" if r["wd"] >= 86400 else format_dur(r["wd"])
                     mae_str = f"{r['mae_cycle']/86400:.2f} days" if r["mae_cycle"] >= 86400 else format_dur(r["mae_cycle"])
-                    f.write(f"| `{r['mode']}`{tag} | {cfld_str} | {len_str} | {ng2_str} | {aed_str} | {ced_str} | {red_str} | {car_str} | {wd_str} | {mae_str} | {r['elapsed']:.1f}s |\n")
+                    f.write(f"| `{r['mode']}`{tag} | {cfld_str} | {len_str} | {ng2_str} | {aed_str} | {ced_str} | {cwd_str} | {red_str} | {car_str} | {wd_str} | {mae_str} | {r['elapsed']:.1f}s |\n")
             print(f"[✓] Saved comprehensive ablation report to: {abl_path}\n")
 
     else:
