@@ -43,6 +43,15 @@ resources:
     dispatch_policy: "longest_idle_first"
     enable_concurrency_quotas: true # Allows multi-tasking (C_w >= 1) mined from log to prevent artificial serialization
 
+# Activity Behavioral Profiling (Automated Tasks, Instant Gateways, Human Work Items)
+activity_profiling:
+  enabled: true
+  zero_duration_threshold: 0.95
+  min_automated_wait_seconds: 60.0
+  output_file: "models/activity_profiles.json"
+  report_file: "models/activity_profiles_report.md"
+  overrides: {}  # Leave empty {} for pure data-driven discovery, or map "Activity": "automated_task" | "human_work_item" | "instant_gateway"
+
 
 # Feature Engineering Settings
 features:
@@ -195,6 +204,7 @@ tasks:
   waiting_time:
     description: "Queue / waiting time before activity starts"
     target_column: "Wait_Time_Seconds"
+    target_mode: "residual_delay"   # Options: "residual_delay" (Fix 2: uncoupled ML worklist batching), "raw_wait" (legacy total wait)
     output_file: "datasets/dataset_waiting_time_global.csv"
     filter_zero_duration: false   # Zero waiting time is physically valid (immediate pickup)
     sample_weighting:
