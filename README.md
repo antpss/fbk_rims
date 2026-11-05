@@ -84,13 +84,13 @@ fbk_rims/
 │   │   ├── arrivals.py                # ArrivalGenerator (Replay, Generative, Prophet time-series)
 │   │   └── metrics.py                 # SimulationEvaluator (IEEE XES/CSV export, Wasserstein, RED/EMD)
 │   └── config_loader.py               # Central config loader helper
-├── RIMS/                              # Cloned Reference / Legacy Repo (Meneghello et al. baseline, NOT the simulator)
+├── RIMS/                              # Cloned Reference / Legacy Repo (baseline, NOT the simulator)
 └── RIMS_tool/                         # Cloned Reference / Legacy Repo (BPM 2023 demo tool, NOT the simulator)
 ```
 
 > [!NOTE]
 > **Reference / Baseline Repositories (`RIMS/` & `RIMS_tool/`)**:
-> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes (Meneghello et al., using TensorFlow 1.x / Keras `.h5` LSTM models). **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS++ pipeline lives entirely in `src/`.
+> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes. **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS++ pipeline lives entirely in `src/`.
 
 ---
 
@@ -597,29 +597,32 @@ python src/06_simulate.py --duration 365 --arrival_mode generative
 
 ## Validation Methodology & Multi-Perspective Evaluation Suite
 
-RIMS++ incorporates the full evaluation framework established by **Meneghello et al. (*Information Systems* 128, 2025)** and **Chapela-Campa et al. (*BPM* 2023)**, evaluating simulation fidelity across three foundational dimensions:
+RIMS++ directly integrates the official [`log-distance-measures`](https://github.com/AutomatedProcessImprovement/log-distance-measures) library (**Chapela-Campa et al., *BPM* 2023**), matching the benchmarking framework established by **Meneghello et al. (*Information Systems* 128, 2025)** and FBK's **WISDOM** pipeline across four foundational dimensions:
 
 ```
-                                  RIMS++ Evaluation Suite
-       ┌──────────────────────────────┼──────────────────────────────┐
-       ▼                              ▼                              ▼
-  Control-Flow                     Temporal                      Congestion
-  ├─ CFLD (Edit + Hungarian)       ├─ AED (Absolute Timeline)    ├─ CTD (Cycle Time 1WD)
-  ├─ NGD (2-Gram & 3-Gram)         ├─ CED (168h Circadian Week)  ├─ CAR (Case Arrival Rate 1WD)
-  └─ L_traces (Length Diff)        └─ RED (Relative Trace Start) └─ Mean, Median, MAE
+                                       RIMS++ Evaluation Suite
+       ┌───────────────────────────┬──────────────┴──────────────┬───────────────────────────┐
+       ▼                           ▼                             ▼                           ▼
+  Control-Flow                  Temporal                     Workforce                  Congestion
+  ├─ CFLD (Edit + Hungarian)    ├─ AED (Timeline 1WD)        └─ CWD (168h Staff Active) ├─ CTD (Cycle Time 1WD)
+  ├─ NGD (2-Gram & 3-Gram)      ├─ CED (168h Circadian Week)                            ├─ CAR (Case Arrival 1WD)
+  └─ L_traces (Length Diff)     └─ RED (Relative Trace Start)                           └─ Mean, Median, MAE
 ```
 
 ### 1. Control-Flow Perspective
-* **Control-flow Log Distance (CFLD)**: Measures structural trace divergence by computing the normalized string edit distance (Levenshtein) between trace variants and solving the minimum-weight bipartite matching via the **Hungarian algorithm** (Kuhn 1955).
+* **Control-flow Log Distance (CFLD)**: Measures structural trace divergence by computing the normalized string edit distance (Damerau-Levenshtein) between trace variants and solving the minimum-weight bipartite matching via the **Hungarian algorithm** (Kuhn 1955).
 * **Trace Length Error ($L^{traces}$)**: Average absolute difference in case length between paired traces in $\mathcal{L}_{sim}$ and $\mathcal{L}_{real}$ under optimal Hungarian matching.
 * **N-Gram Distribution Distance (NGD)**: Compares transition sequence probabilities for $N=2$ (2-Gram / Directly-Follows Graph) and $N=3$ (3-Gram) using Total Variation Distance / 1WD bounded in $[0.0, 1.0]$.
 
 ### 2. Temporal Perspective
 * **Absolute Event Distribution (AED)**: Bins all event timestamps across the entire absolute calendar timeline into 1-hour intervals and computes the 1st Wasserstein Distance (1WD / Earth Mover's Distance in hours).
-* **Circadian Event Distribution (CED)**: Projects event timestamps onto a 168-hour weekly grid ($7 \text{ days} \times 24 \text{ hours}$) to evaluate whether human work shifts and diurnal rhythms match historical reality.
+* **Circadian Event Distribution (CED)**: Projects event timestamps onto a 168-hour weekly grid ($7 \text{ days} \times 24 \text{ hours}$) to evaluate whether work shifts and diurnal activity rhythms match historical reality.
 * **Relative Event Distribution (RED)**: Evaluates intra-case pacing by calculating 1WD between event offsets relative to case origin ($t_{event} - t_{case\_start}$).
 
-### 3. Congestion & Cycle Time Perspective
+### 3. Workforce / Resource Scheduling Perspective
+* **Circadian Workforce Distribution (CWD)**: Measures the concurrency of active resources across the 168-hour weekly cycle ($7 \text{ days} \times 24 \text{ hours}$), computing 1WD between the real and simulated staff availability profiles.
+
+### 4. Congestion & Cycle Time Perspective
 * **Cycle Time Distribution (CTD / 1WD)**: Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
   $$W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx$$
 * **Case Arrival Rate (CAR)**: Evaluates arrival burstiness and concurrency by computing 1WD across binned case arrival timestamps.
@@ -629,10 +632,10 @@ RIMS++ incorporates the full evaluation framework established by **Meneghello et
 
 When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark:
 
-| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **REAL HISTORICAL** | — | — | — | — | — | — | — | *Ground Truth* | — | — |
-| **`hybrid_residual` (ML + Physics)** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | ~150–200s |
-| `pure_physics` (Contention Only) | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | ~180–220s |
+| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | CWD (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **REAL HISTORICAL** | — | — | — | — | — | — | — | — | *Ground Truth* | — | — |
+| **`hybrid_residual` (ML + Physics)** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | ~150–200s |
+| `pure_physics` (Contention Only) | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | ~180–220s |
 
 

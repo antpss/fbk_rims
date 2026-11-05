@@ -2,6 +2,8 @@
 pm4py>=2.7.23
 simpy>=4.0.1
 lxml>=4.9.0
+log-distance-measures>=2.2.0
+jellyfish>=1.2.0
 
 # Scientific & Tabular Data
 numpy>=1.25.0
