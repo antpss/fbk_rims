@@ -31,6 +31,8 @@ codebase.txt
 *.xes
 *.xes.gz
 *.csv
+*.csv.gz
+*.parquet
 data/generated/
 
 # Track documentation, benchmark reports, and configuration metadata inside data/

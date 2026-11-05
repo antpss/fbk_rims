@@ -313,6 +313,7 @@ class ChapelaDelayDiscoveryEngine:
         delay_samples_arcs = defaultdict(list)
 
         total_causal_pairs = 0
+        instance_level_records = []
 
         for case_id, insts in instances_by_case.items():
             insts_sorted = sorted(insts, key=lambda x: (x["start"], x["end"]))
@@ -336,6 +337,21 @@ class ChapelaDelayDiscoveryEngine:
                     and p != inst_t
                 ]
                 if not preds:
+                    # Initial activity in trace (no causal predecessor in case)
+                    E = inst_t["start"]
+                    epoch = int(E.timestamp()) if hasattr(E, "timestamp") else int(pd.to_datetime(E).timestamp())
+                    instance_level_records.append({
+                        "case_id": str(case_id),
+                        "target_act": act_t,
+                        "trigger_act": "__START__",
+                        "start_timestamp": str(E),
+                        "start_timestamp_epoch": epoch,
+                        "predecessor_end_timestamp": str(E),
+                        "raw_wait_seconds": 0.0,
+                        "worker_busy_seconds": 0.0,
+                        "calendar_nw_seconds": 0.0,
+                        "residual_delay_seconds": 0.0
+                    })
                     continue
 
                 # Causal predecessor is the one with max end time
@@ -356,12 +372,16 @@ class ChapelaDelayDiscoveryEngine:
                 busy_list = resource_busy.get(res_t, [])
                 ends = resource_busy_ends.get(res_t, [])
                 starts = resource_busy_starts.get(res_t, [])
+                worker_busy_sec = 0.0
                 if busy_list:
                     idx_l = bisect.bisect_right(ends, S)
                     idx_r = bisect.bisect_left(starts, E)
                     for b_s, b_e in busy_list[idx_l:idx_r + 1]:
                         if b_s < E and b_e > S:
-                            unavail.append((max(S, b_s), min(E, b_e)))
+                            o_s = max(S, b_s)
+                            o_e = min(E, b_e)
+                            unavail.append((o_s, o_e))
+                            worker_busy_sec += (o_e - o_s).total_seconds()
 
                 # 2. Calendar non-working periods NW(ρ) for target activity's role
                 cal_nw_sec = 0.0
@@ -444,6 +464,7 @@ class ChapelaDelayDiscoveryEngine:
                     tau_rat = max(prior_busy_ends) if prior_busy_ends else S
                     omega_ex = max(0.0, (E - max(tau_rat, S)).total_seconds())
 
+                omega_ex = min(raw_wait, max(0.0, float(omega_ex)))
                 off_ratio = cal_nw_sec / max(1.0, raw_wait)
                 wip_at_s = lookup_wip(S)
 
@@ -459,6 +480,20 @@ class ChapelaDelayDiscoveryEngine:
                 delay_samples_ex_ante[act_t].append(record)
                 delay_samples_ex_post[act_s].append(record)
                 delay_samples_arcs[(act_s, act_t)].append(record)
+
+                epoch = int(E.timestamp()) if hasattr(E, "timestamp") else int(pd.to_datetime(E).timestamp())
+                instance_level_records.append({
+                    "case_id": str(case_id),
+                    "target_act": act_t,
+                    "trigger_act": act_s,
+                    "start_timestamp": str(E),
+                    "start_timestamp_epoch": epoch,
+                    "predecessor_end_timestamp": str(S),
+                    "raw_wait_seconds": round(float(raw_wait), 2),
+                    "worker_busy_seconds": round(float(worker_busy_sec), 2),
+                    "calendar_nw_seconds": round(float(cal_nw_sec), 2),
+                    "residual_delay_seconds": round(float(omega_ex), 2)
+                })
 
         print(f"Evaluated {total_causal_pairs:,} causally consecutive instance pairs.")
 
@@ -649,9 +684,33 @@ class ChapelaDelayDiscoveryEngine:
         self._write_report(report_out_path, manifest, discovered_delays, all_human_gaps)
         print(f"[✓] Saved Discovery Report to: {report_out_path}")
 
+        # -------------------------------------------------------------
+        # STEP 7: Save Granular Instance-Level Residual Delays
+        # -------------------------------------------------------------
+        if instance_level_records:
+            df_instances = pd.DataFrame(instance_level_records)
+            output_base_dir = self.cfg.get("paths", {}).get("output_base_dir", "data/processed")
+            os.makedirs(output_base_dir, exist_ok=True)
+            parquet_path = os.path.join(output_base_dir, "causal_delays_instance_level.parquet")
+            csv_path = os.path.join(output_base_dir, "causal_delays_instance_level.csv.gz")
+
+            try:
+                df_instances.to_parquet(parquet_path, index=False)
+                print(f"[✓] Saved instance-level causal delays ({len(df_instances):,} records) to: {parquet_path}")
+            except Exception as e:
+                print(f"[!] Warning: failed to save parquet ({e}).")
+
+            try:
+                df_instances.to_csv(csv_path, index=False, compression="gzip")
+                print(f"[✓] Saved instance-level causal delays ({len(df_instances):,} records) to: {csv_path}")
+            except Exception as e:
+                print(f"[!] Warning: failed to save compressed csv ({e}).")
+
         elapsed = time.time() - start_time
         print(f"[✓] Discovery completed in {elapsed:.2f} seconds.")
         return manifest
+
+    discover_delays = run
 
     def _write_report(self, path, manifest, delays, all_gaps):
         """Generates comprehensive Markdown report."""
@@ -679,6 +738,10 @@ class ChapelaDelayDiscoveryEngine:
             f.write(f"- **Global Mean Cooldown:** **{hl['global_mean_seconds']} seconds** ({hl['global_mean_seconds']/60:.1f} mins)\n")
             f.write(f"- **Champion Fit Distribution:** `{hl['global_distribution']}`\n")
             f.write(f"- **Profiled Workers:** {hl['worker_count']} human agents\n")
+
+
+# Backward-compatible alias
+CausalDelayDiscoveryEngine = ChapelaDelayDiscoveryEngine
 
 
 # =====================================================================
