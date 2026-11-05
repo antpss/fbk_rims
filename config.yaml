@@ -114,23 +114,6 @@ preprocessing:
     start: ["START", "start", "begin", "open"]
     complete: ["COMPLETE", "complete", "finish", "end", "close"]
 
-  # Activities discovered in Petri Net & modeled for duration/waiting simulation
-  # DEFAULT: Set to [] or omit to model ALL activities in the log.
-  process_activity_prefixes: []
-
-  # Milestone activities preserved as business state context for routing classifiers
-  # DEFAULT: Set to [] or omit if the log has no separate milestone events.
-  milestone_prefixes: []
-
-  # Empirical distribution of initial milestone profiles observed upon case submission
-  initial_milestones_distribution: []
-
-  # Dynamic progression: milestones achieved when human tasks complete
-  milestone_progression: {}
-
-  # Terminal outcome milestones excluded from decision routing to avoid target leakage
-  excluded_milestones: []
-
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping: {}
 

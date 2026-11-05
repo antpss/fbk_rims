@@ -37,23 +37,15 @@ def build_dataset(cfg, task_name="duration"):
     log = pm4py.read_xes(log_path)
     df = pm4py.convert_to_dataframe(log)
 
-    prep_cfg = cfg.get("preprocessing", {})
-    proc_prefixes = tuple(prep_cfg.get("process_activity_prefixes", []))
-    milestone_prefixes = tuple(prep_cfg.get("milestone_prefixes", []))
-
     activities = cfg.get("target_activities", [])
     if not activities:
-        if proc_prefixes:
-            activities = sorted([a for a in df['concept:name'].dropna().unique() if a.startswith(proc_prefixes)])
-        else:
-            activities = sorted(df['concept:name'].dropna().unique().tolist())
+        activities = sorted(df['concept:name'].dropna().unique().tolist())
         print(f"Target activities: [AUTO-DISCOVERED {len(activities)} activities from log]: {activities}")
     else:
         print(f"Target activities ({len(activities)} configured): {activities}")
 
-    # Discover milestone activities for dynamic business state context
-    if milestone_prefixes:
-        all_milestones = sorted([m for m in df['concept:name'].dropna().unique() if m.startswith(milestone_prefixes)])
+    all_milestones = cfg.get("features", {}).get("milestones_to_track", [])
+    if all_milestones:
         print(f"Discovered {len(all_milestones)} business milestone activities for context: {all_milestones}")
     else:
         all_milestones = []
@@ -269,21 +261,15 @@ def build_dataset(cfg, task_name="duration"):
             case_prefixes[case_id] = []
 
         # -------------------------------------------------------------
-        # A) Milestone Event: update dynamic case business state
+        # Process Activity Execution
         # -------------------------------------------------------------
-        if milestone_prefixes and activity_name.startswith(milestone_prefixes):
-            case_milestones_seen[case_id].add(activity_name)
-            # count discrete offer milestone occurrences (O_ prefixes)
-            if any(p.startswith("O_") for p in milestone_prefixes) and activity_name.startswith("O_"):
-                case_offer_count[case_id] += 1
-
-        # -------------------------------------------------------------
-        # B) Process Work Item Execution
-        # -------------------------------------------------------------
-        elif activity_name in activities or (proc_prefixes and activity_name.startswith(proc_prefixes)):
+        if activity_name in activities:
             if is_synthetic:
                 synthetic_skipped += 1
                 case_prefixes[case_id].append(activity_name)
+                case_milestones_seen[case_id].add(activity_name)
+                if activity_name.startswith("O_"):
+                    case_offer_count[case_id] += 1
 
             elif transition == "START":
                 ac_wip[activity_name] += 1
@@ -428,6 +414,9 @@ def build_dataset(cfg, task_name="duration"):
                     all_rows.append(row_dict)
 
                 case_prefixes[case_id].append(activity_name)
+                case_milestones_seen[case_id].add(activity_name)
+                if activity_name.startswith("O_"):
+                    case_offer_count[case_id] += 1
 
         if seen_events[case_id] == case_event_counts[case_id]:
             active_cases.discard(case_id)

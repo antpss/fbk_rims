@@ -153,8 +153,6 @@ class TestResidualWaitingDelays(unittest.TestCase):
                 "event_attributes": []
             },
             "preprocessing": {
-                "process_activity_prefixes": [],
-                "milestone_prefixes": [],
                 "activity_mapping": {}
             },
             "target_activities": ["Task_A", "Task_B"],

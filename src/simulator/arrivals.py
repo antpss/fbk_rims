@@ -122,19 +122,14 @@ class ArrivalGenerator:
         if self.arrival_mode == "replay" and df_real is not None:
             print(f"Loading arrival timeline from historical log: {aligned_log_path}...")
             target_acts = set(self.cfg.get("target_activities", []))
-            proc_prefixes = tuple(self.cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
-            ms_prefixes = tuple(self.cfg.get("preprocessing", {}).get("milestone_prefixes", []))
-
             if target_acts:
                 w_mask = df_real["concept:name"].isin(target_acts)
-            elif proc_prefixes:
-                w_mask = df_real["concept:name"].str.startswith(proc_prefixes)
+                cases_with_w = set(df_real.loc[w_mask, "case:concept:name"].unique())
+                first_times = df_real.groupby("case:concept:name")["time:timestamp"].min()
+                valid_case_series = first_times[first_times.index.isin(cases_with_w)].sort_values()
             else:
-                w_mask = pd.Series(True, index=df_real.index)
-
-            cases_with_w = set(df_real.loc[w_mask, "case:concept:name"].unique())
-            first_times = df_real.groupby("case:concept:name")["time:timestamp"].min()
-            valid_case_series = first_times[first_times.index.isin(cases_with_w)].sort_values()
+                first_times = df_real.groupby("case:concept:name")["time:timestamp"].min()
+                valid_case_series = first_times.sort_values()
 
             if self.duration_days and float(self.duration_days) > 0 and len(valid_case_series) > 0:
                 t_start = valid_case_series.iloc[0]
@@ -154,13 +149,6 @@ class ArrivalGenerator:
                 amt = grp_sorted[amt_col].iloc[0] if (amt_col and amt_col in grp_sorted.columns) else 0.0
 
                 init_ms = set()
-                if ms_prefixes:
-                    for _, r in grp_sorted.iterrows():
-                        act = str(r["concept:name"])
-                        if w_mask.get(r.name, False):
-                            break
-                        if act.startswith(ms_prefixes):
-                            init_ms.add(act)
 
                 extracted_case_attrs = {}
                 for attr_def in case_attrs:
@@ -223,7 +211,6 @@ class ArrivalGenerator:
             dist_name = self.arr_cfg.get("distribution", "exponential")
             scale = float(self.arr_cfg.get("scale", 300.0))
             calendar_bounded = self.arr_cfg.get("calendar_bounded", True)
-            ms_prefixes = tuple(self.cfg.get("preprocessing", {}).get("milestone_prefixes", []))
 
             i = 0
             while True:
@@ -255,14 +242,7 @@ class ArrivalGenerator:
                     amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
                     sampled_payload = {"RequestedAmount": amt} if amt_col else {}
 
-                init_dist = self.cfg.get("preprocessing", {}).get("initial_milestones_distribution", [])
-                if init_dist:
-                    cand_sets = [set(entry["milestones"]) for entry in init_dist]
-                    probs = [float(entry["probability"]) for entry in init_dist]
-                    init_ms = random.choices(cand_sets, weights=probs, k=1)[0]
-                else:
-                    cfg_init_ms = set(self.cfg.get("preprocessing", {}).get("initial_milestones", []))
-                    init_ms = cfg_init_ms if cfg_init_ms else ({"A_SUBMITTED", "A_PARTLYSUBMITTED"} if any(m.startswith("A_") for m in ms_prefixes) else set())
+                init_ms = set()
                 arrivals.append({
                     "case_id": cid,
                     "arrival_time": cur_time,
@@ -316,21 +296,21 @@ class ArrivalGenerator:
 
         # 1. Extract historical case start times for valid process cases and aggregate into hourly counts
         target_acts = set(self.cfg.get("target_activities", []))
-        proc_prefixes = tuple(self.cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
         if target_acts:
             w_mask = df_real["concept:name"].isin(target_acts)
-        elif proc_prefixes:
-            w_mask = df_real["concept:name"].str.startswith(proc_prefixes)
+            cases_with_w = set(df_real.loc[w_mask, "case:concept:name"].unique())
+            first_times = (
+                df_real[df_real["case:concept:name"].isin(cases_with_w)]
+                .groupby("case:concept:name")["time:timestamp"]
+                .min()
+                .reset_index()
+            )
         else:
-            w_mask = pd.Series(True, index=df_real.index)
-        cases_with_w = set(df_real.loc[w_mask, "case:concept:name"].unique())
-
-        first_times = (
-            df_real[df_real["case:concept:name"].isin(cases_with_w)]
-            .groupby("case:concept:name")["time:timestamp"]
-            .min()
-            .reset_index()
-        )
+            first_times = (
+                df_real.groupby("case:concept:name")["time:timestamp"]
+                .min()
+                .reset_index()
+            )
         first_times.columns = ["case_id", "timestamp"]
         first_times["timestamp"] = pd.to_datetime(first_times["timestamp"])
         if hasattr(first_times["timestamp"].dt, "tz") and first_times["timestamp"].dt.tz is not None:
@@ -372,7 +352,6 @@ class ArrivalGenerator:
         calendar_bounded = self.arr_cfg.get("calendar_bounded", True)
         cache_model = prophet_cfg.get("cache_model", True)
         model_cache_dir = prophet_cfg.get("model_cache_dir", "models/prophet")
-        ms_prefixes = tuple(self.cfg.get("preprocessing", {}).get("milestone_prefixes", []))
 
         # Resolve cache paths
         cache_dir = os.path.join(PROJECT_ROOT, model_cache_dir)
@@ -551,14 +530,7 @@ class ArrivalGenerator:
                         amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
                         sampled_payload = {"RequestedAmount": amt} if amt_col else {}
 
-                    init_dist = self.cfg.get("preprocessing", {}).get("initial_milestones_distribution", [])
-                    if init_dist:
-                        cand_sets = [set(entry["milestones"]) for entry in init_dist]
-                        probs = [float(entry["probability"]) for entry in init_dist]
-                        init_ms = random.choices(cand_sets, weights=probs, k=1)[0]
-                    else:
-                        cfg_init_ms = set(self.cfg.get("preprocessing", {}).get("initial_milestones", []))
-                        init_ms = cfg_init_ms if cfg_init_ms else ({"A_SUBMITTED", "A_PARTLYSUBMITTED"} if any(m.startswith("A_") for m in ms_prefixes) else set())
+                    init_ms = set()
 
                     arrivals.append({
                         "case_id": cid,

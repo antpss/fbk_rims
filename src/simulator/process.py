@@ -345,8 +345,6 @@ class SimulationProcess:
         self.duration_seconds = float(self.duration_days * 86400.0) if (self.duration_days and float(self.duration_days) > 0) else None
         self.max_events = cfg.get("simulation", {}).get("max_events_per_case", 80)
         self.target_activities = cfg.get("target_activities", [])
-        self.proc_prefixes = tuple(cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
-        self.ms_prefixes = tuple(cfg.get("preprocessing", {}).get("milestone_prefixes", []))
         self.force_retrain_prophet = force_retrain_prophet
 
         # Output paths

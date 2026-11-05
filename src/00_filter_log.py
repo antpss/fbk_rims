@@ -20,10 +20,8 @@ def filter_log(config_path=None):
     output_log = os.path.join(PROJECT_ROOT, output_rel)
     os.makedirs(os.path.dirname(output_log), exist_ok=True)
 
-    # Prefixes to keep from config (empty list = keep all)
-    process_prefixes = prep_cfg.get("process_activity_prefixes", prep_cfg.get("prefixes_to_keep", []))
-    milestone_prefixes = prep_cfg.get("milestone_prefixes", [])
-    prefixes_to_keep = list(dict.fromkeys(process_prefixes + milestone_prefixes))
+    # Prefixes / activities to keep from config (empty list = keep all)
+    prefixes_to_keep = list(dict.fromkeys(prep_cfg.get("prefixes_to_keep", [])))
 
     # Translation / renaming map from config (empty dict = no translation)
     translation_map = prep_cfg.get("activity_mapping", {})
@@ -71,10 +69,6 @@ def filter_log(config_path=None):
     if prefixes_to_keep:
         prefixes_tuple = tuple(prefixes_to_keep)
         print(f"Filtering to keep activities starting with: {prefixes_tuple}")
-        if process_prefixes:
-            print(f"  - Active Process Prefixes:    {process_prefixes}")
-        if milestone_prefixes:
-            print(f"  - Milestone Routing Prefixes: {milestone_prefixes}")
         df_filtered = df[df['concept:name'].str.startswith(prefixes_tuple)].copy()
     else:
         print("No prefix filtering specified; keeping all activities.")
@@ -93,25 +87,6 @@ def filter_log(config_path=None):
     print(f"Filtered process events: {len(df_filtered)}")
     print(f"Exporting process log to: {output_log}")
     pm4py.write_xes(df_filtered, output_log)
-
-    # Optional: If separate milestone lifecycle log is configured (e.g. for dual-stream logs like BPI 2012)
-    milestone_rel = cfg.get("paths", {}).get("milestone_log") or cfg.get("paths", {}).get("routing_raw_log")
-    aligned_rel = cfg.get("paths", {}).get("aligned_log", "")
-    protected_paths = {output_log, os.path.join(PROJECT_ROOT, aligned_rel) if aligned_rel else ""}
-    if milestone_rel and milestone_prefixes:
-        milestone_out_log = os.path.join(PROJECT_ROOT, milestone_rel)
-        if milestone_out_log in protected_paths:
-            raise ValueError(
-                f"Safety guard triggered: milestone_log '{milestone_out_log}' collides with protected process log! "
-                "Update config.yaml paths.milestone_log to a dedicated file path."
-            )
-        os.makedirs(os.path.dirname(milestone_out_log), exist_ok=True)
-        df_routing = df[df['concept:name'].str.startswith(tuple(milestone_prefixes))].copy()
-        r_counts = df_routing.groupby('case:concept:name').size()
-        df_routing = df_routing[df_routing['case:concept:name'].isin(r_counts[r_counts > 0].index)].copy()
-        print(f"Exporting milestone lifecycle log ({len(df_routing)} events) to: {milestone_out_log}")
-        pm4py.write_xes(df_routing, milestone_out_log)
-
     print("Done.")
 
 

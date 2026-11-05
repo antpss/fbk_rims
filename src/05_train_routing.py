@@ -121,7 +121,7 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, milestone_prefixes=None, excluded_milestones=None, routing_mode="payload"):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload"):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
     Extracts prefix history, loop counts, milestone business state, offer counts,
@@ -168,16 +168,6 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         if t.label is not None:
             all_acts.add(t.label)
     common_acts = sorted(list(all_acts))
-
-    # Identify distinct milestone activities present in the log (excluding terminal outcome milestones)
-    ms_prefixes_tuple = tuple(milestone_prefixes) if milestone_prefixes else ()
-    excluded_ms = set(excluded_milestones or [])
-    all_milestones = sorted([
-        act for act in df_log["concept:name"].unique()
-        if ms_prefixes_tuple and act.startswith(ms_prefixes_tuple) and act not in excluded_ms
-    ])
-    if all_milestones:
-        print(f"Identified {len(all_milestones)} business milestone states to track as decision context (excluded {len(excluded_ms)} terminal outcomes).")
 
     print(f"Computing optimal PM4Py alignments across {len(log)} traces...")
     params = {
@@ -259,7 +249,6 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         inter_arr = case_inter_arrivals.get(str(case_id), 0.0)
 
         prefix_labels = []
-        milestones_seen = set()
         offer_count = 0
         dp_counts = defaultdict(int)
 
@@ -267,14 +256,9 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
             log_label = move[1][0]
             model_t_id = move[0][1]
 
-            # 1. Track log milestone & offer events even when unmodeled in Petri net
-            if log_label != ">>":
-                if ms_prefixes_tuple and log_label.startswith(ms_prefixes_tuple):
-                    if log_label not in excluded_ms:
-                        milestones_seen.add(log_label)
-                # count discrete offer milestone occurrences (O_ prefixes)
-                if any(p.startswith("O_") for p in ms_prefixes_tuple) and log_label.startswith("O_"):
-                    offer_count += 1
+            # 1. Track log offer events
+            if log_label != ">>" and str(log_label).startswith("O_"):
+                offer_count += 1
 
             # 2. Skip if transition did not fire in Petri net
             if model_t_id == ">>":
@@ -292,10 +276,9 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                         "weekday": weekday,
                         "prev_activity": prefix_labels[-1] if prefix_labels else "<START>",
                         "loop_count": float(dp_counts[p_id]),
+                        "offer_count": float(offer_count),
+                        "has_offer": 1.0 if offer_count > 0 else 0.0,
                     }
-                    if any(p.startswith("O_") for p in ms_prefixes_tuple):
-                        sample["offer_count"] = float(offer_count)
-                        sample["has_offer"] = 1.0 if offer_count > 0 else 0.0
 
                     # Include payload features (case attributes) if requested
                     if routing_mode in ("payload", "both"):
@@ -304,10 +287,6 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                     # Include case inter-arrival time if requested
                     if routing_mode in ("inter_arrival", "both"):
                         sample["inter_arrival_seconds"] = float(inter_arr)
-
-                    # Milestone presence indicators
-                    for ms in all_milestones:
-                        sample[f"has_{ms}"] = 1.0 if ms in milestones_seen else 0.0
 
                     # Process activity presence indicators
                     for act in common_acts:
@@ -428,18 +407,12 @@ def main():
         branch_labels = [b["raw_trans"] for b in p_info["branches"].values()]
         print(f"  - Place [{p_id}]: {len(branch_labels)} branches -> {branch_labels}")
 
-    prep_cfg = cfg.get("preprocessing", {})
-    milestone_prefixes = prep_cfg.get("milestone_prefixes", [])
-    excluded_milestones = prep_cfg.get("excluded_milestones", [])
-
     # 2. Align Log & Extract Decision Samples
     decision_dfs = extract_decision_samples_via_alignment(
         log_path=log_path,
         pnml_path=pnml_path,
         xor_decision_points=xor_points,
         case_attrs_cfg=case_attrs_cfg,
-        milestone_prefixes=milestone_prefixes,
-        excluded_milestones=excluded_milestones,
         routing_mode=routing_mode,
     )
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")

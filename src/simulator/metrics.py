@@ -87,7 +87,7 @@ def compute_trace_length_error(clean_real, clean_sim, max_sample=1000):
     return float(cost[row, col].sum() / n)
 
 
-def prepare_evaluation_dfs(df_real, df_sim, target_acts=None, proc_prefixes=None, max_cases=1000):
+def prepare_evaluation_dfs(df_real, df_sim, target_acts=None, max_cases=1000):
     """
     Standardizes real and simulated event logs for log_distance_measures:
     Ensures both logs contain standard columns:
@@ -118,8 +118,6 @@ def prepare_evaluation_dfs(df_real, df_sim, target_acts=None, proc_prefixes=None
     r_filtered = df_real.copy()
     if target_acts:
         r_filtered = r_filtered[r_filtered["concept:name"].isin(target_acts)].copy()
-    elif proc_prefixes:
-        r_filtered = r_filtered[r_filtered["concept:name"].str.startswith(proc_prefixes)].copy()
 
     c_col = "case:concept:name" if "case:concept:name" in r_filtered.columns else "case_id"
     a_col = "concept:name" if "concept:name" in r_filtered.columns else "activity"
@@ -270,11 +268,10 @@ class SimulationEvaluator:
         sim_mean = float(np.mean(sim_cycles)) if len(sim_cycles) > 0 else 0.0
         sim_median = float(np.median(sim_cycles)) if len(sim_cycles) > 0 else 0.0
 
-        proc_prefixes = tuple(self.cfg.get("preprocessing", {}).get("process_activity_prefixes", []))
         target_acts = set(self.cfg.get("target_activities", []))
 
         clean_real, clean_sim, ids = prepare_evaluation_dfs(
-            df_real, df_sim, target_acts=target_acts, proc_prefixes=proc_prefixes
+            df_real, df_sim, target_acts=target_acts
         )
 
         real_cases = None

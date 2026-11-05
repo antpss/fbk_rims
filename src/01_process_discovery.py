@@ -34,14 +34,13 @@ def main():
     log = pm4py.read_xes(input_log_path)
     print(f"Log loaded successfully. Number of traces: {len(log)}")
 
-    # Filter strictly to process activities and COMPLETE events
-    prep_cfg = cfg.get("preprocessing", {})
-    proc_prefixes = prep_cfg.get("process_activity_prefixes", [])
+    # Filter strictly to target activities (if configured) and COMPLETE events
+    target_acts = cfg.get("target_activities", [])
     
     import pandas as pd
     df_disc = pm4py.convert_to_dataframe(log) if not isinstance(log, pd.DataFrame) else log.copy()
-    if proc_prefixes:
-        df_disc = df_disc[df_disc["concept:name"].str.startswith(tuple(proc_prefixes))].copy()
+    if target_acts:
+        df_disc = df_disc[df_disc["concept:name"].isin(target_acts)].copy()
     if "lifecycle:transition" in df_disc.columns:
         df_disc = df_disc[df_disc["lifecycle:transition"].str.upper() == "COMPLETE"].copy()
 
