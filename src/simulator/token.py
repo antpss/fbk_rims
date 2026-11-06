@@ -22,7 +22,7 @@ class Token:
     Case Instance (Parity with Legacy token_LSTM.py / event_trace.py).
     Represents an active case token flowing through the Petri net process model.
     """
-    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, init_ms=None, ms_states=None, inter_arrival_seconds=0.0, case_attrs=None):
+    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, inter_arrival_seconds=0.0, case_attrs=None):
         self.case_id = str(case_id)
         self.arrival_offset = arrival_offset
         self.process = process

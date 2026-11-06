@@ -65,14 +65,13 @@ class ChampionPredictor:
         self.max_seq_len = cfg.get("features", {}).get("prefix_window_size", 10)
 
         # Load Activity Profiles (Human Work Items vs. Automated Tasks vs. Instant Gateways)
-        prof_file = os.path.join(PROJECT_ROOT, self.models_dir, "activity_profiles.json")
-        self.activity_profiles = {}
-        if os.path.exists(prof_file):
-            try:
-                with open(prof_file, "r") as f:
-                    self.activity_profiles = json.load(f).get("activity_types", {})
-            except Exception:
-                self.activity_profiles = {}
+        try:
+            from activity_profiler import load_or_discover_activity_profiles
+        except ImportError:
+            from src.activity_profiler import load_or_discover_activity_profiles
+
+        prof_data = load_or_discover_activity_profiles(cfg)
+        self.activity_profiles = prof_data.get("activity_types", {})
 
         # Trace history tracked activities
         th_cfg = cfg.get("features", {}).get("trace_history", {})

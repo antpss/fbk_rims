@@ -71,7 +71,13 @@ def main():
     cases_grouped = df.groupby("case:concept:name", sort=False)
     for cid, grp in cases_grouped:
         cid_str = str(cid)
-        grp_sorted = grp.sort_values(by="time:timestamp").reset_index(drop=True)
+        grp_sorted = grp.copy()
+        if "lifecycle:transition" in grp_sorted.columns:
+            trans_order = {"START": 0, "COMPLETE": 1}
+            grp_sorted["_tr"] = grp_sorted["lifecycle:transition"].astype(str).str.upper().map(trans_order).fillna(2)
+            grp_sorted = grp_sorted.sort_values(by=["time:timestamp", "_tr"]).drop(columns=["_tr"]).reset_index(drop=True)
+        else:
+            grp_sorted = grp_sorted.sort_values(by="time:timestamp").reset_index(drop=True)
 
         # Extract trace-level case attributes (without 'case:' prefix)
         trace_attrs = {"concept:name": cid_str}
@@ -161,8 +167,10 @@ def main():
                     repaired_events.append(wi["start"])
                 repaired_events.append(wi["complete"])
 
-        # Sort all events chronologically (stable sort)
-        repaired_events.sort(key=lambda e: e["time:timestamp"])
+        # Sort all events chronologically (stable sort, START before COMPLETE for equal timestamps)
+        repaired_events.sort(
+            key=lambda e: (e["time:timestamp"], 0 if str(e.get("lifecycle:transition", "")).upper() == "START" else 1)
+        )
 
         repaired_trace = Trace(repaired_events, attributes=trace_attrs)
         repaired_log.append(repaired_trace)

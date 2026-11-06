@@ -202,7 +202,16 @@ class ActivityProfiler:
         else:
             df = pd.read_csv(log_path)
 
-        return self.profile_dataframe(df)
+        data = self.profile_dataframe(df)
+        abs_log = os.path.abspath(log_path)
+        data["__cache_validation__"] = {
+            "log_path": abs_log,
+            "log_mtime": os.path.getmtime(abs_log) if os.path.exists(abs_log) else 0.0,
+            "zero_duration_threshold": float(self.zero_duration_threshold),
+            "min_automated_wait_seconds": float(self.min_automated_wait_seconds),
+            "overrides": dict(self.overrides)
+        }
+        return data
 
     def save_profiles(self, profiles_data: dict, output_file: str, report_file: str = None):
         """Saves JSON profiles and markdown documentation report."""
@@ -236,27 +245,54 @@ class ActivityProfiler:
 def load_or_discover_activity_profiles(cfg: dict, force_retrain: bool = False) -> dict:
     """
     Helper function used by DatasetBuilder, ChampionPredictor, and Process.
-    Loads models/activity_profiles.json if present; otherwise runs discovery automatically.
+    Loads models/activity_profiles.json if present and valid; otherwise runs discovery automatically.
     """
+    prof_cfg = cfg.get("activity_profiling", {})
+    if not prof_cfg.get("enabled", True):
+        return {"activity_types": {}, "profiles": {}, "__metadata__": {}}
+
     models_dir = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("models_dir", "models"))
     default_out = os.path.join(models_dir, "activity_profiles.json")
     default_rep = os.path.join(models_dir, "activity_profiles_report.md")
 
-    prof_cfg = cfg.get("activity_profiling", {})
     output_path = os.path.join(PROJECT_ROOT, prof_cfg.get("output_file", default_out))
     report_path = os.path.join(PROJECT_ROOT, prof_cfg.get("report_file", default_rep))
 
-    if os.path.exists(output_path) and not force_retrain:
-        with open(output_path, "r") as f:
-            return json.load(f)
-
-    # Automatically discover from log
-    log_path = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("aligned_log", cfg.get("paths", {}).get("raw_log")))
+    # Resolve active log path
+    log_rel = cfg.get("paths", {}).get("aligned_log", cfg.get("paths", {}).get("raw_log"))
+    log_path = os.path.join(PROJECT_ROOT, log_rel) if log_rel else ""
     if not os.path.exists(log_path):
-        raw_log = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("raw_log"))
-        log_path = raw_log if os.path.exists(raw_log) else log_path
+        raw_log_rel = cfg.get("paths", {}).get("raw_log")
+        if raw_log_rel:
+            raw_log = os.path.join(PROJECT_ROOT, raw_log_rel)
+            log_path = raw_log if os.path.exists(raw_log) else log_path
 
     profiler = ActivityProfiler.from_config(cfg)
+
+    # Check cache validity
+    if os.path.exists(output_path) and not force_retrain:
+        try:
+            with open(output_path, "r") as f:
+                cached_data = json.load(f)
+            c_meta = cached_data.get("__cache_validation__")
+            if c_meta and os.path.exists(log_path):
+                abs_log = os.path.abspath(log_path)
+                current_mtime = os.path.getmtime(abs_log)
+                if (c_meta.get("log_path") == abs_log and
+                    abs(float(c_meta.get("log_mtime", 0.0)) - current_mtime) < 1e-4 and
+                    float(c_meta.get("zero_duration_threshold", -1.0)) == float(profiler.zero_duration_threshold) and
+                    float(c_meta.get("min_automated_wait_seconds", -1.0)) == float(profiler.min_automated_wait_seconds) and
+                    c_meta.get("overrides", {}) == profiler.overrides):
+                    return cached_data
+                else:
+                    print(f"[i] Activity profiles cache invalid (log or configuration changed). Re-profiling...")
+            elif not c_meta:
+                # Legacy cache without validation metadata - return if force_retrain is False
+                return cached_data
+        except Exception as e:
+            print(f"[!] Error reading cached activity profiles: {e}. Re-profiling...")
+
+    # Automatically discover from log
     data = profiler.profile_log_file(log_path)
     profiler.save_profiles(data, output_path, report_path)
     return data

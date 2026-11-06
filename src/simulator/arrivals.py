@@ -148,8 +148,6 @@ class ArrivalGenerator:
                 t_first = grp_sorted["time:timestamp"].iloc[0]
                 amt = grp_sorted[amt_col].iloc[0] if (amt_col and amt_col in grp_sorted.columns) else 0.0
 
-                init_ms = set()
-
                 extracted_case_attrs = {}
                 for attr_def in case_attrs:
                     c_col = attr_def.get("column")
@@ -179,9 +177,7 @@ class ArrivalGenerator:
                     "case_id": str(cid),
                     "arrival_time": t_first,
                     "requested_amount": float(amt) if pd.notna(amt) else 0.0,
-                    "case_attrs": extracted_case_attrs,
-                    "init_ms": init_ms,
-                    "ms_states": []
+                    "case_attrs": extracted_case_attrs
                 })
 
             arrivals.sort(key=lambda x: x["arrival_time"])
@@ -242,14 +238,11 @@ class ArrivalGenerator:
                     amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
                     sampled_payload = {"RequestedAmount": amt} if amt_col else {}
 
-                init_ms = set()
                 arrivals.append({
                     "case_id": cid,
                     "arrival_time": cur_time,
                     "requested_amount": amt,
-                    "case_attrs": sampled_payload,
-                    "init_ms": init_ms,
-                    "ms_states": []
+                    "case_attrs": sampled_payload
                 })
                 i += 1
 
@@ -530,15 +523,11 @@ class ArrivalGenerator:
                         amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
                         sampled_payload = {"RequestedAmount": amt} if amt_col else {}
 
-                    init_ms = set()
-
                     arrivals.append({
                         "case_id": cid,
                         "arrival_time": t_arr,
                         "requested_amount": amt,
-                        "case_attrs": sampled_payload,
-                        "init_ms": init_ms,
-                        "ms_states": []
+                        "case_attrs": sampled_payload
                     })
                     case_idx += 1
 

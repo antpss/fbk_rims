@@ -30,6 +30,7 @@ class FeatureContext:
     tracked_activities: List[str] = field(default_factory=list)
     case_attrs: Dict[str, Any] = field(default_factory=dict)
     event_attrs: Dict[str, Any] = field(default_factory=dict)
+    include_counts: bool = False
 
 
 def _extract_wip(ctx: FeatureContext) -> Dict[str, float]:
@@ -94,6 +95,8 @@ def _extract_trace_history(ctx: FeatureContext) -> Dict[str, float]:
         clean_name = act.replace(" ", "_").replace("-", "_")
         cnt = ctx.trace_history.get(act, 0)
         res[f"has_{clean_name}"] = 1.0 if cnt > 0 else 0.0
+        if getattr(ctx, "include_counts", False):
+            res[f"count_{clean_name}"] = float(cnt)
     return res
 
 
@@ -156,8 +159,13 @@ class FeatureManager:
 
             self.selected_features = selected
 
+        self.include_counts = bool(feat_cfg.get("trace_history", {}).get("include_counts", False))
+
     def build_features(self, ctx: FeatureContext) -> Dict[str, Any]:
         """Runs all active feature extractors on the provided context."""
+        if not getattr(ctx, "include_counts", False) and self.include_counts:
+            ctx.include_counts = True
+
         feats: Dict[str, Any] = {}
         for f_name in self.selected_features:
             extractor = FEATURE_REGISTRY.get(f_name)

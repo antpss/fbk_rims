@@ -167,15 +167,15 @@ def prepare_evaluation_dfs(df_real, df_sim, target_acts=None, max_cases=1000):
             "resource": r_filtered[r_col].astype(str) if r_col in r_filtered.columns else "UNKNOWN"
         })
 
-    # Subsample cases if log is very large to keep Hungarian matching fast
+    # Subsample real cases uniformly across the log to obtain an unbiased representative sample
     rng = np.random.RandomState(42)
     u_cases_real = clean_real["case_id"].unique()
-    if len(u_cases_real) > max_cases:
+    if max_cases and len(u_cases_real) > max_cases:
         sampled_cases_r = set(rng.choice(u_cases_real, size=max_cases, replace=False))
         clean_real = clean_real[clean_real["case_id"].isin(sampled_cases_r)].copy()
 
     u_cases_sim = clean_sim["case_id"].unique()
-    if len(u_cases_sim) > max_cases:
+    if max_cases and len(u_cases_sim) > max_cases:
         sampled_cases_s = set(rng.choice(u_cases_sim, size=max_cases, replace=False))
         clean_sim = clean_sim[clean_sim["case_id"].isin(sampled_cases_s)].copy()
 
@@ -300,8 +300,21 @@ class SimulationEvaluator:
             mae_cycle = float(abs(real_mean - sim_mean))
 
             # 1. Control-Flow Metrics (log-distance-measures)
+            # Cap CFLD to max 1,000 cases to prevent O(N^3) Hungarian matching slowdown
             try:
-                cfld = float(control_flow_log_distance(clean_real, ids, clean_sim, ids, parallel=False))
+                max_cfld_cases = 1000
+                cfld_real = clean_real
+                cfld_sim = clean_sim
+                if clean_real["case_id"].nunique() > max_cfld_cases:
+                    rng = np.random.RandomState(42)
+                    c_r = set(rng.choice(clean_real["case_id"].unique(), size=max_cfld_cases, replace=False))
+                    cfld_real = clean_real[clean_real["case_id"].isin(c_r)].copy()
+                if clean_sim["case_id"].nunique() > max_cfld_cases:
+                    rng = np.random.RandomState(42)
+                    c_s = set(rng.choice(clean_sim["case_id"].unique(), size=max_cfld_cases, replace=False))
+                    cfld_sim = clean_sim[clean_sim["case_id"].isin(c_s)].copy()
+
+                cfld = float(control_flow_log_distance(cfld_real, ids, cfld_sim, ids, parallel=False))
             except Exception:
                 cfld = 0.0
 

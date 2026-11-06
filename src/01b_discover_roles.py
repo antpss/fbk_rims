@@ -159,7 +159,14 @@ def discover_roles(cfg=None, threshold=None):
 
     # Compute observed concurrency & capacities from the log
     print("Computing empirical department staffing capacities and worker concurrency quotas...")
-    df_sorted = df_target.sort_values("time:timestamp").copy()
+    trans_order = {"START": 0, "COMPLETE": 1}
+    df_sorted = df_target.copy()
+    c_col = "case:concept:name" if "case:concept:name" in df_sorted.columns else "case_id"
+    if "lifecycle:transition" in df_sorted.columns:
+        df_sorted["_tr"] = df_sorted["lifecycle:transition"].astype(str).str.upper().map(trans_order).fillna(2)
+        df_sorted = df_sorted.sort_values(by=["time:timestamp", "_tr"]).drop(columns=["_tr"]).reset_index(drop=True)
+    else:
+        df_sorted = df_sorted.sort_values("time:timestamp").reset_index(drop=True)
 
     # Worker concurrency: 95th percentile concurrent open tasks
     worker_open_tasks = defaultdict(int)
@@ -171,20 +178,34 @@ def discover_roles(cfg=None, threshold=None):
     role_max_concurrency = defaultdict(int)
     role_concurrency_history = defaultdict(list)
 
-    events_list = []
-    needed_cols = [c for c in ["concept:name", "org:resource", "lifecycle:transition", "time:timestamp"] if c in df_sorted.columns]
+    # Pair START and COMPLETE into positive-duration intervals (start < end)
+    # Zero-duration intervals (start == end) take 0s and do not occupy human worker capacity
+    pending_starts = defaultdict(list)
+    interval_events = []
+    needed_cols = [c for c in [c_col, "concept:name", "org:resource", "lifecycle:transition", "time:timestamp"] if c in df_sorted.columns]
     for row in df_sorted[needed_cols].to_dict("records"):
+        cid = str(row.get(c_col, ""))
         act = row["concept:name"]
-        w = row["org:resource"]
+        w = row.get("org:resource", "UNKNOWN")
         trans = str(row.get("lifecycle:transition", "COMPLETE")).upper()
         ts = row["time:timestamp"]
         role = activity_to_role.get(act)
-        events_list.append((ts, trans, w, act, role))
 
-    # Process events chronologically
-    events_list.sort(key=lambda x: (x[0], 0 if x[1] == "COMPLETE" else 1))
+        if trans == "START":
+            pending_starts[(cid, act)].append((ts, w))
+        elif trans == "COMPLETE":
+            if pending_starts[(cid, act)]:
+                s_ts, s_w = pending_starts[(cid, act)].pop(0)
+                worker = s_w if s_w not in ("nan", "UNKNOWN", "None", "") else w
+                if s_ts < ts:
+                    interval_events.append((s_ts, "START", worker, act, role))
+                    interval_events.append((ts, "COMPLETE", worker, act, role))
 
-    for ts, trans, w, act, role in events_list:
+    # For positive-duration intervals (s_ts < ts), process COMPLETE before START at equal timestamps
+    # so back-to-back sequential handoffs (end_1 == start_2) do not falsely overlap.
+    interval_events.sort(key=lambda x: (x[0], 0 if x[1] == "COMPLETE" else 1))
+
+    for ts, trans, w, act, role in interval_events:
         if trans == "START":
             worker_open_tasks[w] += 1
             worker_concurrency_history[w].append(worker_open_tasks[w])

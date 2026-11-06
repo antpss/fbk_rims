@@ -380,14 +380,13 @@ class SimulationProcess:
         role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
 
         # Activity Profiles (Human Work Item vs. Automated Task vs. Instant Gateway)
-        prof_file = os.path.join(PROJECT_ROOT, models_dir_rel, "activity_profiles.json")
-        self.activity_profiles = {}
-        if os.path.exists(prof_file):
-            try:
-                with open(prof_file, "r") as f:
-                    self.activity_profiles = json.load(f).get("activity_types", {})
-            except Exception:
-                self.activity_profiles = {}
+        try:
+            from activity_profiler import load_or_discover_activity_profiles
+        except ImportError:
+            from src.activity_profiler import load_or_discover_activity_profiles
+
+        prof_data = load_or_discover_activity_profiles(cfg)
+        self.activity_profiles = prof_data.get("activity_types", {})
 
         # Calendar Manager
         self.calendar = CalendarManager.from_config(cfg, role_mapping_path=role_mapping_path)
@@ -584,8 +583,6 @@ class SimulationProcess:
                 arrival_offset=offset_seconds,
                 requested_amount=arr.get("requested_amount", 0.0),
                 process=self,
-                init_ms=arr.get("init_ms"),
-                ms_states=arr.get("ms_states"),
                 inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0),
                 case_attrs=arr.get("case_attrs", {})
             )

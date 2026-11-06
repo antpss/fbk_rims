@@ -121,7 +121,7 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload"):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload", include_counts=False):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
     Extracts prefix history, loop counts, case attributes (payload), inter-arrival times,
@@ -283,6 +283,8 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                     # Process activity presence indicators
                     for act in common_acts:
                         sample[f"has_{act}"] = 1.0 if act in prefix_labels else 0.0
+                        if include_counts:
+                            sample[f"count_{act}"] = float(prefix_labels.count(act))
 
                     decision_data[p_id].append(sample)
                     dp_counts[p_id] += 1
@@ -400,12 +402,14 @@ def main():
         print(f"  - Place [{p_id}]: {len(branch_labels)} branches -> {branch_labels}")
 
     # 2. Align Log & Extract Decision Samples
+    include_counts = bool(cfg.get("features", {}).get("trace_history", {}).get("include_counts", False))
     decision_dfs = extract_decision_samples_via_alignment(
         log_path=log_path,
         pnml_path=pnml_path,
         xor_decision_points=xor_points,
         case_attrs_cfg=case_attrs_cfg,
         routing_mode=routing_mode,
+        include_counts=include_counts,
     )
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
@@ -415,6 +419,7 @@ def main():
         "min_f1_threshold": min_f1,
         "max_depth": max_depth,
         "window_size": window_size,
+        "include_counts": include_counts,
         "decision_points": {},
     }
     manifest_path = os.path.join(output_dir, "routing_decisions.json")

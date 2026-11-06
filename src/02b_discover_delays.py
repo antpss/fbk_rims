@@ -219,7 +219,12 @@ class ChapelaDelayDiscoveryEngine:
         print(f"Loaded {len(df):,} events across {df['case:concept:name'].nunique():,} cases.")
 
         df["time:timestamp"] = pd.to_datetime(df["time:timestamp"])
-        df = df.sort_values(by="time:timestamp").reset_index(drop=True)
+        if "lifecycle:transition" in df.columns:
+            trans_order = {"START": 0, "COMPLETE": 1}
+            df["_tr"] = df["lifecycle:transition"].astype(str).str.upper().map(trans_order).fillna(2)
+            df = df.sort_values(by=["time:timestamp", "_tr"]).drop(columns=["_tr"]).reset_index(drop=True)
+        else:
+            df = df.sort_values(by="time:timestamp").reset_index(drop=True)
 
         # -------------------------------------------------------------
         # STEP 1: Compute System-Wide WIP Time Series
