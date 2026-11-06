@@ -37,7 +37,7 @@ from collections import defaultdict
 
 import pm4py
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
-from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.tree import DecisionTreeClassifier, export_text
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
@@ -252,7 +252,6 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         dp_counts = defaultdict(int)
 
         for move in trace_res["alignment"]:
-            log_label = move[1][0]
             model_t_id = move[0][1]
 
             # 1. Skip if transition did not fire in Petri net
@@ -503,7 +502,6 @@ def main():
         # Case 2: Multi-class choice with sufficient samples -> Train ML Classifier
         y_raw = df["chosen_target"]
         label_to_idx = {lbl: i for i, lbl in enumerate(sorted(y_raw.unique()))}
-        idx_to_label = {i: lbl for lbl, i in label_to_idx.items()}
         y = y_raw.map(label_to_idx).values
 
         feat_cols = [c for c in df.columns if c not in ["case_id", "chosen_target"]]

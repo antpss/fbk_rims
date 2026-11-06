@@ -112,10 +112,6 @@ class SharedWorkerPool:
         curr_dt = cal.to_datetime(self.env.now)
         return cal.is_working_hour(curr_dt)
 
-    def _is_working_now(self):
-        """Backward-compatibility check for global calendar shift."""
-        return self._is_activity_working_now(None)
-
     def _ensure_shift_alarm(self, activity=None):
         """Arms a non-blocking shift alarm for the activity's role calendar keyed by id(cal)."""
         if not self.calendar or not getattr(self.calendar, "enabled", False):
@@ -356,6 +352,7 @@ class SimulationProcess:
         self.export_xes = export_xes if export_xes is not None else cfg.get("simulation", {}).get("export_xes", True)
         self.output_simulated_xes = os.path.join(
             PROJECT_ROOT,
+            f"data/generated/xes/simulated_log_{self.mode}.xes" if self.mode != "hybrid_residual" else
             cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
         )
 

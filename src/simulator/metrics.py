@@ -22,7 +22,6 @@ and matching the evaluation framework of Meneghello et al. (Information Systems 
 """
 
 import os
-from collections import Counter
 from datetime import timedelta
 import numpy as np
 import pandas as pd
@@ -201,6 +200,7 @@ class SimulationEvaluator:
         )
         self.output_simulated_xes = output_simulated_xes or os.path.join(
             PROJECT_ROOT,
+            f"data/generated/xes/simulated_log_{self.mode}.xes" if self.mode != "hybrid_residual" else
             cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
         )
         self.workers_count = workers_count
@@ -241,7 +241,7 @@ class SimulationEvaluator:
         ).drop(columns=["_trans_order"]).reset_index(drop=True)
 
         os.makedirs(os.path.dirname(self.output_simulated_xes), exist_ok=True)
-        pm4py.write_xes(df_paired, self.output_simulated_xes)
+        pm4py.write_xes(df_paired, self.output_simulated_xes, variant_str="line_by_line")
         print(f"[✓] Saved standard IEEE XES log with paired lifecycle ({len(df_paired)} events) to: {self.output_simulated_xes}")
 
     def evaluate(self, df_real, df_sim, elapsed=0.0):

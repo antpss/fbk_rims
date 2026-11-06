@@ -21,7 +21,6 @@ Classification Rule:
 """
 
 import os
-import sys
 import json
 import argparse
 from datetime import datetime
@@ -111,7 +110,7 @@ class ActivityProfiler:
                 act_resources[act].append(res)
 
                 if pending_starts[(cid, act)]:
-                    s_ts, s_res = pending_starts[(cid, act)].pop(0)
+                    s_ts, _ = pending_starts[(cid, act)].pop(0)
                     dur = max(0.0, (ts - s_ts).total_seconds())
                     act_durations[act].append(dur)
                 else:
@@ -129,7 +128,7 @@ class ActivityProfiler:
 
         # Also capture any unmatched starts (duration = 0 fallback)
         for (cid, act), start_list in pending_starts.items():
-            for s_ts, s_res in start_list:
+            for _ in start_list:
                 act_durations[act].append(0.0)
 
         all_activities = sorted(list(set(list(act_completes_seen.keys()) + list(act_starts_seen.keys()))))

@@ -17,10 +17,9 @@ Outputs:
 """
 
 import os
-import sys
 import json
 import argparse
-from collections import defaultdict, Counter
+from collections import defaultdict
 from datetime import datetime
 
 import pandas as pd

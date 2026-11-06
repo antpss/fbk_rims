@@ -30,14 +30,6 @@ except ImportError:
 
 from simulator import (
     SimulationProcess,
-    DiscreteEventSimulation,
-    SharedWorkerPool,
-    WorkerManager,
-    ChampionPredictor,
-    CalendarManager,
-    ArrivalGenerator,
-    Token,
-    SimulationEvaluator,
     format_dur,
 )
 
@@ -116,7 +108,6 @@ def main():
         print(f"{'Simulation Mode':<22} | {'CFLD':>8} | {'L_traces':>8} | {'2-Gram':>7} | {'AED (h)':>8} | {'CED (h)':>8} | {'CWD (h)':>8} | {'RED (h)':>8} | {'CAR (h)':>8} | {'CTD (WD)':>14} | {'MAE Cycle':>14} | {'Run Time':>9}")
         print("-" * 152)
         real_m = results[0]["real_mean"]
-        real_med = results[0]["real_median"]
         print(f"{'REAL HISTORICAL':<22} | {'---':>8} | {'---':>8} | {'---':>7} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>8} | {'---':>14} | {'---':>14} | {'---':>9}")
         print("-" * 152)
 

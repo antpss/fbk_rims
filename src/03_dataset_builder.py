@@ -261,8 +261,6 @@ def build_dataset(cfg, task_name="duration"):
         seen_events[case_id] += 1
 
         wip = len(active_cases)
-        weekday = timestamp.weekday()
-        daytime = (timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second) / 86400.0
         rp_oc_array = [min(1.0, role_active[r] / max(1, role_capacities.get(r, 1))) for r in role_names]
 
         if case_id not in case_prefixes:
@@ -312,9 +310,7 @@ def build_dataset(cfg, task_name="duration"):
                     ac_wip=ac_wip,
                     dt=timestamp,
                     role_oc=rp_oc_array,
-                    role_names=role_names,
                     prev_dur=case_prev_time[case_id],
-                    activities=activities,
                     trace_history=dict(case_history[case_id]),
                     tracked_activities=tracked_activities,
                     case_attrs=extracted_case_attrs,
@@ -373,9 +369,7 @@ def build_dataset(cfg, task_name="duration"):
                         ac_wip=ac_wip,
                         dt=timestamp,
                         role_oc=rp_oc_array,
-                        role_names=role_names,
                         prev_dur=case_prev_time[case_id],
-                        activities=activities,
                         trace_history=dict(case_history[case_id]),
                         tracked_activities=tracked_activities,
                         case_attrs=extracted_case_attrs,

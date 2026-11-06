@@ -8,7 +8,7 @@ model training, and simulation runtime inference.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Set, Any, Optional, Callable
+from typing import Dict, List, Any, Optional, Callable
 
 
 @dataclass
@@ -24,10 +24,8 @@ class FeatureContext:
     dt: Optional[datetime] = None
     requested_amount: float = 0.0
     role_oc: List[float] = field(default_factory=list)
-    role_names: List[str] = field(default_factory=list)
     prev_dur: float = 0.0
     worker_id: str = "UNKNOWN"
-    activities: List[str] = field(default_factory=list)
     trace_history: Dict[str, int] = field(default_factory=dict)
     tracked_activities: List[str] = field(default_factory=list)
     case_attrs: Dict[str, Any] = field(default_factory=dict)

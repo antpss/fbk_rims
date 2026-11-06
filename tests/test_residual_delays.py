@@ -15,12 +15,10 @@ import sys
 import shutil
 import tempfile
 import unittest
-from datetime import datetime, timedelta
 import pandas as pd
 import pm4py
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
-from config_loader import PROJECT_ROOT
 
 
 class TestResidualWaitingDelays(unittest.TestCase):
@@ -82,7 +80,6 @@ class TestResidualWaitingDelays(unittest.TestCase):
             }
         }
 
-        from src.simulator.calendar import CalendarManager
         import importlib
         mod_02b = importlib.import_module("02b_discover_delays")
         ChapelaDelayDiscoveryEngine = mod_02b.ChapelaDelayDiscoveryEngine
@@ -90,7 +87,7 @@ class TestResidualWaitingDelays(unittest.TestCase):
         engine = ChapelaDelayDiscoveryEngine(cfg)
         engine.output_dir = os.path.join(self.test_dir, "delays")
         os.makedirs(engine.output_dir, exist_ok=True)
-        manifest = engine.run()
+        engine.run()
 
         parquet_path = os.path.join(self.test_dir, "causal_delays_instance_level.parquet")
         csv_path = os.path.join(self.test_dir, "causal_delays_instance_level.csv.gz")

@@ -254,7 +254,7 @@ class CalendarManager:
             d_end = e_dt.date() - timedelta(days=1)
             if d_end >= d_start:
                 total_inter_days = (d_end - d_start).days + 1
-                full_weeks, rem_days = divmod(total_inter_days, 7)
+                full_weeks = total_inter_days // 7
                 net_seconds += full_weeks * (len(self.work_days) * shift_len)
 
                 curr_d = d_start + timedelta(days=full_weeks * 7)

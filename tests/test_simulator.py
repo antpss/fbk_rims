@@ -196,7 +196,7 @@ class TestSimulator(unittest.TestCase):
             self.assertEqual(pool.get_role_occupancy(), [0.0, 0.0])
 
             # W1 takes Act_A (1 active out of cap 2 -> 50%)
-            ev_a = pool.request_worker("Act_A")
+            pool.request_worker("Act_A")
             self.assertEqual(pool.get_role_occupancy(), [0.5, 0.0])
 
             # Release

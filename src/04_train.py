@@ -1,5 +1,4 @@
 import os
-import sys
 import json
 import time
 import argparse
@@ -208,7 +207,6 @@ def main():
     task_cfg = cfg["tasks"][task_name]
     strat_cfg = cfg.get("model_strategy", {})
 
-    mode = strat_cfg.get("mode", "hybrid")
     strategy = args.strategy or "global"
     model_type = args.model_type or strat_cfg.get("single_global_engine", "xgboost")
     
@@ -224,7 +222,6 @@ def main():
     data_path = os.path.join(cfg["paths"]["output_base_dir"], task_cfg["output_file"])
     target_col = task_cfg["target_column"]
     max_seq_len = cfg.get("features", {}).get("prefix_window_size", 10)
-    target_acts = cfg.get("target_activities", [])
     
     models_base_dir = os.path.join(PROJECT_ROOT, cfg["paths"]["models_dir"], task_name, f"{strategy}_{model_type}")
     os.makedirs(models_base_dir, exist_ok=True)
@@ -395,7 +392,6 @@ def main():
             y_val_all = np.log1p(val_df['Target_Duration'].values)
 
             X_test_all = build_xgb_features(test_df)
-            y_test_all = np.log1p(test_df['Target_Duration'].values)
 
             global_xgb = xgb.XGBRegressor(
                 n_estimators=400,
@@ -438,7 +434,6 @@ def main():
             X_va = build_xgb_features(val_sub) if len(val_sub) > 0 else None
             y_va = np.log1p(val_sub['Target_Duration'].values) if len(val_sub) > 0 else None
             X_te = build_xgb_features(test_sub)
-            y_te = np.log1p(test_sub['Target_Duration'].values)
 
             loc_xgb = xgb.XGBRegressor(
                 n_estimators=400,

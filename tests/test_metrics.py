@@ -14,7 +14,6 @@ import unittest
 import tempfile
 from datetime import datetime, timedelta
 import pandas as pd
-import numpy as np
 
 from log_distance_measures.config import EventLogIDs
 from log_distance_measures.control_flow_log_distance import control_flow_log_distance

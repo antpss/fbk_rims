@@ -4,7 +4,6 @@ import json
 import argparse
 import subprocess
 import shutil
-import pandas as pd
 import numpy as np
 
 from config_loader import load_config, PROJECT_ROOT

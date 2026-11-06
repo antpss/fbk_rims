@@ -34,7 +34,7 @@ import argparse
 import warnings
 import bisect
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
@@ -142,7 +142,7 @@ class ConcurrencyOracle:
         co_occur = defaultdict(int)
         overlap = defaultdict(int)
 
-        for case_id, insts in instances_by_case.items():
+        for insts in instances_by_case.values():
             unique_acts = list({x["act"] for x in insts})
             for i in range(len(unique_acts)):
                 for j in range(i + 1, len(unique_acts)):
