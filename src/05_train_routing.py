@@ -121,7 +121,7 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload", include_counts=False):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload", include_counts=False, cfg=None):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
     Extracts prefix history, loop counts, case attributes (payload), inter-arrival times,
@@ -132,6 +132,9 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
     print(f"Loading event log: {log_path}...")
     log_raw = pm4py.read_xes(log_path)
+    if cfg is not None:
+        from temporal_split import training_rows
+        log_raw = training_rows(pm4py.convert_to_dataframe(log_raw), cfg)
     if not isinstance(log_raw, pd.DataFrame):
         df_log = pm4py.convert_to_dataframe(log_raw)
     else:
@@ -410,6 +413,7 @@ def main():
         case_attrs_cfg=case_attrs_cfg,
         routing_mode=routing_mode,
         include_counts=include_counts,
+        cfg=cfg,
     )
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
@@ -423,14 +427,8 @@ def main():
         "decision_points": {},
     }
     manifest_path = os.path.join(output_dir, "routing_decisions.json")
-    if os.path.exists(manifest_path):
-        try:
-            with open(manifest_path, "r") as mf:
-                old_data = json.load(mf)
-                if isinstance(old_data.get("decision_points"), dict):
-                    dispatch_manifest["decision_points"] = dict(old_data["decision_points"])
-        except Exception:
-            pass
+    # Rebuild the manifest from this training partition; old decision points may
+    # have been learned from a different log or from the held-out population.
 
     results_table = []
     tree_rules_map = {}

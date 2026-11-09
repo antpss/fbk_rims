@@ -177,3 +177,18 @@ class FeatureManager:
         """Checks if a feature is enabled in the configuration."""
         return feature_name.lower() in self.selected_features
 
+
+
+def capacity_occupancy(role_data, worker_active, enable_quotas=True):
+    """Occupied nominal work slots in each role's roster, across all assignments."""
+    roles = role_data.get("__role_names__") or list(role_data.get("roles", {})) or sorted(set(role_data.get("activity_to_role", {}).values()))
+    rosters = role_data.get("role_to_workers", {})
+    capacities = role_data.get("worker_concurrencies", {})
+    fallback = role_data.get("__resource_capacities__", {})
+    result = []
+    for role in roles:
+        workers = set(rosters.get(role, role_data.get("__all_resources__", [])))
+        caps = {w: max(1, int(capacities.get(w, fallback.get(w, 1)))) if enable_quotas else 1 for w in workers}
+        occupied = sum(min(max(0, worker_active.get(w, 0)), cap) for w, cap in caps.items())
+        result.append(occupied / sum(caps.values()) if caps else 0.0)
+    return result

@@ -22,6 +22,8 @@ and matching the evaluation framework of Meneghello et al. (Information Systems 
 """
 
 import os
+import json
+import warnings
 from datetime import timedelta
 import numpy as np
 import pandas as pd
@@ -48,6 +50,8 @@ except ImportError:
 
 def format_dur(sec):
     """Formats duration in seconds into human-readable string."""
+    if sec is None or not np.isfinite(sec):
+        return "N/A"
     if sec >= 86400:
         return f"{sec/86400:.1f} days"
     elif sec >= 3600:
@@ -218,7 +222,7 @@ class SimulationEvaluator:
             return
 
         # Paired START lifecycle events
-        df_start = df_sim.copy()
+        df_start = df_sim[df_sim["start_timestamp"].notna()].copy()
         df_start["case:concept:name"] = df_start["case_id"].astype(str)
         df_start["concept:name"] = df_start["activity"]
         df_start["time:timestamp"] = pd.to_datetime(df_start["start_timestamp"], utc=True)
@@ -227,7 +231,7 @@ class SimulationEvaluator:
         df_start["_trans_order"] = 0
 
         # Paired COMPLETE lifecycle events
-        df_comp = df_sim.copy()
+        df_comp = df_sim[df_sim["complete_timestamp"].notna()].copy()
         df_comp["case:concept:name"] = df_comp["case_id"].astype(str)
         df_comp["concept:name"] = df_comp["activity"]
         df_comp["time:timestamp"] = pd.to_datetime(df_comp["complete_timestamp"], utc=True)
@@ -245,255 +249,144 @@ class SimulationEvaluator:
         print(f"[✓] Saved standard IEEE XES log with paired lifecycle ({len(df_paired)} events) to: {self.output_simulated_xes}")
 
     def evaluate(self, df_real, df_sim, elapsed=0.0):
-        """
-        Evaluates simulated event log against real historical log across:
-          - Control-Flow Perspective (CFLD, L_traces, NGD 2-Gram, NGD 3-Gram)
-          - Temporal Perspective (AED, CED, RED)
-          - Workforce Perspective (CWD)
-          - Congestion Perspective (CTD / 1WD, CAR, Cycle Mean/Median/MAE)
-        Uses the official `log-distance-measures` library.
-        """
-        print("\n" + "=" * 96)
-        print("         RIMS++ SIMULATION MULTI-PERSPECTIVE BENCHMARK (LOG-DISTANCE-MEASURES)")
-        print("=" * 96)
-
-        df_sim = df_sim.copy()
-        df_sim["start_dt"] = pd.to_datetime(df_sim["start_timestamp"], utc=True)
-        df_sim["comp_dt"] = pd.to_datetime(df_sim["complete_timestamp"], utc=True)
-        sim_cases = df_sim.groupby("case_id").agg(
-            start=("start_dt", "min"),
-            end=("comp_dt", "max")
-        )
-        sim_cycles = (sim_cases["end"] - sim_cases["start"]).dt.total_seconds().values
-        sim_mean = float(np.mean(sim_cycles)) if len(sim_cycles) > 0 else 0.0
-        sim_median = float(np.median(sim_cycles)) if len(sim_cycles) > 0 else 0.0
-
-        target_acts = set(self.cfg.get("target_activities", []))
-
+        """Report full-case distances separately from clipped observation-window data."""
+        cols = ["case_id", "activity", "start_timestamp", "complete_timestamp", "resource_id",
+                "duration_seconds", "wait_time_seconds", "queue_wait_seconds"]
+        df_sim = df_sim.reindex(columns=list(dict.fromkeys(list(df_sim.columns) + cols)))
+        df_sim["case_id"] = df_sim.case_id.astype(str)
         clean_real, clean_sim, ids = prepare_evaluation_dfs(
-            df_real, df_sim, target_acts=target_acts
-        )
-
-        real_cases = None
-        cfld = 0.0
-        l_traces = 0.0
-        ngram_2 = 0.0
-        ngram_3 = 0.0
-        aed = 0.0
-        ced = 0.0
-        cwd = 0.0
-        red_dist = 0.0
-        car = 0.0
-        ctd = 0.0
-        mae_cycle = 0.0
-        real_mean = 0.0
-        real_median = 0.0
-
-        if clean_real is not None and len(clean_real) > 0:
-            real_cases = clean_real.groupby("case_id").agg(
-                start=("start_time", "min"),
-                end=("end_time", "max")
-            )
-            real_cycles = (real_cases["end"] - real_cases["start"]).dt.total_seconds().values
-            real_mean = float(np.mean(real_cycles)) if len(real_cycles) > 0 else 0.0
-            real_median = float(np.median(real_cycles)) if len(real_cycles) > 0 else 0.0
-            mae_cycle = float(abs(real_mean - sim_mean))
-
-            # 1. Control-Flow Metrics (log-distance-measures)
-            # Cap CFLD to max 1,000 cases to prevent O(N^3) Hungarian matching slowdown
+            df_real, df_sim, target_acts=set(self.cfg.get("target_activities", [])), max_cases=None)
+        statuses = getattr(self, "case_status", None)
+        window_start = getattr(self, "window_start", None)
+        window_end = getattr(self, "window_end", None)
+        populations = {"simulated_scheduled": len(statuses) if statuses is not None else clean_sim.case_id.nunique(),
+                       "simulated_statuses": statuses.status.value_counts().to_dict() if statuses is not None else {},
+                       "reference_cases": df_real["case:concept:name"].nunique() if df_real is not None and not df_real.empty else 0}
+        def clipped(frame):
+            if frame is None:
+                return None
+            out = frame.copy()
+            if window_end is not None:
+                out = out[out.start_time < window_end].copy()
+                out["end_time"] = out.end_time.fillna(window_end).clip(upper=window_end)
+            if window_start is not None:
+                out = out[out.end_time >= window_start].copy()
+                out["start_time"] = out.start_time.clip(lower=window_start)
+            return out.dropna(subset=["start_time", "end_time"])
+        window_real, window_sim = clipped(clean_real), clipped(clean_sim)
+        real_ids = set(clean_real.case_id) if clean_real is not None else set()
+        sim_ids = set(statuses.loc[statuses.status == "completed", "case_id"].astype(str)) if statuses is not None else set(clean_sim.case_id)
+        real_bounds = None
+        if df_real is not None and not df_real.empty:
+            raw = df_real.assign(_timestamp=pd.to_datetime(df_real["time:timestamp"], utc=True))
+            real_bounds = raw.groupby("case:concept:name")._timestamp.agg(["min", "max"])
+            real_bounds.index = real_bounds.index.astype(str)
+            if window_end is not None:
+                real_ids &= set(real_bounds.index[real_bounds["max"] < window_end])
+        paired = self.arrival_mode == "replay" and clean_real is not None
+        if paired:
+            real_ids = sim_ids = real_ids & sim_ids
+        # Sample one paired ID set for replay, separately for generated populations.
+        rng = np.random.RandomState(42)
+        def sample(case_ids):
+            ordered = sorted(case_ids)
+            return set(rng.choice(ordered, size=1000, replace=False)) if len(ordered) > 1000 else set(ordered)
+        real_ids = sample(real_ids)
+        sim_ids = real_ids if paired else sample(sim_ids)
+        real = clean_real[clean_real.case_id.isin(real_ids)].copy() if clean_real is not None else None
+        sim = clean_sim[clean_sim.case_id.isin(sim_ids)].dropna(subset=["end_time"]).copy()
+        populations.update(completed_reference_evaluated=len(real_ids), completed_simulated_evaluated=len(sim_ids),
+                           window_reference_intervals=len(window_real) if window_real is not None else 0,
+                           window_simulated_intervals=len(window_sim))
+        metric_status = {}
+        def calculate(name, fn, available=True):
+            if not available:
+                metric_status[name] = {"status": "unavailable", "reason": "empty or missing comparison population"}
+                return None
             try:
-                max_cfld_cases = 1000
-                cfld_real = clean_real
-                cfld_sim = clean_sim
-                if clean_real["case_id"].nunique() > max_cfld_cases:
-                    rng = np.random.RandomState(42)
-                    c_r = set(rng.choice(clean_real["case_id"].unique(), size=max_cfld_cases, replace=False))
-                    cfld_real = clean_real[clean_real["case_id"].isin(c_r)].copy()
-                if clean_sim["case_id"].nunique() > max_cfld_cases:
-                    rng = np.random.RandomState(42)
-                    c_s = set(rng.choice(clean_sim["case_id"].unique(), size=max_cfld_cases, replace=False))
-                    cfld_sim = clean_sim[clean_sim["case_id"].isin(c_s)].copy()
-
-                cfld = float(control_flow_log_distance(cfld_real, ids, cfld_sim, ids, parallel=False))
-            except Exception:
-                cfld = 0.0
-
-            l_traces = compute_trace_length_error(clean_real, clean_sim)
-
-            try:
-                ngram_2 = float(n_gram_distribution_distance(clean_real, ids, clean_sim, ids, n=2))
-            except Exception:
-                ngram_2 = 0.0
-
-            try:
-                ngram_3 = float(n_gram_distribution_distance(clean_real, ids, clean_sim, ids, n=3))
-            except Exception:
-                ngram_3 = 0.0
-
-            # 2. Temporal Metrics (log-distance-measures)
-            try:
-                aed = float(absolute_event_distribution_distance(clean_real, ids, clean_sim, ids))
-            except Exception:
-                aed = 0.0
-
-            try:
-                ced = float(circadian_event_distribution_distance(clean_real, ids, clean_sim, ids))
-            except Exception:
-                ced = 0.0
-
-            try:
-                red_dist = float(relative_event_distribution_distance(clean_real, ids, clean_sim, ids))
-            except Exception:
-                red_dist = 0.0
-
-            # 3. Workforce / Resource Scheduling Metric (log-distance-measures CWD)
-            try:
-                cwd = float(circadian_workforce_distribution_distance(clean_real, ids, clean_sim, ids))
-            except Exception:
-                cwd = 0.0
-
-            # 4. Congestion Metrics (log-distance-measures)
-            try:
-                car = float(case_arrival_distribution_distance(clean_real, ids, clean_sim, ids))
-            except Exception:
-                car = 0.0
-
-            try:
-                ctd = float(cycle_time_distribution_distance(clean_real, ids, clean_sim, ids, bin_size=timedelta(hours=1)))
-            except Exception:
-                ctd = float(wasserstein_distance(real_cycles, sim_cycles)) if (len(real_cycles) > 0 and len(sim_cycles) > 0) else 0.0
-
-            real_tasks_per_case = len(clean_real) / max(1, len(real_cases))
-            sim_tasks_per_case = len(df_sim) / max(1, len(sim_cases))
-            tasks_diff = sim_tasks_per_case - real_tasks_per_case
-
-            print(f"Dimension     | Metric                                | Real Ground-Truth | Simulated RIMS++ | Benchmark Score")
-            print("-" * 96)
-            print(f"Volume        | Cases Evaluated                       | {len(real_cases):>17,} | {len(sim_cases):>16,} | ---")
-            print(f"Volume        | Completed Work Tasks                  | {len(clean_real):>17,} | {len(df_sim):>16,} | ---")
-            print(f"Volume        | Avg Tasks / Case                      | {real_tasks_per_case:>17.2f} | {sim_tasks_per_case:>16.2f} | {tasks_diff:>+14.2f}")
-            print("-" * 96)
-            print(f"Control-Flow  | Control-flow Log Distance (CFLD)      |             --- |             --- | {cfld:>12.4f} (log-distance)")
-            print(f"Control-Flow  | Trace Length Absolute Error (L_traces)|             --- |             --- | {l_traces:>12.2f} events (Hungarian)")
-            print(f"Control-Flow  | 2-Gram Distance (NGD 2-Gram)          |             --- |             --- | {ngram_2:>12.4f}")
-            print(f"Control-Flow  | 3-Gram Distance (NGD 3-Gram)          |             --- |             --- | {ngram_3:>12.4f}")
-            print("-" * 96)
-            print(f"Temporal      | Absolute Event Distribution (AED)     |             --- |             --- | {aed:>12.2f}h EMD")
-            print(f"Temporal      | Circadian Event Distribution (CED)    |             --- |             --- | {ced:>12.2f}h EMD")
-            print(f"Temporal      | Relative Event Distribution (RED)     |             --- |             --- | {red_dist:>12.2f}h EMD")
-            print("-" * 96)
-            print(f"Workforce     | Circadian Workforce Dist (CWD)        |             --- |             --- | {cwd:>12.2f}h EMD")
-            print("-" * 96)
-            print(f"Congestion    | Cycle Time Distribution (CTD)         |             --- |             --- | {format_dur(ctd):>15}")
-            print(f"Congestion    | Case Arrival Rate (CAR)               |             --- |             --- | {car:>12.2f}h EMD")
-            print(f"Congestion    | Mean Case Cycle Time                  | {format_dur(real_mean):>17} | {format_dur(sim_mean):>16} | {format_dur(mae_cycle):>15} MAE")
-            print(f"Congestion    | Median Case Cycle Time                | {format_dur(real_median):>17} | {format_dur(sim_median):>16} | ---")
-            print("=" * 96)
-        else:
-            print(f"Dimension     | Metric                                | Simulated RIMS++ (Generative Mode)")
-            print("-" * 75)
-            print(f"Volume        | Cases Evaluated                       | {len(sim_cases):>17,}")
-            print(f"Volume        | Total Work Events                     | {len(df_sim):>17,}")
-            print(f"Congestion    | Mean Case Cycle Time                  | {format_dur(sim_mean):>17}")
-            print(f"Congestion    | Median Case Cycle Time                | {format_dur(sim_median):>17}")
-            print("=" * 75)
-
-        # Activity Breakdown
-        print(f"\n{'Activity Execution':<32} | {'Sim Count':>10} | {'Sim Mean Dur':>14} | {'Sim Mean Wait':>14} | {'Sim Mean Queue':>14}")
-        print("-" * 92)
-        sim_act_stats = df_sim.groupby("activity").agg(
-            count=("activity", "count"),
-            sim_dur=("duration_seconds", "mean"),
-            sim_wait=("wait_time_seconds", "mean"),
-            sim_queue=("queue_wait_seconds", "mean")
-        )
-        cfg_acts = self.cfg.get("target_activities", [])
-        if not cfg_acts:
-            acts_to_show = sorted(df_sim["activity"].unique())
-        else:
-            extra = [a for a in sorted(df_sim["activity"].unique()) if a not in cfg_acts]
-            acts_to_show = list(cfg_acts) + extra
-
-        for act in acts_to_show:
-            cnt = int(sim_act_stats.loc[act, "count"]) if act in sim_act_stats.index else 0
-            s_dur = sim_act_stats.loc[act, "sim_dur"] if act in sim_act_stats.index else 0.0
-            s_wait = sim_act_stats.loc[act, "sim_wait"] if act in sim_act_stats.index else 0.0
-            s_queue = sim_act_stats.loc[act, "sim_queue"] if act in sim_act_stats.index else 0.0
-            print(f"{act:<32} | {cnt:>10,} | {format_dur(s_dur):>14} | {format_dur(s_wait):>14} | {format_dur(s_queue):>14}")
-        print("=" * 92 + "\n")
-
-        # Save Comprehensive Markdown Report
-        out_base = self.cfg.get("paths", {}).get("output_base_dir", "data/processed")
-        rep_path = os.path.join(PROJECT_ROOT, out_base, "simulation_report.md")
-        with open(rep_path, "w") as f:
-            f.write("# RIMS++ Simulation Benchmark Report\n\n")
-            f.write(f"- **Simulation Mode:** `{self.mode}`\n")
-            f.write(f"- **Arrival Mode:** `{self.arrival_mode}`\n")
-            f.write(f"- **Simulated Cases:** {len(sim_cases):,}\n")
-            f.write(f"- **Total Work Events:** {len(df_sim):,}\n")
-            f.write(f"- **Workers in Multi-Skilled Pool:** {self.workers_count} human resources\n")
-            if self.calendar is not None:
-                f.write(f"- **Calendar Engine:** Working Hours {self.calendar.hour_start}:00 - {self.calendar.hour_end}:00 (Mon-Fri)\n")
-            f.write(f"- **Simulated Log Path (CSV):** `{self.sim_log_path}`\n")
-            if self.export_xes:
-                f.write(f"- **Simulated Log Path (XES):** `{self.output_simulated_xes}`\n\n")
-            else:
-                f.write("\n")
-
-            f.write("## Multi-Perspective Quality Benchmark (log-distance-measures / WISDOM)\n\n")
-            f.write("| Dimension | Metric | Real Ground-Truth | Simulated RIMS++ | Benchmark Score |\n")
-            f.write("|---|---|---|---|---|\n")
-            real_cases_str = f"{len(real_cases):,}" if real_cases is not None else "N/A"
-            f.write(f"| **Volume** | Cases Evaluated | {real_cases_str} | {len(sim_cases):,} | --- |\n")
-            if clean_real is not None and len(clean_real) > 0:
-                f.write(f"| **Volume** | Completed Work Tasks | {len(clean_real):,} | {len(df_sim):,} | --- |\n")
-                f.write(f"| **Volume** | Avg Tasks / Case | {real_tasks_per_case:.2f} | {sim_tasks_per_case:.2f} | {tasks_diff:+.2f} |\n")
-                f.write(f"| **Control-Flow** | Control-flow Log Distance (CFLD) | --- | --- | **{cfld:.4f}** (log-distance) |\n")
-                f.write(f"| **Control-Flow** | Trace Length Error ($L^{{traces}}$) | --- | --- | **{l_traces:.2f}** events (Hungarian) |\n")
-                f.write(f"| **Control-Flow** | 2-Gram Distance (NGD 2-Gram) | --- | --- | **{ngram_2:.4f}** |\n")
-                f.write(f"| **Control-Flow** | 3-Gram Distance (NGD 3-Gram) | --- | --- | **{ngram_3:.4f}** |\n")
-                f.write(f"| **Temporal** | Absolute Event Distribution (AED) | --- | --- | **{aed:.2f}h** EMD |\n")
-                f.write(f"| **Temporal** | Circadian Event Distribution (CED) | --- | --- | **{ced:.2f}h** EMD |\n")
-                f.write(f"| **Temporal** | Relative Event Distribution (RED) | --- | --- | **{red_dist:.2f}h** EMD |\n")
-                f.write(f"| **Workforce** | Circadian Workforce Dist (CWD) | --- | --- | **{cwd:.2f}h** EMD |\n")
-                f.write(f"| **Congestion** | Cycle Time Distribution (CTD) | --- | --- | **{format_dur(ctd)}** |\n")
-                f.write(f"| **Congestion** | Case Arrival Rate (CAR) | --- | --- | **{car:.2f}h** EMD |\n")
-                f.write(f"| **Congestion** | Mean Case Cycle Time | {format_dur(real_mean)} | {format_dur(sim_mean)} | {format_dur(mae_cycle)} MAE |\n")
-                f.write(f"| **Congestion** | Median Case Cycle Time | {format_dur(real_median)} | {format_dur(sim_median)} | --- |\n\n")
-            else:
-                f.write(f"| **Congestion** | Mean Case Cycle Time | N/A | {format_dur(sim_mean)} | --- |\n")
-                f.write(f"| **Congestion** | Median Case Cycle Time | N/A | {format_dur(sim_median)} | --- |\n\n")
-
-            f.write("## Activity Execution Breakdown\n\n")
-            f.write("| Activity | Simulated Count | Sim Mean Duration | Sim Mean Wait | Sim Mean Queue Wait |\n")
-            f.write("|---|---|---|---|---|\n")
-            for act in acts_to_show:
-                cnt = int(sim_act_stats.loc[act, "count"]) if act in sim_act_stats.index else 0
-                s_dur = sim_act_stats.loc[act, "sim_dur"] if act in sim_act_stats.index else 0.0
-                s_wait = sim_act_stats.loc[act, "sim_wait"] if act in sim_act_stats.index else 0.0
-                s_queue = sim_act_stats.loc[act, "sim_queue"] if act in sim_act_stats.index else 0.0
-                f.write(f"| `{act}` | {cnt:,} | {format_dur(s_dur)} | {format_dur(s_wait)} | {format_dur(s_queue)} |\n")
-        print(f"[✓] Saved simulation benchmark report to: {rep_path}\n")
-
-        return {
-            "mode": self.mode,
-            "cases": len(sim_cases),
-            "events": len(df_sim),
-            "cfld": cfld,
-            "l_traces": l_traces,
-            "ngram_2": ngram_2,
-            "ngram_3": ngram_3,
-            "aed": aed,
-            "ced": ced,
-            "cwd": cwd,
-            "red_dist": red_dist,
-            "car": car,
-            "ctd": ctd,
-            "wd": ctd,
-            "real_mean": real_mean,
-            "sim_mean": sim_mean,
-            "real_median": real_median,
-            "sim_median": sim_median,
-            "mae_cycle": mae_cycle,
-            "elapsed": elapsed
+                value = float(fn())
+                if not np.isfinite(value):
+                    raise ValueError("non-finite metric result")
+                metric_status[name] = {"status": "ok"}
+                return value
+            except Exception as exc:
+                metric_status[name] = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+                warnings.warn(f"Metric {name} unavailable: {exc}")
+                return None
+        available = real is not None and not real.empty and not sim.empty
+        functions = {
+            "cfld": lambda: control_flow_log_distance(real, ids, sim, ids, parallel=False),
+            "l_traces": lambda: compute_trace_length_error(real, sim),
+            "ngram_2": lambda: n_gram_distribution_distance(real, ids, sim, ids, n=2),
+            "ngram_3": lambda: n_gram_distribution_distance(real, ids, sim, ids, n=3),
+            "aed": lambda: absolute_event_distribution_distance(real, ids, sim, ids),
+            "ced": lambda: circadian_event_distribution_distance(real, ids, sim, ids),
+            "red_dist": lambda: relative_event_distribution_distance(real, ids, sim, ids),
+            "cwd": lambda: circadian_workforce_distribution_distance(real, ids, sim, ids),
+            "car": lambda: case_arrival_distribution_distance(real, ids, sim, ids),
         }
+        result = {name: calculate(name, fn, available) for name, fn in functions.items()}
+        # Case boundaries include initial waiting, not just the first completed task.
+        def cycle_frame(frame, case_ids, historical=False):
+            if historical and real_bounds is not None:
+                out = real_bounds.loc[real_bounds.index.isin(case_ids)].rename(columns={"min": "start_time", "max": "end_time"}).reset_index().rename(columns={"case:concept:name": "case_id"})
+            elif not historical and statuses is not None:
+                out = statuses[statuses.case_id.isin(case_ids)][["case_id", "arrival", "end"]].rename(columns={"arrival": "start_time", "end": "end_time"}).copy()
+            elif frame is not None:
+                out = frame.groupby("case_id").agg(start_time=("start_time", "min"), end_time=("end_time", "max")).reset_index()
+            else:
+                out = pd.DataFrame(columns=["case_id", "start_time", "end_time"])
+            out["start_time"] = pd.to_datetime(out.start_time, utc=True)
+            out["end_time"] = pd.to_datetime(out.end_time, utc=True)
+            return out
+        rc, sc = cycle_frame(real, real_ids, True), cycle_frame(sim, sim_ids)
+        rcycles = (rc.end_time - rc.start_time).dt.total_seconds()
+        scycles = (sc.end_time - sc.start_time).dt.total_seconds()
+        for prefix, cycles in [("real", rcycles), ("sim", scycles)]:
+            result[prefix + "_mean"] = float(cycles.mean()) if len(cycles) else None
+            result[prefix + "_median"] = float(cycles.median()) if len(cycles) else None
+        cycle_available = len(rc) > 0 and len(sc) > 0
+        result["mae_cycle"] = calculate("mae_cycle", lambda: abs(result["real_mean"] - result["sim_mean"]), cycle_available)
+        bin_size = timedelta(hours=1)
+        result["ctd"] = calculate("ctd", lambda: cycle_time_distribution_distance(rc, ids, sc, ids, bin_size=bin_size) * bin_size.total_seconds(), cycle_available)
+        result["wd"] = result["ctd"]
+        window_available = window_real is not None and not window_real.empty and not window_sim.empty
+        window_metrics = {
+            "aed": calculate("window_aed", lambda: absolute_event_distribution_distance(window_real, ids, window_sim, ids), window_available),
+            "ced": calculate("window_ced", lambda: circadian_event_distribution_distance(window_real, ids, window_sim, ids), window_available),
+            "cwd": calculate("window_cwd", lambda: circadian_workforce_distribution_distance(window_real, ids, window_sim, ids), window_available),
+        }
+        result.update(mode=self.mode, cases=populations["simulated_scheduled"], events=len(df_sim), elapsed=elapsed,
+                      populations=populations, metric_status=metric_status, window_metrics=window_metrics,
+                      metric_units={"ctd": "seconds", "wd": "seconds", "mae_cycle": "seconds"},
+                      completed_case_metrics_conditional=True,
+                      generation_status=getattr(self, "generation_status", {"status": "unknown"}))
+        lines = ["# Simulation benchmark", "", "Full-case metrics below are conditional on completion; censored and failed cases are excluded.",
+                 "Replay uses paired completed IDs. Window metrics use observed intervals clipped at the cutoff; clipped endpoints are not recorded completions.", "",
+                 "## Populations", "", "```json", json.dumps(populations, indent=2), "```", "",
+                 "## Completed-case metrics", "", "| Metric | Value | Status |", "|---|---:|---|"]
+        for name in list(functions) + ["ctd", "mae_cycle"]:
+            val = result[name]
+            display = format_dur(val) if name in ("ctd", "mae_cycle") else "N/A" if val is None else f"{val:.4f}"
+            lines.append(f"| {name} | {display} | {metric_status[name]} |")
+        lines.extend(["", "## Observation-window metrics", "", "```json", json.dumps(window_metrics, indent=2), "```",
+                      "", "## Completed-case cycle times", "",
+                      f"Mean: reference {format_dur(result['real_mean'])}; simulated {format_dur(result['sim_mean'])}.",
+                      f"Median: reference {format_dur(result['real_median'])}; simulated {format_dur(result['sim_median'])}.",
+                      "", "## Activity execution", "",
+                      "| Activity | Completed tasks | Mean duration | Mean waiting | Mean worker queue |",
+                      "|---|---:|---:|---:|---:|"])
+        completed_events = df_sim[df_sim.complete_timestamp.notna()]
+        for act, group in completed_events.groupby("activity"):
+            lines.append(f"| {act} | {len(group)} | {format_dur(group.duration_seconds.mean())} | "
+                         f"{format_dur(group.wait_time_seconds.mean())} | {format_dur(group.queue_wait_seconds.mean())} |")
+        lines.extend(["", "Activity statistics above describe completed tasks in the observation window, including tasks in unfinished cases.",
+                      "", "## Arrival generation", "", "```json", json.dumps(result["generation_status"], indent=2), "```"])
+        out = os.path.join(PROJECT_ROOT, self.cfg.get("paths", {}).get("output_base_dir", "data/processed"))
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "simulation_report.md"), "w") as f:
+            f.write("\n".join(lines) + "\n")
+        with open(os.path.join(out, "simulation_metrics.json"), "w") as f:
+            json.dump(result, f, indent=2, allow_nan=False)
+        print("\n".join(lines))
+        return result

@@ -50,6 +50,7 @@ class SharedWorkerPool:
 
         self.activity_to_role = data.get("activity_to_role", {})
         self.role_to_workers = data.get("role_to_workers", {})
+        self.role_data = data
         self.role_names = data.get("__role_names__") or list(data.get("roles", {}).keys()) or sorted(list(set(self.activity_to_role.values())))
         self.role_capacities = data.get("role_capacities", {r: 1 for r in self.role_names})
 
@@ -182,27 +183,10 @@ class SharedWorkerPool:
                 i += 1
 
     def get_role_occupancy(self, activities_list=None):
-        """Returns concurrent departmental utilization vector matching Role_*_OC."""
-        if not self.role_names:
-            # Fallback for legacy 1-to-1 activity pools if no roles are defined
-            activities_list = activities_list or list(self.activity_pools.keys())
-            oc = []
-            for act in activities_list:
-                eligible = self.activity_pools.get(act, self.all_workers)
-                busy_on_act = sum(1 for w in eligible if act in self.worker_activities[w])
-                oc.append(busy_on_act / max(1, len(eligible)))
-            return oc
-
-        oc = []
-        for r in self.role_names:
-            role_workers = self.role_to_workers.get(r, self.all_workers)
-            active_in_role = sum(
-                1 for w in role_workers
-                if any(self.activity_to_role.get(act) == r for act in self.worker_activities[w])
-            )
-            cap = max(1, self.role_capacities.get(r, len(role_workers)))
-            oc.append(min(1.0, active_in_role / cap))
-        return oc
+        """Fraction of occupied nominal work slots, including cross-role work."""
+        from features import capacity_occupancy
+        return capacity_occupancy(self.role_data, self.worker_active_count,
+                                  self.enable_concurrency_quotas)
 
     def request_worker(self, activity):
         """
@@ -339,6 +323,9 @@ class SimulationProcess:
         self.num_cases = num_cases
         self.duration_days = duration_days if duration_days is not None else cfg.get("simulation", {}).get("duration_simulation")
         self.duration_seconds = float(self.duration_days * 86400.0) if (self.duration_days and float(self.duration_days) > 0) else None
+        self.max_silent_transitions = int(cfg.get("simulation", {}).get("max_silent_transitions", 500))
+        if self.max_silent_transitions < 1:
+            raise ValueError("max_silent_transitions must be positive")
         self.max_events = cfg.get("simulation", {}).get("max_events_per_case", 80)
         self.target_activities = cfg.get("target_activities", [])
         self.force_retrain_prophet = force_retrain_prophet
@@ -572,10 +559,13 @@ class SimulationProcess:
         print(f"Scheduled {len(arrivals):,} cases for simulation.")
 
         # Reference start datetime
-        ref_dt = arrivals[0]["arrival_time"]
+        ref_dt = self.arrivals_generator.origin
+        if ref_dt is None:
+            ref_dt = arrivals[0]["arrival_time"] if arrivals else pd.Timestamp(self.cfg.get("simulation", {}).get("arrival", {}).get("start_timestamp", "2012-01-01 08:00:00"))
         self.calendar.set_ref_dt(ref_dt)
 
         # Launch SimPy Arrival Processes via Token instances
+        tokens = []
         for arr in arrivals:
             offset_seconds = (arr["arrival_time"] - ref_dt).total_seconds()
             token = Token(
@@ -586,6 +576,7 @@ class SimulationProcess:
                 inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0),
                 case_attrs=arr.get("case_attrs", {})
             )
+            tokens.append(token)
             self.env.process(token.run())
 
         start_exec = time.time()
@@ -598,7 +589,23 @@ class SimulationProcess:
         print(f"\n[✓] Simulation completed in {elapsed:.2f} seconds ({len(self.simulated_records):,} events generated).")
 
         # Save simulated event log (CSV)
-        df_sim = pd.DataFrame(self.simulated_records)
+        columns = ["case_id", "activity", "start_timestamp", "complete_timestamp", "resource_id",
+                   "duration_seconds", "wait_time_seconds", "queue_wait_seconds", "wip"]
+        records = self.simulated_records + [record for token in tokens for record in token.pending_work]
+        df_sim = pd.DataFrame(records, columns=columns)
+        case_status = pd.DataFrame([{
+            "case_id": token.case_id, "arrival": self.calendar.to_datetime(token.arrival_offset),
+            "status": "censored" if token.status in ("running", "scheduled") and self.duration_seconds is not None else token.status,
+            "end": self.calendar.to_datetime(token.finished_at) if token.finished_at is not None else None,
+        } for token in tokens], columns=["case_id", "arrival", "status", "end"])
+        self.evaluator.case_status = case_status
+        self.evaluator.window_start = pd.to_datetime(ref_dt, utc=True)
+        self.evaluator.window_end = (self.evaluator.window_start + pd.Timedelta(seconds=self.duration_seconds)
+                                     if self.duration_seconds is not None else None)
+        self.evaluator.generation_status = self.arrivals_generator.generation_status
+        case_path = os.path.splitext(self.evaluator.sim_log_path)[0] + "_cases.csv"
+        os.makedirs(os.path.dirname(case_path), exist_ok=True)
+        case_status.to_csv(case_path, index=False)
         self.evaluator.save_csv(df_sim)
 
         # Save simulated event log (Standard IEEE XES)

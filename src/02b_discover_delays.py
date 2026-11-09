@@ -203,7 +203,7 @@ class ChapelaDelayDiscoveryEngine:
         self.min_break_seconds = min_break_seconds
 
         self.log_path = cfg["paths"]["aligned_log"]
-        self.output_dir = os.path.join(PROJECT_ROOT, "models/delays")
+        self.output_dir = os.path.join(cfg["paths"].get("models_dir", "models"), "delays")
         os.makedirs(self.output_dir, exist_ok=True)
         self.calendar_mgr = CalendarManager.from_config(cfg)
 
@@ -215,6 +215,8 @@ class ChapelaDelayDiscoveryEngine:
 
         start_time = time.time()
         print(f"Loading aligned event log: {self.log_path}...")
+        from temporal_split import require_artifact, stamp_artifact
+        require_artifact(self.cfg, self.log_path)
         df = pm4py.read_xes(self.log_path)
         print(f"Loaded {len(df):,} events across {df['case:concept:name'].nunique():,} cases.")
 
@@ -275,7 +277,10 @@ class ChapelaDelayDiscoveryEngine:
         for inst in instances:
             instances_by_case[inst["case"]].append(inst)
 
-        oracle = ConcurrencyOracle(zeta=self.zeta).fit(instances_by_case)
+        from temporal_split import training_rows
+        train_df = training_rows(df, self.cfg)
+        train_ids = set(train_df["case:concept:name"].astype(str))
+        oracle = ConcurrencyOracle(zeta=self.zeta).fit({c: v for c, v in instances_by_case.items() if c in train_ids})
         print(f"Discovered {len(oracle.concurrent_pairs)} concurrent activity relations.")
 
         # Reconstruct Worker Timelines & Slicing Arrays
@@ -321,6 +326,7 @@ class ChapelaDelayDiscoveryEngine:
 
         for case_id, insts in instances_by_case.items():
             insts_sorted = sorted(insts, key=lambda x: (x["start"], x["end"]))
+            positions = {id(inst): i for i, inst in enumerate(insts_sorted)}
 
             for idx, inst_t in enumerate(insts_sorted):
                 act_t = inst_t["act"]
@@ -332,7 +338,8 @@ class ChapelaDelayDiscoveryEngine:
                     p for p in insts_sorted
                     if p["end"] <= inst_t["start"]
                     and not oracle.are_concurrent(p["act"], act_t)
-                    and p != inst_t
+                    and p is not inst_t
+                    and (p["end"] < inst_t["start"] or positions[id(p)] < idx)
                 ]
                 if not preds:
                     # Initial activity in trace (no causal predecessor in case)
@@ -475,9 +482,10 @@ class ChapelaDelayDiscoveryEngine:
                     "target_act": act_t
                 }
 
-                delay_samples_ex_ante[act_t].append(record)
-                delay_samples_ex_post[act_s].append(record)
-                delay_samples_arcs[(act_s, act_t)].append(record)
+                if str(case_id) in train_ids:
+                    delay_samples_ex_ante[act_t].append(record)
+                    delay_samples_ex_post[act_s].append(record)
+                    delay_samples_arcs[(act_s, act_t)].append(record)
 
                 epoch = int(E.timestamp()) if hasattr(E, "timestamp") else int(pd.to_datetime(E).timestamp())
                 instance_level_records.append({
@@ -607,7 +615,7 @@ class ChapelaDelayDiscoveryEngine:
         # STEP 5: Human Inter-Ticket Latency (Worker Refractory Mining)
         # -------------------------------------------------------------
         print("\n[Step 4/4] Mining Human Inter-Ticket Latency (Worker Refractory Gaps)...")
-        df_shifts = df[df["lifecycle:transition"].isin(["START", "COMPLETE"])].sort_values(by="time:timestamp")
+        df_shifts = train_df[train_df["lifecycle:transition"].isin(["START", "COMPLETE"])].sort_values(by="time:timestamp")
 
         res_events = defaultdict(list)
         needed_shift_cols = [c for c in ["org:resource", "lifecycle:transition", "time:timestamp"] if c in df_shifts.columns]
@@ -694,12 +702,14 @@ class ChapelaDelayDiscoveryEngine:
 
             try:
                 df_instances.to_parquet(parquet_path, index=False)
+                stamp_artifact(self.cfg, parquet_path)
                 print(f"[✓] Saved instance-level causal delays ({len(df_instances):,} records) to: {parquet_path}")
             except Exception as e:
                 print(f"[!] Warning: failed to save parquet ({e}).")
 
             try:
                 df_instances.to_csv(csv_path, index=False, compression="gzip")
+                stamp_artifact(self.cfg, csv_path)
                 print(f"[✓] Saved instance-level causal delays ({len(df_instances):,} records) to: {csv_path}")
             except Exception as e:
                 print(f"[!] Warning: failed to save compressed csv ({e}).")

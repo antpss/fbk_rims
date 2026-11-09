@@ -1,547 +1,203 @@
-import os
-import sys
-import json
+"""Train configured candidates, select on validation, package and evaluate frozen dispatch."""
 import argparse
-import subprocess
+import json
+from pathlib import Path
 import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+
 import numpy as np
-
+import pandas as pd
 from config_loader import load_config, PROJECT_ROOT
+from model_artifacts import prediction_metrics, experiment_id
 
-def format_time_duration(seconds: float) -> str:
-    
-    #e.g. 81,252s (22.6h), 440s (7.3m), or 25.65s.
-    if seconds is None or np.isnan(seconds) or np.isinf(seconds):
-        return "N/A"
-    sec_int = int(round(seconds))
-    if seconds >= 86400:
-        days = seconds / 86400.0
-        return f"{sec_int:,}s ({days:.1f}d)"
-    elif seconds >= 3600:
-        hours = seconds / 3600.0
-        return f"{sec_int:,}s ({hours:.1f}h)"
-    elif seconds >= 60:
-        mins = seconds / 60.0
-        return f"{sec_int:,}s ({mins:.1f}m)"
-    else:
-        return f"{seconds:.2f}s"
 
-def discover_trained_metrics(models_dir, task="duration"):
-    """
-    Scans the models directory for any subdirectories containing metrics.json.
-    Filters by task if specified.
-    """
+def discover_trained_metrics(models_dir, task="duration", candidates=None, identity=None):
     results = []
-    if not os.path.exists(models_dir):
-        return results
-
-    for entry in sorted(os.listdir(models_dir)):
-        if entry.startswith(".") or entry.startswith("_") or entry in ["petri_nets", "petrinets"]:
+    root = Path(models_dir)
+    for folder in sorted(root.iterdir()) if root.exists() else []:
+        if candidates is not None and folder.name not in candidates:
             continue
-        sub_dir = os.path.join(models_dir, entry)
-        metrics_file = os.path.join(sub_dir, "metrics.json")
-        if os.path.isdir(sub_dir) and os.path.exists(metrics_file):
-            try:
-                with open(metrics_file, "r") as f:
-                    data = json.load(f)
-                    if task is None or data.get("task") == task:
-                        data["folder_name"] = entry
-                        results.append(data)
-            except Exception as e:
-                print(f"[Warning] Could not read {metrics_file}: {e}")
+        path = folder / "metrics.json"
+        if folder.name.endswith("champion") or not path.exists():
+            continue
+        data = json.loads(path.read_text())
+        if data.get("task") != task or data.get("selection_partition") != "validation":
+            continue
+        if identity is not None and data.get("experiment_id") != identity:
+            continue
+        data["folder_name"] = folder.name
+        results.append(data)
     return results
 
-def synthesize_champion_hybrid(models_dir, task="duration"):
-    """
-    Analyzes all candidate models, identifies the best performer for each activity,
-    and synthesizes an optimal 'hybrid_champion' dispatch manifest and metrics summary.
-    """
-    candidates = discover_trained_metrics(models_dir, task=task)
-    # Exclude any existing champions so we do not self-reference
-    candidates = [c for c in candidates if c.get("folder_name") not in ["hybrid_champion", "global_champion"]]
-    if len(candidates) < 2:
+
+def valid_entry(root, candidate, act):
+    path = root / candidate["folder_name"] / "dispatch_config.json"
+    if not path.exists():
         return None
-
-    # Collect all activities evaluated across models
-    all_acts = set()
-    for c in candidates:
-        all_acts.update(c.get("activity_metrics", {}).keys())
-    all_acts = sorted(list(all_acts))
-
-    if not all_acts:
+    manifest = json.loads(path.read_text())
+    if manifest.get("experiment_id") != candidate.get("experiment_id"):
         return None
+    entry = manifest["dispatch"].get(act, manifest["dispatch"].get("__default__"))
+    if not isinstance(entry, dict) or not entry.get("file"):
+        return None
+    if not (path.parent / entry["file"]).is_file():
+        return None
+    return dict(entry)
 
-    champion_dir = os.path.join(models_dir, "hybrid_champion")
-    os.makedirs(champion_dir, exist_ok=True)
 
-    champion_dispatch = {
-        "strategy": "hybrid_champion",
-        "task": task,
-        "description": "Synthesized Best-of-All-Worlds Hybrid (dynamically selects champion model per activity)",
-        "source_candidates": [c.get("folder_name") for c in candidates],
-        "dispatch": {}
-    }
-
-    champion_activity_metrics = {}
-    total_samples = 0
-    sum_mae_weighted = 0.0
-    sum_smape_weighted = 0.0
-
-    # Determine global fallback (__default__)
-    global_candidates = [c for c in candidates if "global" in c.get("folder_name", "").lower()]
-    default_cand = min(global_candidates, key=lambda x: x.get("weighted_mae", float("inf"))) if global_candidates else min(candidates, key=lambda x: x.get("weighted_mae", float("inf")))
-
-    default_dispatch_file = os.path.join(models_dir, default_cand["folder_name"], "dispatch_config.json")
-    if os.path.exists(default_dispatch_file):
+def synthesize_champion(models_dir, task="duration", mode="hybrid", candidates=None, identity=None):
+    if mode == "single_global":
+        return None
+    root = Path(models_dir)
+    choices = discover_trained_metrics(root, task, candidates, identity)
+    identities = {c.get("experiment_id") for c in choices}
+    if not choices or len(identities) != 1 or None in identities:
+        raise ValueError("No compatible current-experiment candidates; rerun training")
+    globals_ = [c for c in choices if c.get("strategy") == "global"
+                and c.get("weighted_mae") is not None
+                and c.get("available_count") == c.get("total_count")
+                and valid_entry(root, c, "__default__")]
+    if not globals_:
+        raise ValueError("A fully evaluated global fallback is required")
+    fallback = min(globals_, key=lambda c: (c["weighted_mae"], c["folder_name"]))
+    assignments = {"__default__": fallback}
+    acts = set().union(*(c.get("activity_metrics", {}) for c in choices))
+    for act in sorted(acts):
+        eligible = [c for c in choices if act in c.get("activity_metrics", {})
+                    and np.isfinite(c["activity_metrics"][act]["mae"]) and valid_entry(root, c, act)]
+        assignments[act] = (min(eligible, key=lambda c: (c["activity_metrics"][act]["mae"], c["folder_name"]))
+                            if mode == "hybrid" and eligible else fallback)
+    name = "hybrid_champion" if mode == "hybrid" else "global_champion"
+    manifest = {"schema_version": 2, "task": task, "strategy": name,
+                "experiment_id": next(iter(identities)), "dispatch": {}}
+    # Decide and freeze routing before consulting held-out predictions.
+    for act, candidate in assignments.items():
+        manifest["dispatch"][act] = {**valid_entry(root, candidate, act), "bundle": candidate["folder_name"]}
+    selected = {c["folder_name"] for c in assignments.values()}
+    stage = Path(tempfile.mkdtemp(prefix=".champion-", dir=root))
+    try:
+        for folder in selected:
+            source = root / folder
+            child = json.loads((source / "dispatch_config.json").read_text())
+            files = {entry["file"] for entry in child["dispatch"].values() if entry.get("file")}
+            files.update({"dispatch_config.json", "training_metadata.json"})
+            files.update(path.name for path in source.glob("scaler_*.pkl"))
+            files.update(name for name in ("vocab.json", "categories.json") if (source / name).exists())
+            (stage / folder).mkdir()
+            for filename in files:
+                shutil.copyfile(source / filename, stage / folder / filename)
+        shutil.copyfile(root / fallback["folder_name"] / "training_metadata.json", stage / "training_metadata.json")
+        (stage / "dispatch_config.json").write_text(json.dumps(manifest, indent=2))
+        # Validation and test rows must have identical identities/targets across candidates.
+        tables = {folder: pd.read_csv(root / folder / "predictions.csv", dtype={"Case_ID": str, "Instance_ID": str}) for folder in selected}
+        base = tables[fallback["folder_name"]].copy()
+        keys = ["Case_ID", "Instance_ID", "Partition", "Target_Activity"]
+        for table in tables.values():
+            if table.duplicated(keys).any():
+                raise ValueError("Duplicate evaluation instance identity")
+            check = base[keys + ["Actual"]].merge(table[keys + ["Actual"]], on=keys, how="outer", suffixes=("_base", "_candidate"))
+            if len(check) != len(base) or not np.array_equal(check.Actual_base, check.Actual_candidate):
+                raise ValueError("Candidate evaluation populations differ")
+        for act in base.Target_Activity.unique():
+            folder = assignments.get(act, fallback)["folder_name"]
+            mask = base.Target_Activity == act
+            rows = base.loc[mask, keys].merge(tables[folder], on=keys, validate="one_to_one", how="left")
+            base.loc[mask, "Predicted"] = rows.Predicted.to_numpy()
+            base.loc[mask, "Source_Model"] = folder
+        if not np.isfinite(base.Predicted).all():
+            raise ValueError("Frozen champion has unavailable predictions")
+        result = {"task": task, "strategy": mode, "model_type": "champion", "folder_name": name,
+                  "experiment_id": manifest["experiment_id"], "selection_partition": "validation",
+                  **prediction_metrics(base[base.Partition == "validation"]),
+                  "test_metrics": prediction_metrics(base[base.Partition == "test"])}
+        (stage / "metrics.json").write_text(json.dumps(result, indent=2, allow_nan=False))
+        base.to_csv(stage / "predictions.csv", index=False)
+        # Loading the staged suite checks architecture, weights, vocab and scaler together.
+        from simulator.predictor import ChampionPredictor
+        loader = ChampionPredictor.__new__(ChampionPredictor)
+        loader._load_model_suite(str(stage), manifest["dispatch"])
+        destination = root / name
+        backup = root / ("." + name + "-" + uuid.uuid4().hex)
+        if destination.exists():
+            destination.rename(backup)
         try:
-            with open(default_dispatch_file) as f:
-                d_table = json.load(f)
-                def_entry = d_table.get("dispatch", {}).get("__default__", {})
-                if isinstance(def_entry, dict):
-                    champion_dispatch["dispatch"]["__default__"] = {
-                        "model_type": def_entry.get("model_type", default_cand.get("model_type")),
-                        "source_dir": default_cand["folder_name"],
-                        "file": def_entry.get("file")
-                    }
-                else:
-                    champion_dispatch["dispatch"]["__default__"] = {
-                        "model_type": default_cand.get("model_type"),
-                        "source_dir": default_cand["folder_name"],
-                        "file": str(def_entry)
-                    }
-        except Exception:
-            pass
+            stage.rename(destination)
+        except BaseException:
+            if backup.exists():
+                backup.rename(destination)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
+        return result
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
 
-    # For each activity, pick the champion
-    for act in all_acts:
-        best_cand = None
-        best_mae = float("inf")
-        best_act_data = None
 
-        for c in candidates:
-            act_data = c.get("activity_metrics", {}).get(act)
-            if act_data and act_data.get("mae") is not None:
-                if act_data["mae"] < best_mae:
-                    best_mae = act_data["mae"]
-                    best_cand = c
-                    best_act_data = act_data
+def synthesize_champion_hybrid(models_dir, task="duration"):
+    return synthesize_champion(models_dir, task, "hybrid")
 
-        if best_cand and best_act_data:
-            cnt = best_act_data.get("count", 0)
-            mae = best_act_data.get("mae", 0.0)
-            smape = best_act_data.get("smape", 0.0)
-            src_folder = best_cand["folder_name"]
-
-            # Read artifact filename from best_cand's dispatch_config.json
-            cand_dispatch_file = os.path.join(models_dir, src_folder, "dispatch_config.json")
-            model_file = None
-            model_type = best_cand.get("model_type", "unknown")
-            if os.path.exists(cand_dispatch_file):
-                try:
-                    with open(cand_dispatch_file) as f:
-                        c_table = json.load(f)
-                        entry = c_table.get("dispatch", {}).get(act)
-                        if entry is None:
-                            entry = c_table.get("dispatch", {}).get("__default__")
-                        if isinstance(entry, dict):
-                            model_file = entry.get("file")
-                            model_type = entry.get("model_type", model_type)
-                        elif isinstance(entry, str):
-                            model_file = entry
-                except Exception:
-                    pass
-
-            champion_dispatch["dispatch"][act] = {
-                "model_type": model_type,
-                "source_dir": src_folder,
-                "file": model_file,
-                "best_test_mae": round(mae, 2),
-                "best_test_smape": round(smape, 2)
-            }
-
-            champion_activity_metrics[act] = {
-                "count": cnt,
-                "model_source": f"{src_folder} ({model_type.upper()})",
-                "mae": round(mae, 2),
-                "smape": round(smape, 2)
-            }
-
-            total_samples += cnt
-            sum_mae_weighted += mae * cnt
-            sum_smape_weighted += smape * cnt
-
-    weighted_mae = (sum_mae_weighted / total_samples) if total_samples > 0 else 0.0
-    weighted_smape = (sum_smape_weighted / total_samples) if total_samples > 0 else 0.0
-    macro_mae = np.mean([v["mae"] for v in champion_activity_metrics.values()]) if champion_activity_metrics else 0.0
-
-    # Copy auxiliary assets (vocab.json, scalers, and model weight binaries) into champion_dir for standalone deployment
-    for act, info in champion_dispatch["dispatch"].items():
-        s_folder = info.get("source_dir")
-        if not s_folder:
-            continue
-        src_dir = os.path.join(models_dir, s_folder)
-        if not os.path.exists(src_dir):
-            continue
-        v_src = os.path.join(src_dir, "vocab.json")
-        if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
-            shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
-        c_src = os.path.join(src_dir, "categories.json")
-        if os.path.exists(c_src) and not os.path.exists(os.path.join(champion_dir, "categories.json")):
-            shutil.copy(c_src, os.path.join(champion_dir, "categories.json"))
-        # Copy model binary file
-        m_file = info.get("file")
-        if m_file:
-            m_src = os.path.join(src_dir, m_file)
-            if os.path.exists(m_src):
-                shutil.copy(m_src, os.path.join(champion_dir, m_file))
-        for fname in os.listdir(src_dir):
-            if fname.startswith("scaler_") and fname.endswith(".pkl"):
-                dest = os.path.join(champion_dir, fname)
-                shutil.copy(os.path.join(src_dir, fname), dest)
-
-    # Save champion dispatch_config.json
-    with open(os.path.join(champion_dir, "dispatch_config.json"), "w") as f:
-        json.dump(champion_dispatch, f, indent=2)
-
-    # Save champion metrics.json
-    champion_metrics = {
-        "task": task,
-        "strategy": "hybrid",
-        "model_type": "champion",
-        "folder_name": "hybrid_champion",
-        "training_time_seconds": round(sum(c.get("training_time_seconds", 0.0) for c in candidates), 2),
-        "weighted_mae": round(weighted_mae, 2),
-        "weighted_smape": round(weighted_smape, 2),
-        "macro_mae": round(macro_mae, 2),
-        "activity_metrics": champion_activity_metrics
-    }
-    with open(os.path.join(champion_dir, "metrics.json"), "w") as f:
-        json.dump(champion_metrics, f, indent=2)
-
-    return champion_metrics
 
 def synthesize_champion_global(models_dir, task="duration"):
-    """
-    Analyzes global candidate models, crowns the single best performing global engine,
-    and synthesizes a 'global_champion' dispatch manifest and metrics summary.
-    """
-    candidates = discover_trained_metrics(models_dir, task=task)
-    candidates = [c for c in candidates if c.get("folder_name") not in ["hybrid_champion", "global_champion"]]
-    global_cands = [c for c in candidates if c.get("strategy") == "global" or "global" in c.get("folder_name", "").lower()]
-    if not global_cands:
-        return None
+    return synthesize_champion(models_dir, task, "global_tournament")
 
-    best_cand = min(global_cands, key=lambda x: x.get("weighted_mae", float("inf")))
-    champion_dir = os.path.join(models_dir, "global_champion")
-    os.makedirs(champion_dir, exist_ok=True)
-
-    src_folder = best_cand["folder_name"]
-    cand_dispatch_file = os.path.join(models_dir, src_folder, "dispatch_config.json")
-    model_file = None
-    model_type = best_cand.get("model_type", "unknown")
-    if os.path.exists(cand_dispatch_file):
-        try:
-            with open(cand_dispatch_file) as f:
-                c_table = json.load(f)
-                entry = c_table.get("dispatch", {}).get("__default__")
-                if isinstance(entry, dict):
-                    model_file = entry.get("file")
-                    model_type = entry.get("model_type", model_type)
-                elif isinstance(entry, str):
-                    model_file = entry
-        except Exception:
-            pass
-
-    champion_dispatch = {
-        "strategy": "global_champion",
-        "task": task,
-        "description": "Winning Global Engine (selected across competing global architectures)",
-        "winning_engine": model_type,
-        "source_candidate": src_folder,
-        "dispatch": {
-            "__default__": {
-                "model_type": model_type,
-                "source_dir": src_folder,
-                "file": model_file,
-                "best_test_mae": best_cand.get("weighted_mae"),
-                "best_test_smape": best_cand.get("weighted_smape")
-            }
-        }
-    }
-    for act, act_m in best_cand.get("activity_metrics", {}).items():
-        champion_dispatch["dispatch"][act] = {
-            "model_type": model_type,
-            "source_dir": src_folder,
-            "file": model_file,
-            "best_test_mae": act_m.get("mae"),
-            "best_test_smape": act_m.get("smape")
-        }
-
-    # Copy auxiliary assets (vocab.json, scalers, and model binary) into global_champion for standalone deployment
-    src_dir = os.path.join(models_dir, src_folder)
-    v_src = os.path.join(src_dir, "vocab.json")
-    if os.path.exists(v_src) and not os.path.exists(os.path.join(champion_dir, "vocab.json")):
-        shutil.copy(v_src, os.path.join(champion_dir, "vocab.json"))
-    c_src = os.path.join(src_dir, "categories.json")
-    if os.path.exists(c_src) and not os.path.exists(os.path.join(champion_dir, "categories.json")):
-        shutil.copy(c_src, os.path.join(champion_dir, "categories.json"))
-    if model_file:
-        m_src = os.path.join(src_dir, model_file)
-        if os.path.exists(m_src):
-            shutil.copy(m_src, os.path.join(champion_dir, model_file))
-    for fname in os.listdir(src_dir):
-        if fname.startswith("scaler_") and fname.endswith(".pkl"):
-            dest = os.path.join(champion_dir, fname)
-            if not os.path.exists(dest):
-                shutil.copy(os.path.join(src_dir, fname), dest)
-
-    with open(os.path.join(champion_dir, "dispatch_config.json"), "w") as f:
-        json.dump(champion_dispatch, f, indent=2)
-
-    champion_metrics = {
-        "task": task,
-        "strategy": "global",
-        "model_type": "champion",
-        "folder_name": "global_champion",
-        "training_time_seconds": best_cand.get("training_time_seconds", 0.0),
-        "weighted_mae": best_cand.get("weighted_mae", 0.0),
-        "weighted_smape": best_cand.get("weighted_smape", 0.0),
-        "macro_mae": best_cand.get("macro_mae", 0.0),
-        "activity_metrics": best_cand.get("activity_metrics", {})
-    }
-    with open(os.path.join(champion_dir, "metrics.json"), "w") as f:
-        json.dump(champion_metrics, f, indent=2)
-
-    return champion_metrics
-
-def synthesize_champion(models_dir, task="duration", mode="hybrid"):
-    """
-    Synthesizes the champion deployment according to active mode:
-    - 'global_tournament': crowns the best global architecture
-    - 'hybrid': synthesizes the per-activity hybrid champion
-    - 'single_global': standalone single model, no tournament synthesis needed
-    """
-    if mode == "global_tournament":
-        return synthesize_champion_global(models_dir, task=task)
-    elif mode == "single_global":
-        return None
-    else:
-        return synthesize_champion_hybrid(models_dir, task=task)
-
-def print_comparison_table(metrics_list, models_dir, task="duration"):
-    """
-    Renders an ASCII and Markdown comparison table across all evaluated models.
-    """
-    if not metrics_list:
-        print("\n[!] No trained model metrics found. Train models first using src/04_train.py.")
-        return
-
-    task_title = task.replace("_", " ").title()
-
-    # Sort by Weighted MAE (ascending, best first)
-    metrics_list = sorted(metrics_list, key=lambda x: x.get("weighted_mae", float("inf")))
-
-    print("\n" + "=" * 105)
-    print(f"                     RIMS++ {task_title.upper()} MODEL BENCHMARK RESULTS")
-    print("=" * 105)
-    header = f"{'Configuration':<26} | {'Strategy':<8} | {'Engine':<12} | {'MAE':>18} | {'SMAPE (%)':>9} | {'Train (s)':>9}"
-    print(header)
-    print("-" * 105)
-
-    md_lines = [
-        f"# RIMS++ {task_title} Model Benchmark Report\n",
-        "| Configuration | Strategy | Engine | Test MAE | Test SMAPE (%) | Training Time (s) |",
-        "| :--- | :--- | :--- | :---: | :---: | :---: |"
-    ]
-
-    for i, m in enumerate(metrics_list):
-        cfg_name = m.get("folder_name", "unknown")
-        strat = m.get("strategy", "-")
-        mtype = m.get("model_type", "-")
-        mae = m.get("weighted_mae", 0.0)
-        smape = m.get("weighted_smape", 0.0)
-        ttime = m.get("training_time_seconds", 0.0)
-        mae_str = format_time_duration(mae)
-
-        is_champion = (i == 0)
-        star = " ★ (Champion)" if is_champion else ""
-        print(f"{cfg_name:<26} | {strat:<8} | {mtype:<12} | {mae_str:>18} | {smape:>8.2f}% | {ttime:>8.2f}s{star}")
-
-        cfg_label = f"**{cfg_name}**" if is_champion else cfg_name
-        md_lines.append(f"| {cfg_label} | `{strat}` | `{mtype}` | **{mae_str}** | {smape:.2f}% | {ttime:.2f}s |")
-
-    print("=" * 105)
-
-    # Activity-level breakdown
-    all_acts = set()
-    for m in metrics_list:
-        all_acts.update(m.get("activity_metrics", {}).keys())
-    all_acts = sorted(list(all_acts))
-
-    if all_acts:
-        col_w = 18
-        print("\n" + "=" * (35 + len(metrics_list) * (col_w + 3)))
-        print(f"                        ACTIVITY-LEVEL MAE COMPARISON")
-        print("=" * (35 + len(metrics_list) * (col_w + 3)))
-        act_header = f"{'Activity':<32} | " + " | ".join([f"{m.get('folder_name')[:col_w]:>{col_w}}" for m in metrics_list])
-        print(act_header)
-        print("-" * (35 + len(metrics_list) * (col_w + 3)))
-
-        md_lines.append("\n## Activity-Level MAE Breakdown\n")
-        md_act_header = "| Activity | " + " | ".join([f"`{m.get('folder_name')}`" for m in metrics_list]) + " |"
-        md_act_sep = "| :--- | " + " | ".join([":---:" for _ in metrics_list]) + " |"
-        md_lines.append(md_act_header)
-        md_lines.append(md_act_sep)
-
-        for act in all_acts:
-            row_raw_maes = []
-            for m in metrics_list:
-                act_data = m.get("activity_metrics", {}).get(act)
-                if act_data:
-                    row_raw_maes.append(act_data.get("mae", float("inf")))
-                else:
-                    row_raw_maes.append(float("inf"))
-
-            min_act_mae = min(row_raw_maes) if row_raw_maes else 0.0
-
-            row_strs = []
-            md_row_strs = []
-            for val in row_raw_maes:
-                if val != float("inf"):
-                    val_fmt = format_time_duration(val)
-                    best_mark = "*" if val == min_act_mae else " "
-                    row_strs.append(f"{val_fmt:>{col_w-1}}{best_mark}")
-                    md_val = f"**{val_fmt}**" if val == min_act_mae else val_fmt
-                    md_row_strs.append(md_val)
-                else:
-                    row_strs.append(f"{'N/A':>{col_w}}")
-                    md_row_strs.append("N/A")
-
-            print(f"{act:<32} | " + " | ".join(row_strs))
-            md_lines.append(f"| {act} | " + " | ".join(md_row_strs) + " |")
-
-        print("=" * (35 + len(metrics_list) * (col_w + 3)))
-        print("(* indicates best performer for that specific activity)\n")
-
-    # Add Champion Hybrid Assignment table to Markdown
-    champ_dispatch_file = os.path.join(models_dir, "hybrid_champion", "dispatch_config.json")
-    if os.path.exists(champ_dispatch_file):
-        try:
-            with open(champ_dispatch_file) as f:
-                c_data = json.load(f)
-            md_lines.append("\n## Hybrid Champion Architecture Assignment\n")
-            md_lines.append("| Activity | Winning Model | Model Engine | Test MAE | Best SMAPE (%) |")
-            md_lines.append("| :--- | :--- | :---: | :---: | :---: |")
-            for act, info in sorted(c_data.get("dispatch", {}).items()):
-                if act == "__default__":
-                    continue
-                s_dir = info.get("source_dir", "-")
-                m_type = info.get("model_type", "-").upper()
-                mae_val = info.get("best_test_mae", "-")
-                smape_val = info.get("best_test_smape", "-")
-                mae_fmt = format_time_duration(float(mae_val)) if mae_val != "-" else "-"
-                md_lines.append(f"| **{act}** | `{s_dir}` | **{m_type}** | **{mae_fmt}** | {smape_val}% |")
-            def_info = c_data.get("dispatch", {}).get("__default__", {})
-            if def_info:
-                md_lines.append(f"| *Fallback (`__default__`)* | `{def_info.get('source_dir')}` | `{def_info.get('model_type', '').upper()}` | — | — |")
-        except Exception:
-            pass
-
-    glob_champ_file = os.path.join(models_dir, "global_champion", "dispatch_config.json")
-    if os.path.exists(glob_champ_file):
-        try:
-            with open(glob_champ_file) as f:
-                g_data = json.load(f)
-            def_info = g_data.get("dispatch", {}).get("__default__", {})
-            md_lines.append("\n##  Global Champion Architecture Assignment\n")
-            md_lines.append("| Winning Global Model | Engine | Test MAE | Best SMAPE (%) |")
-            md_lines.append("| :--- | :---: | :---: | :---: |")
-            s_dir = def_info.get("source_dir", "-")
-            m_type = def_info.get("model_type", "-").upper()
-            mae_val = def_info.get("best_test_mae", "-")
-            smape_val = def_info.get("best_test_smape", "-")
-            mae_fmt = format_time_duration(float(mae_val)) if mae_val != "-" else "-"
-            md_lines.append(f"| `{s_dir}` | **{m_type}** | **{mae_fmt}** | {smape_val}% |")
-        except Exception:
-            pass
-
-    # Save Markdown report
-    report_path = os.path.join(models_dir, "benchmark_report.md")
-    with open(report_path, "w") as f:
-        f.write("\n".join(md_lines) + "\n")
-    print(f"[✓] Saved comprehensive benchmark report to: {report_path}\n")
 
 def run_training_experiment(strategy, model_type, task="duration", config_path=None):
-    """
-    Executes a single training run via python src/04_train.py.
-    """
-    cmd = [
-        sys.executable,
-        os.path.join(PROJECT_ROOT, "src", "04_train.py"),
-        "--task", task,
-        "--strategy", strategy,
-        "--model_type", model_type
-    ]
+    cmd = [sys.executable, str(Path(PROJECT_ROOT)/"src/04_train.py"), "--task", task,
+           "--strategy", strategy, "--model_type", model_type]
     if config_path:
-        cmd.extend(["--config", config_path])
-    print(f"\n>>> Running: {' '.join(cmd)}")
+        cmd += ["--config", config_path]
     subprocess.run(cmd, check=True)
 
+
+def print_comparison_table(metrics_list, models_dir, task="duration"):
+    def fmt(v):
+        return "N/A" if v is None else f"{v:.3f}"
+    lines = [f"# {task} candidate validation results", "",
+             "Selection uses validation MAE. Partial-coverage candidates are eligible only for activities they actually predict.", "",
+             "| Candidate | Validation MAE (s) | Coverage | Frozen champion test MAE (s) |",
+             "|---|---:|---:|---:|"]
+    for m in metrics_list:
+        lines.append(f"| {m['folder_name']} | {fmt(m.get('weighted_mae'))} | {m.get('available_count')}/{m.get('total_count')} | {fmt(m.get('test_metrics', {}).get('weighted_mae'))} |")
+    text = "\n".join(lines) + "\n"
+    print(text)
+    (Path(models_dir)/"benchmark_report.md").write_text(text)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="RIMS++ Model Benchmarking & Comparison Suite")
-    parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
-    parser.add_argument("--task", type=str, default="duration", choices=["duration", "waiting_time"], help="Task to benchmark")
-    parser.add_argument("--mode", type=str, default=None, choices=["hybrid", "global_tournament", "single_global"],
-                        help="Exploration mode (hybrid, global_tournament, single_global). Defaults to config.yaml")
-    parser.add_argument("--compare", "--report", dest="compare", action="store_true", help="Compare already trained models in models/ and synthesize champion")
-    parser.add_argument("--run_all", "--tournament", dest="run_all", action="store_true", help="Train candidate models, run tournament, and synthesize champion")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--task", choices=["duration", "waiting_time"], default="duration")
+    parser.add_argument("--mode", choices=["hybrid", "global_tournament", "single_global"])
+    parser.add_argument("--compare", "--report", action="store_true")
+    parser.add_argument("--run_all", "--tournament", action="store_true")
     args = parser.parse_args()
-
     cfg = load_config(args.config)
-    strat_cfg = cfg.get("model_strategy", {})
-    mode = args.mode or strat_cfg.get("mode", "hybrid")
-
-    models_dir = os.path.join(PROJECT_ROOT, cfg["paths"]["models_dir"], args.task)
-    os.makedirs(models_dir, exist_ok=True)
-
+    settings = cfg.get("model_strategy", {})
+    mode = args.mode or settings.get("mode", "hybrid")
+    candidates = ([{"strategy": "global", "engine": settings.get("single_global_engine", "xgboost")}]
+                  if mode == "single_global" else settings.get("candidates", {}).get(mode, []))
+    if not candidates:
+        raise ValueError(f"Configure model_strategy.candidates.{mode}")
+    root = Path(cfg["paths"]["models_dir"]) / args.task
+    root.mkdir(parents=True, exist_ok=True)
     if args.run_all:
-        print("\n" + "=" * 80)
-        print(f"      LAUNCHING RIMS++ [{args.task.upper()}] BENCHMARK SUITE")
-        print(f"      Mode: [{mode.upper()}]")
-        print("=" * 80)
+        for c in candidates:
+            run_training_experiment(c["strategy"], c["engine"], args.task, args.config)
+    names = [c["strategy"] + "_" + c["engine"] for c in candidates]
+    identity = experiment_id(cfg, Path(cfg["paths"]["output_base_dir"]) / cfg["tasks"][args.task]["output_file"])
+    champion = synthesize_champion(root, args.task, mode, names, identity)
+    results = discover_trained_metrics(root, args.task, names, identity)
+    if mode == "single_global":
+        if len(results) != 1:
+            raise ValueError("Requested current-experiment single model is unavailable")
+        table = pd.read_csv(root / names[0] / "predictions.csv")
+        results[0]["test_metrics"] = prediction_metrics(table[table.Partition == "test"])
+    print_comparison_table(results + ([champion] if champion else []), root, args.task)
 
-        if mode == "single_global":
-            engine = strat_cfg.get("single_global_engine", "xgboost")
-            run_training_experiment("global", engine, task=args.task, config_path=args.config)
-        else:
-            candidates_list = strat_cfg.get("candidates", {}).get(mode, [])
-            if not candidates_list:
-                if mode == "global_tournament":
-                    candidates_list = [
-                        {"strategy": "global", "engine": "xgboost"},
-                        {"strategy": "global", "engine": "tcn"}
-                    ]
-                else:
-                    candidates_list = [
-                        {"strategy": "global", "engine": "xgboost"},
-                        {"strategy": "local", "engine": "xgboost"},
-                        {"strategy": "global", "engine": "tcn"},
-                        {"strategy": "local", "engine": "tcn"}
-                    ]
-            for cand in candidates_list:
-                run_training_experiment(cand["strategy"], cand["engine"], task=args.task, config_path=args.config)
-
-    # Synthesize the Champion from available candidate models
-    champion = synthesize_champion(models_dir, task=args.task, mode=mode)
-    if champion:
-        label = "Hybrid" if mode == "hybrid" else "Global"
-        folder = "hybrid_champion" if mode == "hybrid" else "global_champion"
-        print(f"[✓] Synthesized Best-of-All-Worlds {label} Champion: {champion['weighted_mae']}s MAE ({champion['weighted_smape']}% SMAPE)")
-        print(f"    Saved champion dispatch table to: {os.path.join(models_dir, folder, 'dispatch_config.json')}")
-
-    # Discover and display the full comparison leaderboard
-    metrics_list = discover_trained_metrics(models_dir, task=args.task)
-    print_comparison_table(metrics_list, models_dir, task=args.task)
 
 if __name__ == "__main__":
     main()

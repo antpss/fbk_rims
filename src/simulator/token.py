@@ -38,6 +38,9 @@ class Token:
         self.prefix = []
         self.trace_history = defaultdict(int)
         self.events_done = 0
+        self.status = "scheduled"
+        self.finished_at = None
+        self.pending_work = []
         self.prev_act = None
         self.prev_dur = 0.0
         self.dp_counts = defaultdict(int)
@@ -104,25 +107,26 @@ class Token:
     def _partition_and_resolve_transitions(self, enabled):
         """Partitions enabled transitions into independent conflict sets and selects one transition per conflict set.
         Transitions sharing an input place are in XOR conflict; transitions with disjoint input places run concurrently (AND-split)."""
-        # Build conflict graph
-        selected = []
+        # Reserve inputs on a provisional marking. Recompute after every choice:
+        # a connected conflict component can still contain concurrent transitions.
+        provisional = self.marking.copy()
         remaining = list(enabled)
+        selected = []
         while remaining:
-            first = remaining.pop(0)
-            group = [first]
-            first_in = set(arc.source for arc in first.in_arcs)
-            idx = 0
-            while idx < len(remaining):
-                cand = remaining[idx]
-                cand_in = set(arc.source for arc in cand.in_arcs)
-                if first_in & cand_in:
-                    group.append(cand)
-                    first_in.update(cand_in)
-                    remaining.pop(idx)
-                else:
-                    idx += 1
-            chosen = self._resolve_conflict_group(group)
+            remaining = [t for t in remaining if semantics.is_enabled(t, self.process.net, provisional)]
+            if not remaining:
+                break
+            first = remaining[0]
+            inputs = {arc.source for arc in first.in_arcs}
+            competitors = [t for t in remaining if t == first or
+                           inputs.intersection(arc.source for arc in t.in_arcs)]
+            chosen = self._resolve_conflict_group(competitors) if len(competitors) > 1 else first
+            for arc in chosen.in_arcs:
+                provisional[arc.source] -= arc.weight
+                if provisional[arc.source] == 0:
+                    del provisional[arc.source]
             selected.append(chosen)
+            remaining.remove(chosen)
         return selected
 
     def _execute_work_item(self, chosen_t, on_complete):
@@ -133,18 +137,6 @@ class Token:
         act_occurrences = self.prefix.count(act)
         loop_decay = 0.5 ** act_occurrences if act_occurrences > 0 else 1.0
 
-        # 3. Chapela-Campa Transition-Arc Delay (specific) or Ex-Ante Extraneous Delay (generic fallback)
-        ext_delay = 0.0
-        if self.prev_act and (self.prev_act, act) in self.process.external_delays:
-            ext_delay = self.process.sample_external_delay(self.prev_act, act) * loop_decay
-            if ext_delay > 0:
-                yield self.env.timeout(ext_delay)
-        elif self.process.has_ex_ante_delay(act):
-            ext_delay = self.process.sample_ex_ante_delay(act) * loop_decay
-            if ext_delay > 0:
-                yield self.env.timeout(ext_delay)
-
-        # 4. Worklist Waiting Time (ML expectation: batching & uncoupled backlog)
         role_oc = self.process.workers.get_role_occupancy(self.process.target_activities)
         curr_dt = self.process.calendar.to_datetime(self.env.now)
         if self.process.mode == "hybrid_residual":
@@ -156,11 +148,20 @@ class Token:
                 trace_history=dict(self.trace_history),
                 case_attrs=self.case_attrs
             )
-            w_worklist = max(0.0, w_ml * loop_decay - ext_delay)
-            if w_worklist > 0:
-                yield self.env.timeout(w_worklist)
         else:
-            w_worklist = 0.0
+            w_ml = 0.0
+
+        # Prediction observes eligibility, before any external delay is consumed.
+        ext_delay = 0.0
+        if self.prev_act and (self.prev_act, act) in self.process.external_delays:
+            ext_delay = self.process.sample_external_delay(self.prev_act, act) * loop_decay
+        elif self.process.has_ex_ante_delay(act):
+            ext_delay = self.process.sample_ex_ante_delay(act) * loop_decay
+        w_worklist = max(0.0, w_ml * loop_decay - ext_delay)
+        if ext_delay > 0:
+            yield self.env.timeout(ext_delay)
+        if w_worklist > 0:
+            yield self.env.timeout(w_worklist)
 
         act_type = self.process.activity_profiles.get(act, "HUMAN_WORK_ITEM")
         if act_type == "AUTOMATED_TASK":
@@ -223,7 +224,14 @@ class Token:
         actual_dur = self.process.calendar.calculate_calendar_duration(
             self.env.now, dur_pred, role_or_act=act
         )
+        pending_record = {"case_id": self.case_id, "activity": act,
+                          "start_timestamp": self.process.calendar.to_datetime(t_start),
+                          "complete_timestamp": None, "resource_id": worker_id,
+                          "duration_seconds": None, "wait_time_seconds": total_wait,
+                          "queue_wait_seconds": w_queue, "wip": self.process.active_cases_count}
+        self.pending_work.append(pending_record)
         yield self.env.timeout(actual_dur)
+        self.pending_work.remove(pending_record)
         t_comp = self.env.now
 
         # 8. Release Worker
@@ -264,6 +272,7 @@ class Token:
         """
         yield self.env.timeout(self.arrival_offset)
 
+        self.status = "running"
         self.process.active_cases_count += 1
         active_tasks = 0
         marking_event = self.env.event()
@@ -309,8 +318,10 @@ class Token:
                 if chosen_t.label is None:
                     self.marking = semantics.execute(chosen_t, self.process.net, self.marking)
                     silent_chain_guard += 1
-                    if silent_chain_guard < 500:
-                        immediate_progress = True
+                    limit = getattr(self.process, "max_silent_transitions", 500)
+                    if silent_chain_guard >= limit:
+                        raise RuntimeError(f"Case {self.case_id}: exceeded {limit} consecutive silent transitions at t={self.env.now}; marking={self.marking}")
+                    immediate_progress = True
                     continue
 
                 silent_chain_guard = 0
@@ -360,5 +371,8 @@ class Token:
                 marking_event = self.env.event()
                 yield marking_event
 
+        self.status = ("completed" if self.marking == self.process.fm and active_tasks == 0 else
+                       "limit_failed" if self.events_done >= self.process.max_events else "deadlocked")
+        self.finished_at = self.env.now
         self.process.active_cases_count = max(0, self.process.active_cases_count - 1)
 

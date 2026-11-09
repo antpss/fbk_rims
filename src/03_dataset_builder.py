@@ -1,15 +1,14 @@
 import os
 import json
 import argparse
-from collections import defaultdict
 import pandas as pd
 import numpy as np
 import pm4py
 from config_loader import load_config, PROJECT_ROOT
 try:
-    from features import FeatureManager, FeatureContext
+    from features import FeatureManager
 except ImportError:
-    from src.features import FeatureManager, FeatureContext
+    from src.features import FeatureManager
 try:
     from simulator.calendar import CalendarManager
 except ImportError:
@@ -33,13 +32,19 @@ def build_dataset(cfg, task_name="duration"):
     if not os.path.exists(log_path):
         raise FileNotFoundError(f"Aligned log not found at: {log_path}")
 
+    from temporal_split import require_artifact
+    require_artifact(cfg, log_path)
     print(f"Loading aligned log: {log_path}")
     log = pm4py.read_xes(log_path)
     df = pm4py.convert_to_dataframe(log)
 
+    from temporal_split import training_rows, split_manifest
+    fit_df = training_rows(df, cfg)
+    manifest = split_manifest(cfg) if "model_strategy" in cfg else None
+
     activities = cfg.get("target_activities", [])
     if not activities:
-        activities = sorted(df['concept:name'].dropna().unique().tolist())
+        activities = sorted(fit_df['concept:name'].dropna().unique().tolist())
         print(f"Target activities: [AUTO-DISCOVERED {len(activities)} activities from log]: {activities}")
     else:
         print(f"Target activities ({len(activities)} configured): {activities}")
@@ -55,7 +60,7 @@ def build_dataset(cfg, task_name="duration"):
     for attr in case_attrs:
         col = attr["column"]
         clean_col = col.replace("case:", "")
-        series = df[col] if col in df.columns else (df[clean_col] if clean_col in df.columns else pd.Series(dtype=float))
+        series = fit_df[col] if col in fit_df.columns else (fit_df[clean_col] if clean_col in fit_df.columns else pd.Series(dtype=float))
         is_cont = (attr.get("type") == "continuous")
         treat_zero = attr.get("treat_zero_as_missing", False)
         if is_cont:
@@ -87,14 +92,14 @@ def build_dataset(cfg, task_name="duration"):
 
     # Pre-calculate original complete distributions for sample weighting
     if 'lifecycle:transition' in df.columns:
-        trans_col = df['lifecycle:transition'].astype(str).str.upper()
-        completes_df = df[(df['concept:name'].isin(activities)) & (trans_col == 'COMPLETE')]
+        trans_col = fit_df['lifecycle:transition'].astype(str).str.upper()
+        completes_df = fit_df[(fit_df['concept:name'].isin(activities)) & (trans_col == 'COMPLETE')]
         if 'is_synthetic' in completes_df.columns:
             completes_df = completes_df[completes_df['is_synthetic'].astype(str).str.lower() != 'true']
         if len(completes_df) == 0:
-            completes_df = df[df['concept:name'].isin(activities)]
+            completes_df = fit_df[fit_df['concept:name'].isin(activities)]
     else:
-        completes_df = df[df['concept:name'].isin(activities)]
+        completes_df = fit_df[fit_df['concept:name'].isin(activities)]
 
     orig_activity_counts = completes_df['concept:name'].value_counts().to_dict()
     total_orig_completes = max(1, len(completes_df))
@@ -102,11 +107,11 @@ def build_dataset(cfg, task_name="duration"):
     print("Sorting log chronologically (START before COMPLETE for equal timestamps)...")
     trans_order = {"START": 0, "COMPLETE": 1}
     df["_trans_rank"] = df["lifecycle:transition"].astype(str).str.upper().map(trans_order).fillna(2)
-    df = df.sort_values(by=["time:timestamp", "_trans_rank"]).drop(columns=["_trans_rank"]).reset_index(drop=True)
+    df = df.sort_values(by=["time:timestamp", "_trans_rank"], kind="stable").drop(columns=["_trans_rank"]).reset_index(drop=True)
 
-    active_cases = set()
     models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
-    role_file = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+    role_file = os.path.join(PROJECT_ROOT, cfg.get("resources", {}).get("discovery", {}).get("output_file", os.path.join(models_dir_rel, "role_mapping.json")))
+    require_artifact(cfg, role_file)
     if os.path.exists(role_file):
         with open(role_file, 'r') as f:
             role_data = json.load(f)
@@ -135,23 +140,6 @@ def build_dataset(cfg, task_name="duration"):
     print(f"Calendar Active: {calendar.enabled} ({calendar.hour_start}:00 - {calendar.hour_end}:00, Days: {calendar.work_days})")
     if calendar.role_calendars:
         print(f"Role-specific calendars active: {list(calendar.role_calendars.keys())}")
-    role_active = defaultdict(int)
-
-    ac_wip = defaultdict(int)
-    case_event_counts = df['case:concept:name'].value_counts().to_dict()
-    seen_events = {case_id: 0 for case_id in case_event_counts}
-
-    case_prefixes = {}
-    case_history = defaultdict(lambda: defaultdict(int))
-    case_start_times = defaultdict(lambda: defaultdict(list))
-    case_start_features = defaultdict(lambda: defaultdict(list))
-    case_prev_time = {}
-    case_prev_end_time = {}
-
-    all_rows = []
-    synthetic_skipped = 0
-    missing_start_skipped = 0
-
     profiles_data = load_or_discover_activity_profiles(cfg)
     activity_types = profiles_data.get("activity_types", {})
     print(f"Loaded activity profile classifications for {len(activity_types)} activities.")
@@ -162,7 +150,7 @@ def build_dataset(cfg, task_name="duration"):
     if th_mode == "whitelist":
         tracked_activities = th_cfg.get("whitelist", [])
     elif th_mode == "all_activities":
-        tracked_activities = sorted(df['concept:name'].dropna().unique().tolist())
+        tracked_activities = sorted(fit_df['concept:name'].dropna().unique().tolist())
     else:  # "profile_aware"
         tracked_activities = sorted([
             act for act, p_type in activity_types.items()
@@ -171,264 +159,30 @@ def build_dataset(cfg, task_name="duration"):
     if feature_mgr.is_feature_active("trace_history"):
         print(f"Trace History ({th_mode}): tracking {len(tracked_activities)} activities: {tracked_activities}")
 
-    target_mode = task_cfg.get("target_mode", "raw_wait")
-    residual_lookup = {}
-    matched_residuals = 0
-    initial_case_events = 0
-    fallback_residuals = 0
-
-    if task_name == "waiting_time" and target_mode == "residual_delay":
-        out_base = cfg.get("paths", {}).get("output_base_dir", "data/processed")
-        inst_parquet = os.path.join(PROJECT_ROOT, out_base, "causal_delays_instance_level.parquet")
-        inst_csv = os.path.join(PROJECT_ROOT, out_base, "causal_delays_instance_level.csv.gz")
-
-        df_inst = None
-        if os.path.exists(inst_parquet):
-            try:
-                df_inst = pd.read_parquet(inst_parquet)
-            except Exception:
-                df_inst = None
-        if df_inst is None and os.path.exists(inst_csv):
-            try:
-                df_inst = pd.read_csv(inst_csv)
-            except Exception:
-                df_inst = None
-
-        if df_inst is not None:
-            print(f"Loaded {len(df_inst):,} instance-level residual delay records from Step 02b.")
-            for r in df_inst.itertuples(index=False):
-                epoch = getattr(r, "start_timestamp_epoch", None)
-                if epoch is None:
-                    epoch = int(pd.to_datetime(getattr(r, "start_timestamp")).timestamp())
-                key = (str(getattr(r, "case_id")), str(getattr(r, "target_act")), int(epoch))
-                residual_lookup[key] = float(getattr(r, "residual_delay_seconds"))
+    df_inst = None
+    if task_name == "waiting_time":
+        if feature_mgr.is_feature_active("resource_id") or feature_mgr.is_feature_active("event_attributes"):
+            raise ValueError("Waiting prediction cannot use the future worker or execution-event attributes; disable them for this task")
+        out_base = cfg["paths"]["output_base_dir"]
+        parquet = os.path.join(out_base, "causal_delays_instance_level.parquet")
+        csv = os.path.join(out_base, "causal_delays_instance_level.csv.gz")
+        if os.path.exists(parquet):
+            require_artifact(cfg, parquet)
+            df_inst = pd.read_parquet(parquet)
+        elif os.path.exists(csv):
+            require_artifact(cfg, csv)
+            df_inst = pd.read_csv(csv)
         else:
-            print(f"[!] Warning: target_mode is 'residual_delay' but neither {inst_parquet} nor {inst_csv} exists.")
-            print(f"    Please run Step 02b first: python src/02b_discover_delays.py --config config.yaml")
-
-    print("Sweeping log chronologically to construct state vectors...")
-
-    base_cols = [
-        "case:concept:name", "concept:name", "lifecycle:transition",
-        "time:timestamp", "org:resource", "is_synthetic"
-    ]
-    for attr in case_attrs:
-        col = attr["column"]
-        base_cols.extend([col, col.replace("case:", "")])
-    base_cols.extend(event_attrs)
-    required_cols = [c for c in dict.fromkeys(base_cols) if c in df.columns]
-
-    for row in df[required_cols].to_dict("records"):
-        case_id = row["case:concept:name"]
-        activity_name = row["concept:name"]
-        transition = str(row.get("lifecycle:transition", "COMPLETE")).upper()
-        timestamp = row["time:timestamp"]
-        is_synthetic = str(row.get("is_synthetic", "false")).lower() == "true"
-
-        # Dynamic extraction of Tier 2 case attributes
-        extracted_case_attrs = {}
-        for attr in case_attrs:
-            col = attr["column"]
-            clean_col = col.replace("case:", "")
-            feat_name = attr["feature_name"]
-            default_val = attr_imputation.get(feat_name, attr.get("fill_value", 0.0))
-            val = row.get(col, row.get(clean_col, default_val))
-            if pd.isna(val):
-                val = default_val
-
-            is_cont = (attr.get("type") == "continuous")
-            treat_zero = attr.get("treat_zero_as_missing", False)
-            if is_cont:
-                try:
-                    val = float(val)
-                    if treat_zero and val == 0.0:
-                        val = float(default_val)
-                except Exception:
-                    val = float(default_val)
-            else:
-                val = str(val) if val is not None else str(default_val)
-            extracted_case_attrs[feat_name] = val
-
-        # Dynamic extraction of Tier 2 event attributes
-        extracted_event_attrs = {}
-        for col in event_attrs:
-            extracted_event_attrs[col] = row.get(col, "UNKNOWN")
-
-        if seen_events[case_id] == 0:
-            active_cases.add(case_id)
-            case_prev_time[case_id] = 0.0
-
-        seen_events[case_id] += 1
-
-        wip = len(active_cases)
-        rp_oc_array = [min(1.0, role_active[r] / max(1, role_capacities.get(r, 1))) for r in role_names]
-
-        if case_id not in case_prefixes:
-            case_prefixes[case_id] = []
-
-        # -------------------------------------------------------------
-        # Process Activity Execution
-        # -------------------------------------------------------------
-        if activity_name in activities:
-            if is_synthetic:
-                synthetic_skipped += 1
-                case_prefixes[case_id].append(activity_name)
-                case_history[case_id][activity_name] += 1
-
-            elif transition == "START":
-                ac_wip[activity_name] += 1
-                act_role = activity_to_role.get(activity_name)
-                if act_role:
-                    role_active[act_role] += 1
-                case_start_times[case_id][activity_name].append(timestamp)
-
-                # Queue wait calculation
-                if case_id in case_prev_end_time:
-                    raw_wait = (timestamp - case_prev_end_time[case_id]).total_seconds()
-                else:
-                    raw_wait = 0.0
-                raw_wait = max(0.0, float(raw_wait))
-
-                if task_name == "waiting_time" and target_mode == "residual_delay" and residual_lookup:
-                    epoch = int(timestamp.timestamp()) if hasattr(timestamp, "timestamp") else int(pd.to_datetime(timestamp).timestamp())
-                    key = (str(case_id), str(activity_name), epoch)
-                    if key in residual_lookup:
-                        current_wait = residual_lookup[key]
-                        matched_residuals += 1
-                    elif case_id not in case_prev_end_time:
-                        current_wait = 0.0
-                        initial_case_events += 1
-                    else:
-                        current_wait = raw_wait
-                        fallback_residuals += 1
-                else:
-                    current_wait = raw_wait
-
-                ctx = FeatureContext(
-                    target_act=activity_name,
-                    wip=wip,
-                    ac_wip=ac_wip,
-                    dt=timestamp,
-                    role_oc=rp_oc_array,
-                    prev_dur=case_prev_time[case_id],
-                    trace_history=dict(case_history[case_id]),
-                    tracked_activities=tracked_activities,
-                    case_attrs=extracted_case_attrs,
-                    event_attrs=extracted_event_attrs,
-                    worker_id=row.get("org:resource", "UNKNOWN")
-                )
-                feat_dict = feature_mgr.build_features(ctx)
-                feat_dict["Wait_Time_Seconds"] = current_wait
-                if feature_mgr.is_feature_active("prev_duration"):
-                    feat_dict["Prev_Proc_Time"] = case_prev_time[case_id]
-
-                case_start_features[case_id][activity_name].append(feat_dict)
-
-            elif transition == "COMPLETE":
-                if ac_wip[activity_name] > 0:
-                    ac_wip[activity_name] -= 1
-                act_role = activity_to_role.get(activity_name)
-                if act_role and role_active[act_role] > 0:
-                    role_active[act_role] -= 1
-
-                act_type = activity_types.get(activity_name, "HUMAN_WORK_ITEM")
-
-                if case_start_times[case_id][activity_name]:
-                    start_ts = case_start_times[case_id][activity_name].pop(0)
-                    duration = calendar.calculate_net_working_seconds(start_ts, timestamp, role_or_act=activity_name)
-                    has_valid_start = True
-                    feat = case_start_features[case_id][activity_name].pop(0) if case_start_features[case_id][activity_name] else None
-                elif act_type in ("AUTOMATED_TASK", "INSTANT_GATEWAY"):
-                    # Non-human automated/instant activity with single completion event
-                    duration = 0.0
-                    has_valid_start = True
-
-                    if case_id in case_prev_end_time:
-                        raw_wait = max(0.0, float((timestamp - case_prev_end_time[case_id]).total_seconds()))
-                    else:
-                        raw_wait = 0.0
-
-                    if task_name == "waiting_time" and target_mode == "residual_delay" and residual_lookup:
-                        epoch = int(timestamp.timestamp()) if hasattr(timestamp, "timestamp") else int(pd.to_datetime(timestamp).timestamp())
-                        key = (str(case_id), str(activity_name), epoch)
-                        if key in residual_lookup:
-                            current_wait = residual_lookup[key]
-                            matched_residuals += 1
-                        elif case_id not in case_prev_end_time:
-                            current_wait = 0.0
-                            initial_case_events += 1
-                        else:
-                            current_wait = raw_wait
-                            fallback_residuals += 1
-                    else:
-                        current_wait = raw_wait
-
-                    ctx = FeatureContext(
-                        target_act=activity_name,
-                        wip=wip,
-                        ac_wip=ac_wip,
-                        dt=timestamp,
-                        role_oc=rp_oc_array,
-                        prev_dur=case_prev_time[case_id],
-                        trace_history=dict(case_history[case_id]),
-                        tracked_activities=tracked_activities,
-                        case_attrs=extracted_case_attrs,
-                        event_attrs=extracted_event_attrs,
-                        worker_id=row.get("org:resource", "SYSTEM")
-                    )
-                    feat = feature_mgr.build_features(ctx)
-                    feat["Wait_Time_Seconds"] = current_wait
-                    if feature_mgr.is_feature_active("prev_duration"):
-                        feat["Prev_Proc_Time"] = case_prev_time[case_id]
-                else:
-                    duration = 0.0
-                    has_valid_start = False
-                    feat = None
-
-                case_prev_time[case_id] = duration
-                case_prev_end_time[case_id] = timestamp
-
-                # Only emit valid human training samples or profiled automated/instant events
-                if not has_valid_start or feat is None:
-                    missing_start_skipped += 1
-                    if case_start_features[case_id][activity_name]:
-                        case_start_features[case_id][activity_name].pop(0)
-                else:
-                    row_dict = {
-                        "Case_ID": case_id,
-                        "Target_Activity": activity_name,
-                        "Prefix": json.dumps(case_prefixes[case_id][-prefix_window:]),
-                        "Duration_Seconds": duration,
-                        "Wait_Time_Seconds": feat.get("Wait_Time_Seconds", 0.0)
-                    }
-
-                    # Merge all dynamically extracted features
-                    for k, v in feat.items():
-                        if k not in row_dict:
-                            row_dict[k] = v
-
-                    all_rows.append(row_dict)
-
-                case_prefixes[case_id].append(activity_name)
-                case_history[case_id][activity_name] += 1
-
-        if seen_events[case_id] == case_event_counts[case_id]:
-            active_cases.discard(case_id)
-            if case_id in case_prefixes: del case_prefixes[case_id]
-            if case_id in case_history: del case_history[case_id]
-            if case_id in case_start_times: del case_start_times[case_id]
-            if case_id in case_start_features: del case_start_features[case_id]
-            if case_id in case_prev_time: del case_prev_time[case_id]
-            if case_id in case_prev_end_time: del case_prev_end_time[case_id]
-
-    print(f"\nExtraction Summary:")
-    print(f"  - Extracted valid rows: {len(all_rows)}")
-    print(f"  - Synthetic model moves skipped: {synthetic_skipped}")
-    print(f"  - Incomplete work items (missing START) skipped: {missing_start_skipped}")
-    if task_name == "waiting_time" and target_mode == "residual_delay" and residual_lookup:
-        print(f"  - Residual Delays Matched: {matched_residuals:,}")
-        print(f"  - Initial Case Events (0.0s wait): {initial_case_events:,}")
-        print(f"  - Fallback to Raw Elapsed Wait: {fallback_residuals:,}")
+            raise FileNotFoundError("Run Step 02b before waiting dataset creation: eligibility timestamps are required")
+        if "predecessor_end_timestamp" not in df_inst:
+            raise ValueError("Delay records lack eligibility timestamps; rerun Step 02b")
+    from historical_features import snapshot_rows
+    extraction_summary = {}
+    all_rows = snapshot_rows(df, cfg, task_name, feature_mgr, calendar, role_data,
+                             activity_types, activities, tracked_activities,
+                             attr_imputation, df_inst, manifest, diagnostics=extraction_summary)
+    if not all_rows:
+        raise ValueError(f"No usable {task_name} training instances")
 
     task_df = pd.DataFrame(all_rows)
     total_before = len(task_df)
@@ -456,8 +210,9 @@ def build_dataset(cfg, task_name="duration"):
     if weight_cfg.get("enabled", False):
         smoothing = weight_cfg.get("smoothing", "sqrt")
         max_cap = weight_cfg.get("max_weight_cap", 8.0)
-        train_counts = task_df['Target_Activity'].value_counts().to_dict()
-        total_train = len(task_df)
+        fit_rows = task_df[task_df.Partition == 'train'] if manifest else task_df
+        train_counts = fit_rows['Target_Activity'].value_counts().to_dict()
+        total_train = len(fit_rows)
 
         print(f"\n--- Activity Sample Weights Calculation (Smoothing={smoothing}, Cap={max_cap}) ---")
         weights_dict = {}
@@ -476,8 +231,8 @@ def build_dataset(cfg, task_name="duration"):
             weights_dict[act] = smoothed_w
             print(f"  {act:32s}: Train={train_counts[act]:5d} | P_orig={p_orig:.4f} | P_train={p_train:.4f} | Ratio={ratio:6.2f} -> Sqrt_Weight={smoothed_w:5.2f}")
 
-        task_df['Sample_Weight'] = task_df['Target_Activity'].map(weights_dict)
-        mean_w = task_df['Sample_Weight'].mean()
+        task_df['Sample_Weight'] = task_df['Target_Activity'].map(weights_dict).fillna(1.0)
+        mean_w = float(fit_rows['Target_Activity'].map(weights_dict).mean())
         task_df['Sample_Weight'] = task_df['Sample_Weight'] / mean_w
         normalized_weights = {k: v / mean_w for k, v in weights_dict.items()}
 
@@ -501,6 +256,12 @@ def build_dataset(cfg, task_name="duration"):
     out_path = os.path.join(cfg["paths"]["output_base_dir"], out_rel)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     task_df.to_csv(out_path, index=False)
+    extraction_summary["rows_after_target_filter"] = len(task_df)
+    extraction_summary["partition_rows"] = task_df.Partition.value_counts().to_dict()
+    with open(out_path + ".summary.json", "w") as f:
+        json.dump(extraction_summary, f, indent=2)
+    from temporal_split import stamp_artifact
+    stamp_artifact(cfg, out_path)
     print(f"\nSaved [{task_name}] dataset to: {out_path} ({len(task_df)} rows)")
     print(f"Dataset creation for task '{task_name}' complete.\n")
     return task_df

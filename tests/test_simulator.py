@@ -195,9 +195,9 @@ class TestSimulator(unittest.TestCase):
             # Initially 0% occupancy
             self.assertEqual(pool.get_role_occupancy(), [0.0, 0.0])
 
-            # W1 takes Act_A (1 active out of cap 2 -> 50%)
+            # W1 occupies its only slot; aggregate legacy role_capacities is not the denominator.
             pool.request_worker("Act_A")
-            self.assertEqual(pool.get_role_occupancy(), [0.5, 0.0])
+            self.assertEqual(pool.get_role_occupancy(), [1.0, 0.0])
 
             # Release
             pool.release_worker("W1", activity="Act_A")
@@ -428,8 +428,9 @@ class TestSimulator(unittest.TestCase):
         for t in [t_a, t_b]:
             net.transitions.add(t)
 
-        PetriNet.Arc(p_p1, t_a)
-        PetriNet.Arc(p_p2, t_b)
+        from pm4py.objects.petri_net.utils.petri_utils import add_arc_from_to
+        add_arc_from_to(p_p1, t_a, net)
+        add_arc_from_to(p_p2, t_b, net)
 
         # Mock token with marking having tokens in both p1 and p2 (AND-split output)
         env = simpy.Environment()

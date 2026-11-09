@@ -178,10 +178,8 @@ class CalendarManager:
         work_left = duration_seconds - today_window
         curr_dt = day_end
 
-        # Jump to next working morning
-        w = curr_dt.weekday()
-        days_ahead = min(((d - w - 1) % 7) + 1 for d in self.work_days)
-        curr_dt = (curr_dt + timedelta(days=days_ahead)).replace(hour=self.hour_start, minute=0, second=0, microsecond=0)
+        # day_end may already be the following midnight (hour_end == 24).
+        curr_dt += timedelta(seconds=self.get_gap_to_next_work_window(curr_dt))
 
         shift_len = (self.hour_end - self.hour_start) * 3600.0
         full_shifts, rem_seconds = divmod(work_left, shift_len)

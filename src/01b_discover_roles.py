@@ -62,14 +62,15 @@ def discover_roles(cfg=None, threshold=None):
     report_file = os.path.join(PROJECT_ROOT, disc_cfg.get("report_file", os.path.join(models_dir, "role_discovery_report.md")))
 
     aligned_log_rel = cfg.get("paths", {}).get("aligned_log", "data/processed/aligned_BPI_2012.xes")
-    log_path = os.path.join(PROJECT_ROOT, aligned_log_rel)
-    if not os.path.exists(log_path):
-        log_path = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("raw_log", "data/processed/BPI_2012_filtered.xes"))
+    # Roles are mined from the current standardized source, never a stale alignment.
+    log_path = cfg.get("paths", {}).get("raw_log") or os.path.join(PROJECT_ROOT, aligned_log_rel)
 
     print(f"Loading event log from: {log_path}...")
     df = pm4py.read_xes(log_path)
     if not isinstance(df, pd.DataFrame):
         df = pm4py.convert_to_dataframe(df)
+    from temporal_split import training_rows
+    df = training_rows(df, cfg)
 
     # Check if valid org:resource column exists
     has_resources = False
@@ -128,6 +129,8 @@ def discover_roles(cfg=None, threshold=None):
         with open(output_file, "w") as f:
             json.dump(role_mapping_data, f, indent=2)
         print(f"Successfully generated role manifest: {output_file}")
+        from temporal_split import stamp_artifact
+        stamp_artifact(cfg, output_file)
         _write_markdown_report(report_file, th, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources, role_calendars)
         print(f"Successfully generated discovery report: {report_file}")
         return role_mapping_data
@@ -310,6 +313,8 @@ def discover_roles(cfg=None, threshold=None):
     print(f"Successfully generated role manifest: {output_file}")
 
     # Generate Markdown Report
+    from temporal_split import stamp_artifact
+    stamp_artifact(cfg, output_file)
     _write_markdown_report(report_file, th, role_to_activities, role_to_workers, role_capacities, worker_concurrencies, all_resources, role_calendars)
     print(f"Successfully generated discovery report: {report_file}")
 

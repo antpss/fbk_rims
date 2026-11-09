@@ -86,31 +86,31 @@ class ChampionPredictor:
                 if t in ("INSTANT_GATEWAY", "AUTOMATED_TASK")
             ]
 
-        # 1. Load Duration Models (hybrid_champion or active candidate directory)
-        dur_base = os.path.join(self.models_dir, "duration")
-        dur_dir = os.path.join(dur_base, "hybrid_champion")
-        if not os.path.exists(dur_dir) and os.path.exists(dur_base):
-            for cand in sorted(os.listdir(dur_base)):
-                alt = os.path.join(dur_base, cand)
-                if os.path.isdir(alt) and os.path.exists(os.path.join(alt, "dispatch_config.json")):
-                    dur_dir = alt
-                    break
-        with open(os.path.join(dur_dir, "dispatch_config.json")) as f:
-            self.dur_dispatch = json.load(f)["dispatch"]
-        self.dur_models = self._load_model_suite(dur_dir, self.dur_dispatch)
-
-        # 2. Load Waiting Time Models (hybrid_champion or active candidate directory)
-        wait_base = os.path.join(self.models_dir, "waiting_time")
-        wait_dir = os.path.join(wait_base, "hybrid_champion")
-        if not os.path.exists(wait_dir) and os.path.exists(wait_base):
-            for cand in sorted(os.listdir(wait_base)):
-                alt = os.path.join(wait_base, cand)
-                if os.path.isdir(alt) and os.path.exists(os.path.join(alt, "dispatch_config.json")):
-                    wait_dir = alt
-                    break
-        with open(os.path.join(wait_dir, "dispatch_config.json")) as f:
-            self.wait_dispatch = json.load(f)["dispatch"]
-        self.wait_models = self._load_model_suite(wait_dir, self.wait_dispatch)
+        # Resolve exactly the deployment requested by configuration.
+        strategy = cfg.get("model_strategy", {})
+        mode = strategy.get("mode", "hybrid")
+        deployments = {"hybrid": "hybrid_champion", "global_tournament": "global_champion",
+                       "single_global": "global_" + strategy.get("single_global_engine", "xgboost")}
+        if mode not in deployments:
+            raise ValueError(f"Unknown model strategy: {mode}")
+        for task, prefix in [("duration", "dur"), ("waiting_time", "wait")]:
+            directory = os.path.join(self.models_dir, task, deployments[mode])
+            with open(os.path.join(directory, "dispatch_config.json")) as f:
+                manifest = json.load(f)
+            if manifest.get("task") != task:
+                raise ValueError(f"Wrong task in {directory}")
+            if manifest.get("schema_version") != 2:
+                raise ValueError(f"Legacy feature/model schema in {directory}; rebuild discovery, datasets and models")
+            with open(os.path.join(directory, "training_metadata.json")) as f:
+                metadata = json.load(f)
+                if metadata.get("feature_config") != cfg.get("features", {}):
+                    raise ValueError(f"Feature configuration differs from training in {directory}; retrain models")
+                quotas = cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True)
+                if metadata.get("capacity_quotas") != quotas:
+                    raise ValueError("Worker capacity policy differs from training; rebuild features and models")
+                setattr(self, prefix + "_metadata", metadata)
+            setattr(self, prefix + "_dispatch", manifest["dispatch"])
+            setattr(self, prefix + "_models", self._load_model_suite(directory, manifest["dispatch"]))
 
         # 3. Load XOR Routing Decision Classifiers
         routing_dir = os.path.join(
@@ -141,37 +141,35 @@ class ChampionPredictor:
 
         # Cache feature columns and empirical percentile training bounds to prevent OOD extrapolation
         self.feature_mgr = FeatureManager(cfg)
-        dur_ds_path = os.path.join(cfg["paths"]["output_base_dir"], cfg["tasks"]["duration"]["output_file"])
-        wait_ds_path = os.path.join(cfg["paths"]["output_base_dir"], cfg["tasks"]["waiting_time"]["output_file"])
-        
-        dur_df_stats = pd.read_csv(dur_ds_path)
-        ignored = {
-            "Case_ID", "case_id", "Prefix", "Duration_Seconds", "Wait_Time_Seconds",
-            "Target_Duration", "Sample_Weight", "Target_Activity"
-        }
-        if not self.feature_mgr.is_feature_active("resource_id"):
-            ignored.add("Resource_ID")
-        self.feature_cols = [c for c in dur_df_stats.columns if c not in ignored]
-
-        # 99th percentile feature bounds (prevents WIP / AC_WIP / Prev_Proc_Time runaway feedback loops)
-        self.feature_max_caps = {}
-        for c in ["WIP", "AC_WIP", "Prev_Proc_Time"]:
-            if c in dur_df_stats.columns:
-                self.feature_max_caps[c] = float(np.percentile(dur_df_stats[c].dropna(), 99))
-
-        # Per-activity 99th percentile prediction ceilings (in seconds)
-        self.dur_max_caps = dur_df_stats.groupby("Target_Activity")["Duration_Seconds"].quantile(0.99).to_dict()
-        self.dur_global_cap = float(dur_df_stats["Duration_Seconds"].quantile(0.99))
-        if os.path.exists(wait_ds_path):
-            wait_df_stats = pd.read_csv(wait_ds_path, usecols=["Target_Activity", "Wait_Time_Seconds"])
-            self.wait_max_caps = wait_df_stats.groupby("Target_Activity")["Wait_Time_Seconds"].quantile(0.99).to_dict()
-            self.wait_global_cap = float(wait_df_stats["Wait_Time_Seconds"].quantile(0.99))
-        else:
-            self.wait_max_caps = {}
-            self.wait_global_cap = 86400.0
+        self.feature_cols = self.dur_metadata["feature_columns"]
+        self.feature_max_caps = self.dur_metadata["feature_caps"]
+        self.dur_max_caps = self.dur_metadata["activity_caps"]
+        self.dur_global_cap = self.dur_metadata["global_cap"]
+        self.wait_max_caps = self.wait_metadata["activity_caps"]
+        self.wait_global_cap = self.wait_metadata["global_cap"]
 
     def _load_model_suite(self, base_dir, dispatch_dict):
+        if any("bundle" in e for e in dispatch_dict.values()):
+            loaded = {}
+            result = {"models": {}}
+            for act, entry in dispatch_dict.items():
+                bundle = entry["bundle"]
+                if bundle not in loaded:
+                    directory = os.path.join(base_dir, bundle)
+                    with open(os.path.join(directory, "dispatch_config.json")) as f:
+                        child = json.load(f)
+                    loaded[bundle] = self._load_model_suite(directory, child["dispatch"])
+                sub = loaded[bundle]
+                model = sub["models"].get(act) or sub["models"].get("__default__")
+                if model is None:
+                    raise ValueError(f"Missing model for {act} in {bundle}")
+                result["models"][act] = {**model, "suite": sub}
+            return result
         suite = {}
+        meta_path = os.path.join(base_dir, "training_metadata.json")
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                suite["metadata"] = json.load(f)
         v_path = os.path.join(base_dir, "vocab.json")
         vocab = {}
         act_to_idx = {}
@@ -324,6 +322,18 @@ class ChampionPredictor:
                     "num_feats": num_feats,
                     "scaler": _resolve_scaler(s_dir, num_feats)
                 }
+        for entry in suite["models"].values():
+            if entry["type"] not in ("lstm", "tcn"):
+                continue
+            model = entry["model"]
+            if len(vocab) != model.embedding.num_embeddings:
+                raise ValueError(f"Vocabulary does not match neural weights in {base_dir}")
+            scaler = entry.get("scaler")
+            if scaler is None or scaler.n_features_in_ != entry["num_feats"]:
+                raise ValueError(f"Missing/incompatible neural scaler in {base_dir}")
+            expected = suite.get("metadata", {}).get("feature_columns")
+            if expected is not None and list(scaler.feature_names_in_) != expected:
+                raise ValueError(f"Scaler feature order differs from training metadata in {base_dir}")
         return suite
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
@@ -368,10 +378,6 @@ class ChampionPredictor:
                 else:
                     feats[col] = 0.0
 
-        # Clamp in-flight features to 99th percentile training bounds to prevent OOD extrapolation
-        for k, max_v in self.feature_max_caps.items():
-            if k in feats and isinstance(feats[k], (int, float)):
-                feats[k] = min(float(feats[k]), max_v)
         return feats
 
     def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
@@ -413,12 +419,18 @@ class ChampionPredictor:
         if not entry:
             return default_fallback
 
+        suite = entry.get("suite", suite)
         m_type = entry["type"]
         model = entry["model"]
         f_dict = self._build_feature_dict(activity, prefix, wip, ac_wip, dt, requested_amount,
                                           role_oc_array,
                                           worker_id=worker_id, prev_dur=prev_dur,
                                           trace_history=trace_history, case_attrs=case_attrs)
+
+        # Waiting and duration observe different times, so use their own fitted bounds.
+        for key, ceiling in suite.get("metadata", {}).get("feature_caps", {}).items():
+            if key in f_dict and isinstance(f_dict[key], (int, float)):
+                f_dict[key] = min(float(f_dict[key]), ceiling)
 
         if m_type == "xgboost":
             p_features = prefix[-self.max_seq_len:] if len(prefix) > self.max_seq_len else prefix + ["NONE"] * (self.max_seq_len - len(prefix))
@@ -491,7 +503,9 @@ class ChampionPredictor:
             x_arr = np.array([row_vals], dtype=np.float32)
             booster_obj = entry.get("booster") or model.get_booster()
             entry["booster"] = booster_obj
-            pred_log1p = float(booster_obj.inplace_predict(x_arr)[0])
+            best = booster_obj.attr("best_iteration")
+            iteration_range = (0, int(best) + 1) if best is not None else (0, 0)
+            pred_log1p = float(booster_obj.inplace_predict(x_arr, iteration_range=iteration_range)[0])
             val = float(np.expm1(np.clip(pred_log1p, 0.0, 20.0)))
             return max(1.0, val)
 

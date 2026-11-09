@@ -120,6 +120,11 @@ preprocessing:
 
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping: {}
+  # Example:
+  # activity_mapping:
+  #   "Richiesta creazione": "Request created"
+  #   "Valutazione richiesta": "Evaluating Request"
+  #   "Richiesta completata": "Request completed"
 
 # Activities to model (Duration, Waiting Time, Routing)
 # If empty list [] or omitted, RIMS++ automatically discovers and models all activities in the log.
@@ -217,6 +222,7 @@ simulation:
   mode: "hybrid_residual"         # Options: "hybrid_residual", "pure_physics"
   duration_simulation: null       # Duration horizon in days (RIMS duration_simulation). If null, bounded by num_cases
   num_cases: 1000                 # Number of cases to simulate (null for all cases)
+  max_silent_transitions: 500    # Abort with a diagnostic if a silent chain exceeds this limit
   max_events_per_case: 80         # Safety ceiling to prevent non-terminating loops
   output_simulated_log: "data/generated/csv/simulated_log.csv"
   export_xes: true                # Also export standard IEEE XES log (.xes)
@@ -253,6 +259,7 @@ simulation:
       daily_seasonality: true             # Model diurnal intra-day arrival variations
       weekly_seasonality: true            # Model weekly / day-of-week arrival variations
       intra_hour_distribution: "uniform"  # Intra-hour case arrival dispersion: "uniform" or "normal"
+      max_search_days: 3650            # Finite search limit for count-only forecasts; report shortfall
       cache_model: true                   # Enable disk serialization and caching of fitted model
       model_cache_dir: "models/prophet"   # Directory for cached model JSON and metadata
 

@@ -40,6 +40,8 @@ class ArrivalGenerator:
         self.arr_cfg = arr_cfg
         self.calendar = calendar
         self.force_retrain_prophet = force_retrain_prophet
+        self.origin = None
+        self.generation_status = {"status": "ok"}
 
     def prepare_arrivals(self):
         """
@@ -61,13 +63,15 @@ class ArrivalGenerator:
         if os.path.exists(aligned_log_path):
             try:
                 df_real = pm4py.read_xes(aligned_log_path)
-                if amt_col and amt_col in df_real.columns:
-                    empirical_amounts = df_real[amt_col].dropna().astype(float).tolist()
+                from temporal_split import training_rows
+                fit_df = training_rows(df_real, self.cfg)
+                if amt_col and amt_col in fit_df.columns:
+                    empirical_amounts = fit_df[amt_col].dropna().astype(float).tolist()
 
                 for attr in case_attrs:
                     col = attr["column"]
                     clean_col = col.replace("case:", "")
-                    series = df_real[col] if col in df_real.columns else (df_real[clean_col] if clean_col in df_real.columns else pd.Series(dtype=float))
+                    series = fit_df[col] if col in fit_df.columns else (fit_df[clean_col] if clean_col in fit_df.columns else pd.Series(dtype=float))
                     is_cont = (attr.get("type") == "continuous")
                     treat_zero = attr.get("treat_zero_as_missing", False)
                     if is_cont:
@@ -89,7 +93,7 @@ class ArrivalGenerator:
                         val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
                     attr_imputation[attr["feature_name"]] = val_stat
 
-                case_first_rows = df_real.groupby("case:concept:name", sort=False).first().reset_index()
+                case_first_rows = fit_df.groupby("case:concept:name", sort=False).first().reset_index()
                 for r in case_first_rows.to_dict("records"):
                     rec = {}
                     for attr in case_attrs:
@@ -131,16 +135,19 @@ class ArrivalGenerator:
                 first_times = df_real.groupby("case:concept:name")["time:timestamp"].min()
                 valid_case_series = first_times.sort_values()
 
+            if len(valid_case_series):
+                self.origin = valid_case_series.iloc[0]
             if self.duration_days and float(self.duration_days) > 0 and len(valid_case_series) > 0:
                 t_start = valid_case_series.iloc[0]
                 t_cutoff = t_start + pd.Timedelta(days=float(self.duration_days))
-                valid_case_series = valid_case_series[valid_case_series <= t_cutoff]
+                valid_case_series = valid_case_series[valid_case_series < t_cutoff]
 
             target_case_ids = list(valid_case_series.index)
             if self.num_cases and self.num_cases > 0:
                 target_case_ids = target_case_ids[:self.num_cases]
 
             df_target = df_real[df_real["case:concept:name"].isin(set(target_case_ids))]
+            df_real = df_target.copy()
             case_grps = df_target.groupby("case:concept:name", sort=False)
 
             for cid, grp in case_grps:
@@ -200,6 +207,7 @@ class ArrivalGenerator:
 
             start_str = self.arr_cfg.get("start_timestamp", "2012-01-01 08:00:00")
             start_time = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+            self.origin = start_time
             cur_time = start_time
             if self.calendar is not None:
                 self.calendar.set_ref_dt(cur_time)
@@ -231,6 +239,9 @@ class ArrivalGenerator:
                     if gap > 0:
                         cur_time += timedelta(seconds=gap)
 
+                if dur_seconds is not None and (cur_time - start_time).total_seconds() >= dur_seconds:
+                    break
+
                 if case_payload_records:
                     sampled_payload = dict(random.choice(case_payload_records))
                     amt = float(sampled_payload.get("RequestedAmount", 0.0))
@@ -256,6 +267,13 @@ class ArrivalGenerator:
                     delta = (arrivals[idx]["arrival_time"] - arrivals[idx - 1]["arrival_time"]).total_seconds()
                     arrivals[idx]["inter_arrival_seconds"] = max(0.0, float(delta))
 
+        if self.arrival_mode != "replay" and df_real is not None and self.origin is not None:
+            first = pd.to_datetime(df_real["time:timestamp"], utc=True).groupby(df_real["case:concept:name"]).min()
+            start = pd.to_datetime(self.origin, utc=True)
+            end = (start + pd.Timedelta(days=float(self.duration_days)) if self.duration_days else
+                   pd.to_datetime(arrivals[-1]["arrival_time"], utc=True) + pd.Timedelta(nanoseconds=1) if arrivals else start)
+            cohort = first[(first >= start) & (first < end)].index
+            df_real = df_real[df_real["case:concept:name"].isin(cohort)].copy()
         return arrivals, df_real
 
     def _prepare_prophet_arrivals(self, df_real, empirical_amounts, amt_col, case_payload_records=None):
@@ -287,6 +305,9 @@ class ArrivalGenerator:
                 "but no valid event log was found."
             )
 
+        from temporal_split import training_rows, split_manifest
+        df_real = training_rows(df_real, self.cfg)
+        split_id = split_manifest(self.cfg)["split_id"] if "model_strategy" in self.cfg else None
         # 1. Extract historical case start times for valid process cases and aggregate into hourly counts
         target_acts = set(self.cfg.get("target_activities", []))
         if target_acts:
@@ -360,6 +381,7 @@ class ArrivalGenerator:
         log_size = os.path.getsize(aligned_log_path) if os.path.exists(aligned_log_path) else 0
 
         hyperparams = {
+            "split_id": split_id,
             "growth": growth,
             "cap_multiplier": cap_multiplier,
             "changepoint_prior_scale": cp_prior,
@@ -441,6 +463,12 @@ class ArrivalGenerator:
         start_str = self.arr_cfg.get("start_timestamp", "2012-01-01 08:00:00")
         start_time = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
 
+        self.origin = start_time
+        search_days = float(prophet_cfg.get("max_search_days", 3650))
+        if search_days <= 0:
+            raise ValueError("prophet.max_search_days must be positive")
+        stop_time = start_time + timedelta(days=dur_days if dur_days is not None else search_days)
+
         # Determine forecasting horizon
         if dur_days is not None:
             hours_to_forecast = int(np.ceil(dur_days * 24))
@@ -457,8 +485,9 @@ class ArrivalGenerator:
         if self.calendar is not None:
             self.calendar.set_ref_dt(cur_time)
 
-        while True:
-            future_dates = pd.date_range(start=cur_start, periods=hours_to_forecast, freq="1h")
+        while cur_start < stop_time and (effective_cases is None or len(arrivals) < effective_cases):
+            chunk = min(hours_to_forecast, 24 * 31, max(1, int(np.ceil((stop_time-cur_start).total_seconds()/3600))))
+            future_dates = pd.date_range(start=cur_start, periods=chunk, freq="1h")
             df_future = pd.DataFrame({"ds": future_dates})
             if growth == "logistic":
                 df_future["cap"] = cap_val if cap_val is not None else float(hourly_counts["y"].max() * cap_multiplier)
@@ -470,10 +499,9 @@ class ArrivalGenerator:
             for row in forecast[f_cols].to_dict("records"):
                 if effective_cases is not None and len(arrivals) >= effective_cases:
                     break
-                if dur_days is not None and (cur_time - start_time).total_seconds() >= dur_days * 86400.0:
-                    break
-
                 hour_start = row["ds"].to_pydatetime()
+                if hour_start >= stop_time:
+                    break
                 yhat = float(row.get("yhat", 0.0))
 
                 if sampling_method == "triangular":
@@ -495,14 +523,13 @@ class ArrivalGenerator:
                 if hourly_expected == 0:
                     continue
 
-                for _ in range(hourly_expected):
+                if intra_dist == "normal":
+                    offsets = np.clip(np.random.normal(loc=1800.0, scale=600.0, size=hourly_expected), 0.0, 3599.0)
+                else:
+                    offsets = np.random.uniform(0.0, 3599.0, size=hourly_expected)
+                for offset_sec in sorted(offsets):
                     if effective_cases is not None and len(arrivals) >= effective_cases:
                         break
-
-                    if intra_dist == "normal":
-                        offset_sec = float(np.clip(np.random.normal(loc=1800.0, scale=600.0), 0.0, 3599.0))
-                    else:
-                        offset_sec = float(np.random.uniform(0.0, 3599.0))
 
                     t_arr = hour_start + timedelta(seconds=offset_sec)
 
@@ -512,8 +539,8 @@ class ArrivalGenerator:
                             t_arr += timedelta(seconds=gap)
 
                     cur_time = max(cur_time, t_arr)
-                    if dur_days is not None and (cur_time - start_time).total_seconds() >= dur_days * 86400.0:
-                        break
+                    if t_arr >= stop_time:
+                        continue
 
                     cid = f"prophet_case_{case_idx:05d}"
                     if case_payload_records:
@@ -531,18 +558,12 @@ class ArrivalGenerator:
                     })
                     case_idx += 1
 
-            if effective_cases is not None:
-                if len(arrivals) >= effective_cases:
-                    break
-                # Extend window forward if more cases still needed
-                cur_start = future_dates[-1] + timedelta(hours=1)
-            elif dur_days is not None:
-                if (cur_time - start_time).total_seconds() >= dur_days * 86400.0:
-                    break
-                cur_start = future_dates[-1] + timedelta(hours=1)
-            else:
-                break
+            cur_start = future_dates[-1].to_pydatetime() + timedelta(hours=1)
 
+        if effective_cases is not None and len(arrivals) < effective_cases:
+            self.generation_status = {"status": "shortfall", "requested": effective_cases,
+                                      "generated": len(arrivals), "reason": "duration_horizon" if dur_days is not None else "forecast_search_limit"}
+            print(f"[!] Arrival generation: {self.generation_status}")
         arrivals.sort(key=lambda x: x["arrival_time"])
         print(f"  Successfully scheduled {len(arrivals):,} cases via Prophet.")
         return arrivals

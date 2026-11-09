@@ -39,6 +39,8 @@ def main():
     
     import pandas as pd
     df_disc = pm4py.convert_to_dataframe(log) if not isinstance(log, pd.DataFrame) else log.copy()
+    from temporal_split import training_rows
+    df_disc = training_rows(df_disc, cfg)
     if target_acts:
         df_disc = df_disc[df_disc["concept:name"].isin(target_acts)].copy()
     if "lifecycle:transition" in df_disc.columns:
@@ -77,6 +79,8 @@ def main():
     # Export the final model
     print(f"Exporting Petri net to {output_pnml_path}...")
     pm4py.write_pnml(net, initial_marking, final_marking, output_pnml_path)
+    from temporal_split import stamp_artifact
+    stamp_artifact(cfg, output_pnml_path)
     print("Done.")
 
 if __name__ == "__main__":

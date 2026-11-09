@@ -27,6 +27,8 @@ def main():
     df = pm4py.read_xes(input_log_path)
     print(f"Loaded {len(df)} events across {df['case:concept:name'].nunique()} cases.")
 
+    from temporal_split import require_artifact, stamp_artifact
+    require_artifact(cfg, input_pnml_path)
     print(f"Loading Petri net model: {input_pnml_path}")
     net, initial_marking, final_marking = pm4py.read_pnml(input_pnml_path)
 
@@ -182,6 +184,7 @@ def main():
 
     print(f"Exporting repaired aligned log to {output_log_path}...")
     pm4py.write_xes(repaired_log, output_log_path)
+    stamp_artifact(cfg, output_log_path)
     print("Alignment and log repair completed successfully.")
 
 if __name__ == "__main__":
