@@ -90,10 +90,6 @@ fbk_rims/
 └── RIMS_tool/                         # Cloned Reference / Legacy Repo (BPM 2023 demo tool, NOT the simulator)
 ```
 
-> [!NOTE]
-> **Reference / Baseline Repositories (`RIMS/` & `RIMS_tool/`)**:
-> `RIMS/` and `RIMS_tool/` are cloned reference repositories of earlier research prototypes. **They are not used by the simulator**; they are retained strictly for historical reference and baseline comparison. The production RIMS++ pipeline lives entirely in `src/`.
-
 ---
 
 ## Setup & Prerequisites
