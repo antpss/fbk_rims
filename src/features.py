@@ -65,10 +65,7 @@ def _extract_case_attributes(ctx: FeatureContext) -> Dict[str, Any]:
     res = {}
     if ctx.case_attrs:
         for k, v in ctx.case_attrs.items():
-            try:
-                res[k] = float(v)
-            except (ValueError, TypeError):
-                res[k] = str(v) if v is not None else "UNKNOWN"
+            res[k] = v if v is not None else "UNKNOWN"
     else:
         res["RequestedAmount"] = float(ctx.requested_amount)
     return res
@@ -113,6 +110,15 @@ FEATURE_REGISTRY: Dict[str, Callable[[FeatureContext], Dict[str, Any]]] = {
     "event_attributes": _extract_event_attributes,
     "resource_id": _extract_resource_id,
 }
+
+
+def validate_prediction_inputs(cfg, task):
+    manager = FeatureManager(cfg)
+    if manager.is_feature_active('event_attributes'):
+        raise ValueError(f"{task}: execution-event attributes have no runtime input source; "
+                         "disable event_attributes for timing prediction")
+    if task == 'waiting_time' and manager.is_feature_active('resource_id'):
+        raise ValueError('Waiting prediction cannot use the future worker resource_id')
 
 
 class FeatureManager:

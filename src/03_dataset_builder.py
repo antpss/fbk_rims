@@ -1,3 +1,4 @@
+from log_utils import normalize_optional_columns
 import os
 import json
 import argparse
@@ -19,6 +20,8 @@ except ImportError:
     from src.activity_profiler import load_or_discover_activity_profiles
 
 def build_dataset(cfg, task_name="duration"):
+    from features import validate_prediction_inputs
+    validate_prediction_inputs(cfg, task_name)
     if task_name not in cfg.get("tasks", {}):
         raise ValueError(f"Task '{task_name}' is not configured in config.yaml under 'tasks'")
         
@@ -36,7 +39,7 @@ def build_dataset(cfg, task_name="duration"):
     require_artifact(cfg, log_path)
     print(f"Loading aligned log: {log_path}")
     log = pm4py.read_xes(log_path)
-    df = pm4py.convert_to_dataframe(log)
+    df = normalize_optional_columns(pm4py.convert_to_dataframe(log))
 
     from temporal_split import training_rows, split_manifest
     fit_df = training_rows(df, cfg)
@@ -110,7 +113,8 @@ def build_dataset(cfg, task_name="duration"):
     df = df.sort_values(by=["time:timestamp", "_trans_rank"], kind="stable").drop(columns=["_trans_rank"]).reset_index(drop=True)
 
     models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
-    role_file = os.path.join(PROJECT_ROOT, cfg.get("resources", {}).get("discovery", {}).get("output_file", os.path.join(models_dir_rel, "role_mapping.json")))
+    from config_loader import get_role_mapping_path
+    role_file = get_role_mapping_path(cfg)
     require_artifact(cfg, role_file)
     if os.path.exists(role_file):
         with open(role_file, 'r') as f:
@@ -163,17 +167,8 @@ def build_dataset(cfg, task_name="duration"):
     if task_name == "waiting_time":
         if feature_mgr.is_feature_active("resource_id") or feature_mgr.is_feature_active("event_attributes"):
             raise ValueError("Waiting prediction cannot use the future worker or execution-event attributes; disable them for this task")
-        out_base = cfg["paths"]["output_base_dir"]
-        parquet = os.path.join(out_base, "causal_delays_instance_level.parquet")
-        csv = os.path.join(out_base, "causal_delays_instance_level.csv.gz")
-        if os.path.exists(parquet):
-            require_artifact(cfg, parquet)
-            df_inst = pd.read_parquet(parquet)
-        elif os.path.exists(csv):
-            require_artifact(cfg, csv)
-            df_inst = pd.read_csv(csv)
-        else:
-            raise FileNotFoundError("Run Step 02b before waiting dataset creation: eligibility timestamps are required")
+        from log_utils import read_delay_records
+        df_inst = read_delay_records(cfg)
         if "predecessor_end_timestamp" not in df_inst:
             raise ValueError("Delay records lack eligibility timestamps; rerun Step 02b")
     from historical_features import snapshot_rows
@@ -182,7 +177,7 @@ def build_dataset(cfg, task_name="duration"):
                              activity_types, activities, tracked_activities,
                              attr_imputation, df_inst, manifest, diagnostics=extraction_summary)
     if not all_rows:
-        raise ValueError(f"No usable {task_name} training instances")
+        raise ValueError(f"No usable {task_name} training instances; exclusions: {extraction_summary['excluded']}")
 
     task_df = pd.DataFrame(all_rows)
     total_before = len(task_df)
@@ -202,6 +197,9 @@ def build_dataset(cfg, task_name="duration"):
     else:
         # Task retains zeros (e.g. waiting time immediate pickup, routing)
         print(f"\n[Zero-Filtering DISABLED] Retained all samples including zeros ({total_before} samples).")
+
+    if task_df.empty:
+        raise ValueError(f"No usable {task_name} training instances after zero-target filtering")
 
     # -------------------------------------------------------------
     # Config-Driven Sample Weighting

@@ -232,8 +232,8 @@ simulation:
   extraneous_delays:
     enabled: true                 # Simulate discovered extraneous activity delays
     estimator: "eclaw_plus"       # Options: "eclaw_plus", "eclaw", "naive"
-    placement: "ex_ante"          # Options: "ex_ante", "ex_post", "causal_pair"
-    include_internal_queue_delays: false # If true, also simulates internal queue delays
+    placement: "ex_ante"          # Only supported placement: before the target activity
+    include_internal_queue_delays: false # Also sample discovered internal case delays; NOT worker queues or human_latency cooldowns
   
   # Human Inter-Ticket Latency (Worker Refractory Cooldowns / Coffee Breaks)
   human_latency:
@@ -275,7 +275,7 @@ simulation:
     # Tier 2: Discovered role calendars from models/role_mapping.json (active if use_discovered_role_calendars: true).
     # Tier 3 (Fallback): Global calendar (work_days, hour_start, hour_end above).
     # IMPORTANT: Changing role calendars requires re-running Steps 02b, 03, and 04 so training features match simulation.
-    use_discovered_role_calendars: false
+    use_discovered_role_calendars: true
 
     # Optional Per-Role / Per-Activity Calendars (Tier 1 overrides)
     # If not specified for a role/activity, it defaults to Tier 2 (if enabled) or Tier 3 global calendar.

@@ -56,7 +56,9 @@ class ArrivalGenerator:
         df_real = None
         empirical_amounts = []
         case_attrs = self.cfg.get("features", {}).get("case_attributes", [])
-        amt_col = case_attrs[0]["column"] if (case_attrs and "column" in case_attrs[0]) else None
+        # Compatibility payload only; arbitrary first attributes are never amounts.
+        amt_col = next((a['column'] for a in case_attrs
+                        if a.get('feature_name') == 'RequestedAmount' and a.get('type') == 'continuous'), None)
 
         attr_imputation = {}
         case_payload_records = []
@@ -178,7 +180,7 @@ class ArrivalGenerator:
                         val = str(val) if val is not None else str(default_val)
                     extracted_case_attrs[feat_name] = val
 
-                amt = float(extracted_case_attrs.get("RequestedAmount", amt))
+                amt = float(extracted_case_attrs.get("RequestedAmount", amt)) if amt_col else 0.0
 
                 arrivals.append({
                     "case_id": str(cid),
@@ -244,7 +246,7 @@ class ArrivalGenerator:
 
                 if case_payload_records:
                     sampled_payload = dict(random.choice(case_payload_records))
-                    amt = float(sampled_payload.get("RequestedAmount", 0.0))
+                    amt = float(sampled_payload.get("RequestedAmount", 0.0)) if amt_col else 0.0
                 else:
                     amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
                     sampled_payload = {"RequestedAmount": amt} if amt_col else {}
@@ -381,6 +383,7 @@ class ArrivalGenerator:
         log_size = os.path.getsize(aligned_log_path) if os.path.exists(aligned_log_path) else 0
 
         hyperparams = {
+            "target_activities": sorted(target_acts),
             "split_id": split_id,
             "growth": growth,
             "cap_multiplier": cap_multiplier,
@@ -545,7 +548,7 @@ class ArrivalGenerator:
                     cid = f"prophet_case_{case_idx:05d}"
                     if case_payload_records:
                         sampled_payload = dict(random.choice(case_payload_records))
-                        amt = float(sampled_payload.get("RequestedAmount", 0.0))
+                        amt = float(sampled_payload.get("RequestedAmount", 0.0)) if amt_col else 0.0
                     else:
                         amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
                         sampled_payload = {"RequestedAmount": amt} if amt_col else {}

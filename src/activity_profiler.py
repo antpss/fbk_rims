@@ -254,12 +254,8 @@ def load_or_discover_activity_profiles(cfg: dict, force_retrain: bool = False) -
     if not prof_cfg.get("enabled", True):
         return {"activity_types": {}, "profiles": {}, "__metadata__": {}}
 
-    models_dir = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("models_dir", "models"))
-    default_out = os.path.join(models_dir, "activity_profiles.json")
-    default_rep = os.path.join(models_dir, "activity_profiles_report.md")
-
-    output_path = os.path.join(PROJECT_ROOT, prof_cfg.get("output_file", default_out))
-    report_path = os.path.join(PROJECT_ROOT, prof_cfg.get("report_file", default_rep))
+    from config_loader import get_profile_paths
+    output_path, report_path = get_profile_paths(cfg)
 
     # Resolve active log path
     log_rel = cfg.get("paths", {}).get("aligned_log", cfg.get("paths", {}).get("raw_log"))
@@ -319,9 +315,8 @@ def main():
     from temporal_split import split_manifest
     data["split_id"] = split_manifest(cfg)["split_id"] if "model_strategy" in cfg else None
 
-    models_dir = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("models_dir", "models"))
-    out_file = os.path.join(models_dir, "activity_profiles.json")
-    rep_file = os.path.join(models_dir, "activity_profiles_report.md")
+    from config_loader import get_profile_paths
+    out_file, rep_file = get_profile_paths(cfg)
     profiler.save_profiles(data, out_file, rep_file)
 
 

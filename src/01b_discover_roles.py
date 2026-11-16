@@ -58,8 +58,10 @@ def discover_roles(cfg=None, threshold=None):
 
     th = threshold if threshold is not None else float(disc_cfg.get("threshold", 0.35))
     models_dir = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("models_dir", "models"))
-    output_file = os.path.join(PROJECT_ROOT, disc_cfg.get("output_file", os.path.join(models_dir, "role_mapping.json")))
+    from config_loader import get_role_mapping_path
+    output_file = get_role_mapping_path(cfg)
     report_file = os.path.join(PROJECT_ROOT, disc_cfg.get("report_file", os.path.join(models_dir, "role_discovery_report.md")))
+    os.makedirs(os.path.dirname(report_file), exist_ok=True)
 
     aligned_log_rel = cfg.get("paths", {}).get("aligned_log", "data/processed/aligned_BPI_2012.xes")
     # Roles are mined from the current standardized source, never a stale alignment.

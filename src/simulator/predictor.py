@@ -59,6 +59,8 @@ class ChampionPredictor:
     Loads and serves duration, waiting time, and XOR routing champion models.
     """
     def __init__(self, cfg):
+        from features import validate_prediction_inputs
+        validate_prediction_inputs(cfg, 'duration')
         self.cfg = cfg
         self.models_dir = cfg["paths"]["models_dir"]
         self.target_acts = cfg.get("target_activities", [])
@@ -103,6 +105,8 @@ class ChampionPredictor:
                 raise ValueError(f"Legacy feature/model schema in {directory}; rebuild discovery, datasets and models")
             with open(os.path.join(directory, "training_metadata.json")) as f:
                 metadata = json.load(f)
+                from model_artifacts import warn_learning_settings
+                warn_learning_settings(cfg, metadata, directory)
                 if metadata.get("feature_config") != cfg.get("features", {}):
                     raise ValueError(f"Feature configuration differs from training in {directory}; retrain models")
                 quotas = cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True)
@@ -223,8 +227,9 @@ class ChampionPredictor:
             suite["target_code_map"] = {}
 
         if res_categories:
-            suite["resource_cat_dtype"] = pd.CategoricalDtype(categories=res_categories + ["UNKNOWN"], ordered=False)
-            suite["resource_code_map"] = {c: float(i) for i, c in enumerate(res_categories + ["UNKNOWN"])}
+            resource_categories = list(dict.fromkeys(res_categories + ["UNKNOWN"]))
+            suite["resource_cat_dtype"] = pd.CategoricalDtype(categories=resource_categories, ordered=False)
+            suite["resource_code_map"] = {c: float(i) for i, c in enumerate(resource_categories)}
         else:
             suite["resource_cat_dtype"] = None
             suite["resource_code_map"] = {}
@@ -358,12 +363,9 @@ class ChampionPredictor:
         # Merge dynamic domain case attributes if passed
         if case_attrs:
             for k, v in case_attrs.items():
-                try:
-                    feats[k] = float(v)
-                except (ValueError, TypeError):
-                    feats[k] = v
+                feats[k] = v
 
-        if self.feature_mgr.is_feature_active("case_attributes") or "RequestedAmount" in self.feature_cols:
+        if "RequestedAmount" in self.feature_cols:
             feats.setdefault("RequestedAmount", float(requested_amount))
         feats["Prev_Proc_Time"] = float(prev_dur)
         if worker_id:
@@ -432,6 +434,14 @@ class ChampionPredictor:
             if key in f_dict and isinstance(f_dict[key], (int, float)):
                 f_dict[key] = min(float(f_dict[key]), ceiling)
 
+        encoding = suite.get("metadata", {}).get("feature_encoding", {})
+        if encoding:
+            from feature_encoding import encode_values
+            for column in encoding.get('categories', {}):
+                if column != 'Resource_ID' and column not in (case_attrs or {}):
+                    f_dict[column] = None
+            f_dict = encode_values(f_dict, encoding)
+
         if m_type == "xgboost":
             p_features = prefix[-self.max_seq_len:] if len(prefix) > self.max_seq_len else prefix + ["NONE"] * (self.max_seq_len - len(prefix))
             row_dict = {}
@@ -495,7 +505,7 @@ class ChampionPredictor:
                     row_vals.append(prefix_map.get(row_dict.get(col, "NONE"), np.nan))
                 elif col == "Target_Activity":
                     row_vals.append(target_map.get(row_dict.get(col, activity), np.nan))
-                elif col == "Resource_ID":
+                elif col == "Resource_ID" and col not in encoding.get("categories", {}):
                     row_vals.append(res_map.get(row_dict.get(col, "UNKNOWN"), np.nan))
                 else:
                     row_vals.append(float(row_dict.get(col, 0.0)))
@@ -640,9 +650,9 @@ class ChampionPredictor:
                     row[col] = 0.0
 
             cat_map = p_info.get("cat_mappings", {})
-            for c in feat_cols:
-                if c in cat_map:
-                    cats = cat_map[c]
+            is_xgb = "xgb" in str(type(clf)).lower()
+            if not is_xgb:
+                for c, cats in cat_map.items():
                     val = row.get(c, "<UNKNOWN>")
                     row[c] = cats.index(val) if val in cats else -1
 
@@ -651,12 +661,12 @@ class ChampionPredictor:
                 idx_to_label = {v: k for k, v in label_enc.items()}
                 inference_mode = self.cfg.get("tasks", {}).get("routing", {}).get("inference_mode", "sample")
 
-                is_xgb = "xgb" in str(type(clf)).lower()
                 if is_xgb:
                     row_df = pd.DataFrame([row])[feat_cols]
-                    for c in row_df.columns:
-                        if (c.startswith("prefix_") or c == "prev_activity") and c not in cat_map:
-                            row_df[c] = row_df[c].astype("category")
+                    for c, cats in cat_map.items():
+                        if c in row_df:
+                            # Preserve training categories/order; unseen values become missing.
+                            row_df[c] = pd.Categorical(row_df[c], categories=cats)
                     if inference_mode == "argmax":
                         pred_code = clf.predict(row_df)[0]
                     elif hasattr(clf, "predict_proba"):

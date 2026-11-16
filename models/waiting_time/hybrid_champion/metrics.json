@@ -3,94 +3,190 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "training_time_seconds": 2535.14,
-  "weighted_mae": 2896.36,
-  "weighted_smape": 188.69,
-  "macro_mae": 4263.57,
+  "experiment_id": "f64dbcac995cd1292bd8959f74a41b3fa06f04db943b01f799a0c1a279193a7a",
+  "selection_partition": "validation",
+  "weighted_mae": 788.7999898394635,
+  "weighted_smape": 6.340174760715696,
+  "macro_mae": 545.6415498115814,
   "activity_metrics": {
     "Authorization Requested": {
-      "count": 2469,
-      "model_source": "global_lstm (LSTM)",
-      "mae": 2155.64,
-      "smape": 185.95
+      "count": 605,
+      "mae": 1769.0247933884298,
+      "smape": 4.6280991734235615,
+      "model_source": "global_tcn"
     },
     "Back-Office Adjustment Requested": {
-      "count": 516,
-      "model_source": "global_lstm (LSTM)",
+      "count": 61,
       "mae": 0.0,
-      "smape": 196.65
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Evaluating Request (NO registered letter)": {
-      "count": 2130,
-      "model_source": "local_xgboost (XGBOOST)",
-      "mae": 210.18,
-      "smape": 199.89
+      "count": 539,
+      "mae": 445.62987012987014,
+      "smape": 1.8552875695068853,
+      "model_source": "global_tcn"
     },
     "Evaluating Request (WITH registered letter)": {
-      "count": 379,
-      "model_source": "global_xgboost (XGBOOST)",
-      "mae": 6039.68,
-      "smape": 199.86
+      "count": 77,
+      "mae": 1.8311688311688312,
+      "smape": 2.5974025970341716,
+      "model_source": "global_tcn"
     },
     "Network Adjustment Requested": {
-      "count": 249,
-      "model_source": "global_lstm (LSTM)",
-      "mae": 8501.32,
-      "smape": 194.53
+      "count": 15,
+      "mae": 0.0,
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Pending Liquidation Request": {
-      "count": 5528,
-      "model_source": "global_lstm (LSTM)",
+      "count": 1305,
       "mae": 0.0,
-      "smape": 189.29
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Pending Request for Reservation Closure": {
-      "count": 5543,
-      "model_source": "global_lstm (LSTM)",
+      "count": 1311,
       "mae": 0.0,
-      "smape": 191.66
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Pending Request for acquittance of heirs": {
-      "count": 362,
-      "model_source": "global_lstm (LSTM)",
+      "count": 52,
       "mae": 0.0,
-      "smape": 193.24
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Request completed with account closure": {
-      "count": 5537,
-      "model_source": "global_lstm (LSTM)",
+      "count": 1309,
       "mae": 0.0,
-      "smape": 190.33
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Request completed with customer recovery": {
       "count": 12,
-      "model_source": "global_lstm (LSTM)",
-      "mae": 20568.58,
-      "smape": 196.66
+      "mae": 0.0,
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Request created": {
-      "count": 6487,
-      "model_source": "global_lstm (LSTM)",
+      "count": 1682,
       "mae": 0.0,
-      "smape": 182.65
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Request deleted": {
-      "count": 938,
-      "model_source": "global_lstm (LSTM)",
+      "count": 361,
       "mae": 0.0,
-      "smape": 196.14
+      "smape": 0.0,
+      "model_source": "global_tcn"
     },
     "Service closure Request with BO responsibility": {
-      "count": 5779,
-      "model_source": "global_lstm (LSTM)",
-      "mae": 5.44,
-      "smape": 180.46
+      "count": 1323,
+      "mae": 0.02947845804988662,
+      "smape": 0.15117157966548442,
+      "model_source": "global_tcn"
     },
     "Service closure Request with network responsibility": {
-      "count": 4847,
-      "model_source": "global_lstm (LSTM)",
-      "mae": 22209.15,
-      "smape": 193.32
+      "count": 1190,
+      "mae": 5422.466386554622,
+      "smape": 48.907563021184316,
+      "model_source": "global_tcn"
     }
+  },
+  "available_count": 9842,
+  "total_count": 9842,
+  "test_metrics": {
+    "weighted_mae": 2895.865679476537,
+    "weighted_smape": 7.173201815788777,
+    "macro_mae": 7193.586116425627,
+    "activity_metrics": {
+      "Authorization Requested": {
+        "count": 2477,
+        "mae": 2251.2365765038353,
+        "smape": 3.4719418648631315,
+        "model_source": "global_tcn"
+      },
+      "Back-Office Adjustment Requested": {
+        "count": 528,
+        "mae": 0.0,
+        "smape": 0.0,
+        "model_source": "global_tcn"
+      },
+      "Evaluating Request (NO registered letter)": {
+        "count": 2154,
+        "mae": 207.7286443825441,
+        "smape": 1.9498607240922345,
+        "model_source": "global_tcn"
+      },
+      "Evaluating Request (WITH registered letter)": {
+        "count": 381,
+        "mae": 5869.070866141732,
+        "smape": 3.1496062991877563,
+        "model_source": "global_tcn"
+      },
+      "Network Adjustment Requested": {
+        "count": 251,
+        "mae": 8431.786852589641,
+        "smape": 7.171314741011145,
+        "model_source": "global_tcn"
+      },
+      "Pending Liquidation Request": {
+        "count": 5566,
+        "mae": 0.0,
+        "smape": 0.0,
+        "model_source": "global_tcn"
+      },
+      "Pending Request for Reservation Closure": {
+        "count": 5580,
+        "mae": 0.0,
+        "smape": 0.0,
+        "model_source": "global_tcn"
+      },
+      "Pending Request for acquittance of heirs": {
+        "count": 354,
+        "mae": 0.0,
+        "smape": 0.0,
+        "model_source": "global_tcn"
+      },
+      "Request completed with account closure": {
+        "count": 5575,
+        "mae": 0.911390134529148,
+        "smape": 0.14349775784380775,
+        "model_source": "global_tcn"
+      },
+      "Request completed with customer recovery": {
+        "count": 12,
+        "mae": 61925.0,
+        "smape": 49.99999999928269,
+        "model_source": "global_tcn"
+      },
+      "Request created": {
+        "count": 6482,
+        "mae": 0.0,
+        "smape": 0.0,
+        "model_source": "global_tcn"
+      },
+      "Request deleted": {
+        "count": 899,
+        "mae": 0.0,
+        "smape": 0.0,
+        "model_source": "global_tcn"
+      },
+      "Service closure Request with BO responsibility": {
+        "count": 5819,
+        "mae": 5.336054304863379,
+        "smape": 0.17185083347538987,
+        "model_source": "global_tcn"
+      },
+      "Service closure Request with network responsibility": {
+        "count": 4880,
+        "mae": 22019.135245901638,
+        "smape": 56.47540983036225,
+        "model_source": "global_tcn"
+      }
+    },
+    "available_count": 40958,
+    "total_count": 40958
   }
 }

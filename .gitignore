@@ -34,17 +34,27 @@ docs/
 *.csv
 *.csv.gz
 *.parquet
+*.log
 data/generated/
 
 # Track documentation, benchmark reports, and configuration metadata inside data/
 !data/**/*.md
 !data/**/*.json
 
-# Generated candidate models (ignore candidate tournaments, track champion runtime models)
+# Per-run case assignments and provenance are regenerated with the datasets/models.
+data/processed/case_split.json
+*.provenance.json
+
+# Generated timing models, including champion bundles. Keep small top-level
+# champion metrics, but rebuild runtime bundles locally.
 models/duration/*
 !models/duration/hybrid_champion/
+models/duration/hybrid_champion/*
+!models/duration/hybrid_champion/metrics.json
 models/waiting_time/*
 !models/waiting_time/hybrid_champion/
+models/waiting_time/hybrid_champion/*
+!models/waiting_time/hybrid_champion/metrics.json
 
 # Visual artifacts
 *.png

@@ -23,9 +23,9 @@ import simpy
 import pm4py
 
 try:
-    from config_loader import PROJECT_ROOT
+    from config_loader import PROJECT_ROOT, get_role_mapping_path, get_simulation_output_paths
 except ImportError:
-    from src.config_loader import PROJECT_ROOT
+    from src.config_loader import PROJECT_ROOT, get_role_mapping_path, get_simulation_output_paths
 from .calendar import CalendarManager
 from .predictor import ChampionPredictor
 from .arrivals import ArrivalGenerator
@@ -94,18 +94,19 @@ class SharedWorkerPool:
         queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
         if not queue_aware:
             return None
-        for w in eligible_workers:
+        for w in sorted(eligible_workers):
             if self.worker_in_cooldown.get(w, False):
                 ev = self.worker_cooldown_events.get(w)
                 if ev and not ev.triggered:
                     self.worker_in_cooldown[w] = False
+                    self.worker_cooldown_events.pop(w, None)
                     ev.succeed()
                     return w
         return None
 
     def _is_activity_working_now(self, activity=None):
         """Checks if office is currently open for the specific activity's role (or global fallback)."""
-        if not self.calendar or not getattr(self.calendar, "enabled", False):
+        if self.calendar is None:
             return True
         cal = self.calendar.get_calendar(activity)
         if not cal.enabled:
@@ -115,7 +116,7 @@ class SharedWorkerPool:
 
     def _ensure_shift_alarm(self, activity=None):
         """Arms a non-blocking shift alarm for the activity's role calendar keyed by id(cal)."""
-        if not self.calendar or not getattr(self.calendar, "enabled", False):
+        if self.calendar is None:
             return
         cal = self.calendar.get_calendar(activity)
         if not cal.enabled:
@@ -161,7 +162,7 @@ class SharedWorkerPool:
                 i += 1
                 continue
 
-            free_workers = [w for w in req["eligible"] if self._is_worker_free(w)]
+            free_workers = [w for w in sorted(req["eligible"]) if self._is_worker_free(w)]
             if not free_workers:
                 interrupted = self._interrupt_cooldown_if_eligible(req["eligible"])
                 if interrupted:
@@ -200,7 +201,7 @@ class SharedWorkerPool:
         else:
             eligible = self.activity_pools.get(activity, self.all_workers)
 
-        free_workers = [w for w in eligible if self._is_worker_free(w)]
+        free_workers = [w for w in sorted(eligible) if self._is_worker_free(w)]
         is_working = self._is_activity_working_now(activity)
 
         # If no free workers, check if an eligible resting worker can be interrupted
@@ -260,8 +261,10 @@ class SharedWorkerPool:
             for req in self.pending_requests
         )
 
-        # Only take coffee break cooldown if no immediate tickets are waiting.
-        if cooldown_enabled and (not queue_aware or not has_pending_work):
+        # A break belongs to an idle worker, not to each released concurrency slot.
+        if (cooldown_enabled and self.worker_active_count[worker_id] == 0
+                and not self.worker_in_cooldown[worker_id]
+                and (not queue_aware or not has_pending_work)):
             cooldown = self._sample_cooldown(worker_id)
             if cooldown > 0:
                 self.worker_in_cooldown[worker_id] = True
@@ -275,24 +278,31 @@ class SharedWorkerPool:
     def _sample_cooldown(self, worker_id):
         profiles = self.latency_cfg.get("per_worker_profiles", {})
         prof = profiles.get(worker_id) or self.latency_cfg
-        dist = prof.get("best_distribution") or prof.get("global_distribution", "lognormal")
-        params = prof.get("distribution_params") or prof.get("global_params", {})
-        max_cd = float(self.latency_cfg.get("max_cooldown_seconds", self.latency_cfg.get("max_cooldown", 1800.0)))
+        dist = prof.get("distribution") or prof.get("best_distribution") or prof.get("global_distribution", "lognormal")
+        params = prof.get("params") or prof.get("distribution_params") or prof.get("global_params", {})
+        max_cd = max(0.0, float(self.latency_cfg.get("max_cooldown_seconds", self.latency_cfg.get("max_cooldown", 1800.0))))
 
         try:
             if dist == "lognormal":
                 val = float(st.lognorm.rvs(params["shape"], loc=params.get("loc", 0.0), scale=params["scale"]))
             elif dist == "gamma":
                 val = float(st.gamma.rvs(params["shape"], loc=params.get("loc", 0.0), scale=params["scale"]))
+            elif dist == "exponential" and "scale" in params:
+                val = float(st.expon.rvs(loc=params.get("loc", 0.0), scale=params["scale"]))
             else:
                 mean_s = float(prof.get("mean_seconds", prof.get("global_mean_seconds", 300.0)))
                 val = float(random.expovariate(1.0 / max(1.0, mean_s)))
-            return min(max(5.0, val), max_cd)
+            if not np.isfinite(val):
+                raise ValueError("Non-finite cooldown sample")
         except Exception:
-            return float(random.expovariate(1.0 / 300.0))
+            val = float(random.expovariate(1.0 / 300.0))
+        # Apply the same bounds to fitted samples and fallback samples.
+        return min(max(5.0, val), max_cd)
 
     def _cooldown_and_dispatch(self, worker_id, cooldown_seconds, cancel_ev):
         yield self.env.timeout(cooldown_seconds) | cancel_ev
+        if self.worker_cooldown_events.get(worker_id) is not cancel_ev:
+            return
         self.worker_in_cooldown[worker_id] = False
         self.worker_cooldown_events.pop(worker_id, None)
         self._complete_release(worker_id)
@@ -315,6 +325,8 @@ class SimulationProcess:
     Manages SimPy environment, resources, calendar shifts, token lifecycles, and evaluation.
     """
     def __init__(self, cfg, num_cases=None, mode=None, arrival_mode=None, export_xes=None, pnml_path=None, duration_days=None, force_retrain_prophet=False):
+        from config_loader import validate_delay_placement
+        validate_delay_placement(cfg.get("simulation", {}).get("extraneous_delays", {}).get("placement", "ex_ante"))
         self.cfg = cfg
         seed = cfg.get("project", {}).get("random_seed", 42)
         random.seed(seed)
@@ -330,18 +342,8 @@ class SimulationProcess:
         self.target_activities = cfg.get("target_activities", [])
         self.force_retrain_prophet = force_retrain_prophet
 
-        # Output paths
-        self.sim_log_path = os.path.join(
-            PROJECT_ROOT,
-            f"data/generated/csv/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_log", "data/generated/csv/simulated_log.csv")
-        )
+        self.sim_log_path, self.output_simulated_xes = get_simulation_output_paths(cfg, self.mode)
         self.export_xes = export_xes if export_xes is not None else cfg.get("simulation", {}).get("export_xes", True)
-        self.output_simulated_xes = os.path.join(
-            PROJECT_ROOT,
-            f"data/generated/xes/simulated_log_{self.mode}.xes" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
-        )
 
         # Arrival Mode
         arr_cfg = cfg.get("simulation", {}).get("arrival", {})
@@ -364,7 +366,7 @@ class SimulationProcess:
 
         # Paths
         models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
-        role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+        role_mapping_path = get_role_mapping_path(cfg)
 
         # Activity Profiles (Human Work Item vs. Automated Task vs. Instant Gateway)
         try:
@@ -417,9 +419,15 @@ class SimulationProcess:
             except Exception as e:
                 print(f"[!] Warning: Failed to load delay manifest: {e}")
 
+        if self.delay_manifest:
+            validate_delay_placement(self.delay_manifest.get("placement", "ex_ante"))
+            for group in ("external_uncoupled_delays", "internal_queue_delays"):
+                for entry in self.delay_manifest.get(group, []):
+                    validate_delay_placement(entry.get("placement", "ex_ante"))
+
         # SimPy Environment & Worker Pool
         self.env = simpy.Environment()
-        role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+        role_mapping_path = get_role_mapping_path(cfg)
         latency_cfg = dict(self.delay_manifest.get("human_inter_ticket_latency", {})) if self.delay_manifest else {}
         user_hl = cfg.get("simulation", {}).get("human_latency", {})
         if isinstance(user_hl, dict):

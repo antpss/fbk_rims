@@ -74,6 +74,11 @@ def snapshot_rows(df, cfg, task, manager, calendar, role_data, activity_types,
             skipped["synthetic" if synthetic else "missing_start"] += 1
             continue
         if task == "duration":
+            # Keep observed lifecycle events above for context, but do not teach
+            # zero effort from positive human executions outside the calendar.
+            if inst["human"] and inst["end"] > inst["start"] and inst["duration"] == 0:
+                skipped["zero_working_time_overlap"] += 1
+                continue
             inst["eligible"] = inst["start"]
             timeline.append((inst["start"], 1, inst["start_order"] * 3 + .5, "snapshot", inst))
         else:

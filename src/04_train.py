@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import random
 import argparse
 import joblib
 import pandas as pd
@@ -23,10 +24,10 @@ except ImportError:
 # Prefix Parsing Helper (supports both JSON arrays and legacy comma strings)
 # =====================================================================
 def parse_prefix(p):
-    if pd.isna(p) or p == "" or p == "[]":
-        return []
     if isinstance(p, list):
         return p
+    if pd.isna(p) or p == "" or p == "[]":
+        return []
     p_str = str(p).strip()
     if p_str.startswith("[") and p_str.endswith("]"):
         try:
@@ -188,6 +189,19 @@ class DurationTCN(nn.Module):
         x = torch.cat(tensors, dim=1)
         return F.softplus(self.fc(x).squeeze(-1))
 
+def seed_training(seed):
+    """Seed model initialization, dropout, minibatch shuffling and estimator RNGs."""
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+
+
 # =====================================================================
 # Main Unified Training Engine
 # =====================================================================
@@ -201,7 +215,11 @@ def main():
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    seed = int(cfg.get("project", {}).get("random_seed", 42))
+    seed_training(seed)
     task_name = args.task
+    from features import validate_prediction_inputs
+    validate_prediction_inputs(cfg, task_name)
     task_cfg = cfg["tasks"][task_name]
     strat_cfg = cfg.get("model_strategy", {})
 
@@ -243,7 +261,10 @@ def main():
 
     from temporal_split import require_artifact
     require_artifact(cfg, data_path)
-    df = pd.read_csv(data_path)
+    categorical_columns = {a['feature_name']: str for a in cfg.get('features', {}).get('case_attributes', [])
+                           if a.get('type') != 'continuous'}
+    categorical_columns['Resource_ID'] = str
+    df = pd.read_csv(data_path, dtype=categorical_columns)
     df['Target_Duration'] = df[target_col]
     print(f"Loaded master dataset: {len(df)} samples across {df['Target_Activity'].nunique()} activities.")
 
@@ -277,6 +298,8 @@ def main():
     held_out = df[df.Partition == "test"].reset_index(drop=True)
     if any(part.empty for part in (train_df, val_df, held_out)):
         raise ValueError("Train, validation and test must each contain usable samples; inspect case_split.json")
+    from feature_encoding import fit_encoding, encode_frame
+    feature_encoding = fit_encoding(train_df, feature_cols, cfg, model_type)
     counts = train_df['Target_Activity'].value_counts().to_dict()
 
     local_targets = []
@@ -355,8 +378,7 @@ def main():
                 p_df[c] = p_df[c].astype(prefix_cat_dtype)
             act_cat = data_subset[['Target_Activity']].astype(target_act_dtype)
             sub_feats = data_subset[feature_cols].copy()
-            if 'Resource_ID' in sub_feats.columns:
-                sub_feats['Resource_ID'] = sub_feats['Resource_ID'].astype('category')
+            sub_feats = encode_frame(sub_feats, feature_encoding)
             return pd.concat([p_df, act_cat, sub_feats], axis=1)
 
         # 1. Train Global Model
@@ -377,7 +399,7 @@ def main():
                 max_depth=6,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                random_state=42,
+                random_state=seed,
                 enable_categorical=True,
                 early_stopping_rounds=20,
                 eval_metric="mae",
@@ -419,7 +441,7 @@ def main():
                 max_depth=6,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                random_state=42,
+                random_state=seed,
                 enable_categorical=True,
                 early_stopping_rounds=20,
                 eval_metric="mae",
@@ -454,12 +476,16 @@ def main():
         act_to_idx = {act: i for i, act in enumerate(sorted(counts.keys()))}
 
         scaler = StandardScaler()
+        encoded_train = encode_frame(train_df[feature_cols], feature_encoding)
+        encoded_val = encode_frame(val_df[feature_cols], feature_encoding)
+        encoded_test = encode_frame(test_df[feature_cols], feature_encoding)
+        feature_cols = list(encoded_train.columns)
         train_df_scaled = train_df.copy()
         val_df_scaled = val_df.copy()
         test_df_scaled = test_df.copy()
-        train_df_scaled[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-        val_df_scaled[feature_cols] = scaler.transform(val_df[feature_cols])
-        test_df_scaled[feature_cols] = scaler.transform(test_df[feature_cols])
+        train_df_scaled[feature_cols] = scaler.fit_transform(encoded_train)
+        val_df_scaled[feature_cols] = scaler.transform(encoded_val)
+        test_df_scaled[feature_cols] = scaler.transform(encoded_test)
         joblib.dump(scaler, os.path.join(models_base_dir, f"scaler_{strategy}.pkl"))
         with open(os.path.join(models_base_dir, "vocab.json"), "w") as f:
             json.dump({"vocab": vocab, "act_to_idx": act_to_idx}, f, indent=2)
@@ -599,7 +625,7 @@ def main():
     with open(dispatch_file, "w") as f:
         json.dump(dispatch_table, f, indent=2)
 
-    from model_artifacts import prediction_metrics, experiment_id
+    from model_artifacts import prediction_metrics, experiment_id, learning_settings
     identity = experiment_id(cfg, data_path)
     metrics_summary = {
         "task": task_name, "strategy": strategy, "model_type": model_type,
@@ -610,6 +636,8 @@ def main():
     with open(os.path.join(models_base_dir, "metrics.json"), "w") as f:
         json.dump(metrics_summary, f, indent=2, allow_nan=False)
     stats = {
+        "feature_encoding": feature_encoding,
+        "learning_settings": learning_settings(cfg),
         "feature_columns": feature_cols,
         "feature_config": cfg.get("features", {}),
         "capacity_quotas": cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True),

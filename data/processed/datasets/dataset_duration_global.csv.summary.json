@@ -1,0 +1,15 @@
+{
+  "observed_instances": 215314,
+  "emitted_rows": 208457,
+  "excluded": {
+    "zero_working_time_overlap": 3453,
+    "synthetic": 3404
+  },
+  "rows_after_target_filter": 175983,
+  "partition_rows": {
+    "train": 115280,
+    "test": 33665,
+    "excluded": 19039,
+    "validation": 7999
+  }
+}

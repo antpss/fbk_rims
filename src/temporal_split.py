@@ -78,6 +78,8 @@ def stamp_artifact(cfg, path):
     path = Path(path)
     metadata = {"split_id": split_manifest(cfg)["split_id"],
                 "artifact_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    from model_artifacts import learning_settings
+    metadata["learning_settings"] = learning_settings(cfg)
     Path(str(path) + ".provenance.json").write_text(json.dumps(metadata, indent=2))
 
 
@@ -90,3 +92,5 @@ def require_artifact(cfg, path):
     if (not path.exists() or meta.get("split_id") != split_manifest(cfg)["split_id"] or
             meta.get("artifact_sha256") != hashlib.sha256(path.read_bytes()).hexdigest()):
         raise ValueError(f"Missing/stale training-only provenance for {path}; rerun its producing pipeline stage")
+    from model_artifacts import warn_learning_settings
+    warn_learning_settings(cfg, meta, path)

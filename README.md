@@ -449,7 +449,7 @@ python src/activity_profiler.py
 
 ### Step 2: Log Alignment & Replay Repair (`src/02_align_and_repair_log.py`)
 
-Replays the event log against the discovered Petri net using $A^*$ state-space alignment to produce a repaired log containing strictly synchronous moves. This guarantees that every trace in the dataset can be replayed inside the simulation model without deadlock:
+Aligns the COMPLETE-event projection against the discovered Petri net. Reconstruction consumes exactly the paired work items submitted for alignment: synchronous moves preserve observed START/COMPLETE records, log moves are excluded, and visible model moves become explicitly synthetic COMPLETE events. Other lifecycle states (such as SCHEDULE/ASSIGN) are excluded from this work-item projection and counted. Only a null model label denotes a silent transition; visible activity names starting with `tau` remain visible. Failed or inconsistent alignments raise an error rather than exporting an unrepaired trace.
 
 ```bash
 python src/02_align_and_repair_log.py
@@ -523,14 +523,44 @@ python src/03_dataset_builder.py --task waiting_time
 
 For paired executions, dataset creation calls `calculate_net_working_seconds` using the activity/role calendar. Simulation expands the predicted working duration with `calculate_calendar_duration`. This avoids the original blanket double-counting of nights and weekends, and was already present before the first-16 fixes.
 
-There are remaining limitations:
+Duration targets now use **strict overlap with the effective working calendar**, without overtime allowances or minimum-effort fallbacks. Disabled calendars continue to use elapsed time. `allow_zero` remains accepted for compatibility; zero is always a valid calculation result. The default configuration enables discovered role calendars, mined from training cases only. Explicit activity/role overrides take precedence over discovered calendars, with the global calendar as fallback.
 
-- Duration extraction preserves raw elapsed time for same-day sessions up to four hours on working days (an overtime heuristic), and credits up to one hour if there is no working-calendar overlap. Runtime still applies shift pauses; these exceptions do not round-trip exactly.
+Matched positive-duration human executions with zero working-time overlap are excluded from duration training regardless of `filter_zero_duration`. The extraction console summary and dataset `.summary.json` count these under `excluded.zero_working_time_overlap`. Their observed START/COMPLETE events still contribute workload, occupancy and completed history; their previous-duration value is zero, and otherwise valid waiting samples remain eligible. Missing STARTs, synthetic events and legitimate instantaneous activities retain their existing treatment. Dataset creation fails clearly if no usable rows remain.
+
+Calendar consistency does not guarantee reproduction of observations outside the selected operating policy: under an 08:00–20:00 shift, Monday 19:00–21:00 supplies one working hour, which simulation completes at 20:00. Friday 19:00–Monday 09:00 supplies two working hours and expands back to 62 elapsed hours. Discovered calendars describe the selected operating policy, not proof of actual human effort.
+
+**Rebuild required:** regenerate role discovery if its artifacts predate the training-only split, then rerun delay discovery, both dataset builders and both model tournaments. With current training-only discovery artifacts, run `venv/bin/python run_pipeline.py --steps 2b,3,4b`; add `1b` if role discovery must be regenerated. For older first-16 artifacts, follow the full rebuild instructions in `docs/first16_fixes.md`. Existing artifact formats are unchanged; the exclusion counter is additive. Do not reuse models trained with the former duration convention.
+
+There are remaining limitations:
 - A positive START–COMPLETE interval is not proof of uninterrupted human work. Long asynchronous/external processing is currently classified as `HUMAN_WORK_ITEM` unless overridden, and consumes worker capacity.
 - `AUTOMATED_TASK` means **zero execution duration plus possible waiting**, not nonzero continuous external processing. Overriding a long task to this type would discard its execution duration.
 - A per-activity calendar override with `enabled: false` already supports continuous duration arithmetic for that activity, but does **not** remove its worker allocation. A positive-duration, worker-free external-task type is not implemented.
 
 Therefore, the complete external-processing proposal in the old notes is not implemented. Changing its semantics requires deciding whether the logged interval represents staffed work, an external timer, or a combination. The remaining audit findings and `docs/first16_fixes.md` describe the repair boundary; the repository is not claimed to be free of all audit issues.
+
+### Follow-up audit fixes: delays, routing, evaluation and execution safety
+
+Delay discovery uses the same activity profiles as simulation. Automated-task waits run continuously and exclude neither human worker-busy time nor human calendar closures. Human off-hours remain descriptive evidence for the existing external-delay classification; they are not subtracted from automated residual targets. Human-task availability correction remains in place.
+
+Routing arrival hour, weekday and inter-arrival features come from the full lifecycle log before COMPLETE-only alignment filtering. Previous-activity history includes observable activities only. Evaluation uses chronological FIFO lifecycle pairing shared with historical feature extraction: unmatched completions are instantaneous, and future STARTs cannot match them.
+
+Worker cooldowns read the fitted per-worker distribution/parameter schema (with global fallback for workers without a profile) and apply the configured maximum to fallback samples too. A worker takes one break only after all active tasks finish. Queue-aware breaks can be interrupted; an obsolete break cannot clear a newer break's state.
+
+The per-case event ceiling reserves observable-event slots before launching parallel work, including automated tasks and instant milestones. Already admitted work finishes while the case remains active in WIP. Silent completion paths may still fire at the ceiling. Reaching the final marking is reported as completed; requiring further observable events is reported as `limit_failed`. A configured simulation horizon can still censor work before it finishes.
+
+**Rebuild after these fixes:** rerun delay discovery, the waiting dataset/tournament and routing training. When combined with the calendar fix above, rebuild both prediction tasks and routing with `venv/bin/python run_pipeline.py --steps 2b,3,4b,5`. If artifacts predate the first-16 fixes, use the full discovery-onward rebuild instead. Existing supplied artifacts were not regenerated by the code changes. Rerun evaluation to obtain corrected lifecycle-based metrics.
+
+### Further audit repairs: log conventions, reproducibility and paths
+
+Repeated activities now use the predicted/sampled waits directly; the unconditional halving on each revisit has been removed. The existing external/residual `max` composition remains.
+
+`log_utils.normalize_optional_columns` supplies the pipeline conventions for absent fields: unspecified lifecycle means COMPLETE, and unspecified resource means UNKNOWN. It never creates a START or invents human effort. Activity profiling still supplies the execution type: completion-only automated/instantaneous events can provide waiting targets under the zero-execution convention, while human executions without a START provide neither duration nor pre-execution waiting targets. Such observations remain historical context. Profiling is a heuristic modeling choice; a missing START alone does not establish that real execution was instantaneous. Logs without resource identities retain the existing anonymous-pool assumption; their staffing and worker occupancy cannot be learned from absent identities.
+
+Training seeds Python, NumPy and PyTorch, including model initialization, dropout and minibatch order. XGBoost honors `project.random_seed`; routing case splits and worker tie-breaking use stable orderings. PyTorch requests deterministic algorithms and disables cuDNN benchmarking; unsupported nondeterministic kernels fail explicitly. Repeatability is scoped to the same inputs, configuration and software/hardware environment. XGBoost routing receives categorical columns with the persisted training categories; unseen values become missing. Sklearn routing keeps its training-time integer representation.
+
+Role discovery, dataset creation, delay calendars and runtime worker/calendar loading share `resources.discovery.output_file`. Profile CLI/helper outputs honor `activity_profiling.output_file` and `report_file`. Comparison reports use `paths.output_base_dir`. Simulation CSV/XES paths honor the configured directories in both modes; pure-physics exports append `_pure_physics` to the configured basename. Relative paths are resolved against the project root.
+
+**Rebuild:** rerun preprocessing when relying on the new optional-column convention, then alignment, delay discovery, both affected datasets/tournaments and routing. For the supplied pre-repair artifacts, run the full pipeline. Reproducibility fixes affect newly trained models; removing loop decay affects runtime immediately. Rerun evaluation and update report consumers to use `mean_cycle_difference` instead of `mae_cycle`.
 
 ### Step 4: Predictive Modeling & Multi-Architecture Benchmark Suite
 
@@ -622,7 +652,7 @@ python src/05_train_routing.py --classifier xgboost
 
 The simulation engine is structured as a modular object-oriented package in `src/simulator/`, orchestrated via the CLI runner `src/06_simulate.py`:
 
-* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, applies loopback damping ($0.5^{\text{loop}}$), and provides safe deadlock detection warnings:
+* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, uses predicted/sampled waits without automatic repeat-activity decay, and provides safe deadlock detection warnings:
   * **3-Way Archetype Execution**: Coordinates with `ActivityProfiler` to execute transitions according to their operational archetype:
     * `INSTANT_GATEWAY`: Fires in $0.0\text{s}$ SimPy time without requesting workers or shift checks, advancing marking immediately.
     * `AUTOMATED_TASK`: Runs 24/7 without consuming human staff capacity, evaluating external/batch waiting time distributions while executing with $0.0\text{s}$ duration.
@@ -708,8 +738,24 @@ Replay references are restricted to scheduled case IDs. Full-case replay metrics
 * **Cycle Time Distribution (CTD / 1WD)**: Stored in seconds (`wd` is an alias); the library’s hourly-bin result is converted before reporting. Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
   $$W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx$$
 * **Case Arrival Rate (CAR)**: Evaluates arrival burstiness and concurrency by computing 1WD across binned case arrival timestamps.
-* **Cycle Time Mean, Median & MAE**: Completed-cohort turnaround summaries. The current `mae_cycle` field is the absolute difference between the two cohort means, not a mean of per-case paired errors.
+* **Cycle Time Mean, Median & Absolute Mean Difference**: Completed-cohort turnaround summaries. `mean_cycle_difference` is the absolute difference between reference and simulated cohort means, in seconds. It replaces the misleading `mae_cycle` field; it does not measure paired case error.
 
 ### Simulation comparison reports (`data/processed/ablation_report.md`)
 
 `--compare_modes` reports measured scores for `hybrid_residual` and `pure_physics`, displaying unavailable scores as `N/A`. It does not assume either mode is better, promise a runtime, or award an overall best-fit star across different completed-case populations. Consult each run's population and censoring counts alongside its scores.
+
+## Residual-audit follow-up
+
+Only `ex_ante` extraneous-delay placement is supported. Discovery and simulation reject `ex_post` and `causal_pair` placement, including incompatible saved manifests. Internal causal predecessor/arc information is still used for ex-ante delay estimation and selection.
+
+New provenance files and training metadata record modeling settings. Reusing them after relevant settings change emits a warning recommending a rebuild; this new configuration check does not stop execution. Older files without those settings emit an "unable to check" warning. Existing split/content/schema/feature compatibility errors remain errors. This is a configuration comparison, not a complete fingerprint of every upstream file or software version.
+
+Worker dispatch and shift alarms resolve activity/role calendars even when the global fallback calendar is disabled. Prophet's cache includes the selected activity filter, so changing the filter retrains the forecast. The trace-prefix parser accepts both CSV strings and lists; it does not interpret activity-name conventions such as `W_`.
+
+Delay discovery writes compressed CSV as well as optional Parquet. Without a Parquet engine, the waiting builder reads the CSV copy and validates its provenance. Corrupt files and invalid provenance do not silently fall back. Failed Parquet exports remove older copies so they cannot take precedence over the new CSV.
+
+Prediction caps/floors and timezone behavior are unchanged pending separate decisions. `include_internal_queue_delays` controls extra sampled case delays, not physical worker queues or the separate `human_latency` worker cooldowns.
+
+Case attributes are generic configured payloads: the first attribute is never implicitly a loan amount. Configure each attribute's source column, feature name and type (`continuous` or `categorical`). Numeric-looking category labels retain their text identity. Timing models fit category vocabularies on training cases only and package them in `training_metadata.json`: XGBoost uses fixed categorical levels (unseen values become missing), while LSTM/TCN use one-hot columns and an explicit unknown indicator before scaling. Duration resource identity uses the same encoding contract; waiting prediction still cannot use a future worker. The legacy numeric `requested_amount` API is retained for compatibility, but new domains do not need a `RequestedAmount` attribute.
+
+Execution-event attributes cannot currently be supplied during simulation. Selecting `event_attributes` for timing prediction therefore raises an explicit error at dataset creation, training and predictor loading. Unselected extra log columns are allowed. Rebuild affected datasets and timing candidates/champions to use the new categorical contract; existing caps/floors are unchanged.

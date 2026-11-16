@@ -18,7 +18,7 @@ and matching the evaluation framework of Meneghello et al. (Information Systems 
   4. Congestion & Cycle Time Quality:
      - Cycle Time Distribution (CTD / 1WD Wasserstein Distance)
      - Case Arrival Rate (CAR, 1WD across case arrival timeline)
-     - Cycle Time Mean, Median, and MAE
+     - Cycle Time Mean, Median, and Absolute Difference of Means
 """
 
 import os
@@ -43,9 +43,9 @@ from log_distance_measures.cycle_time_distribution import cycle_time_distributio
 from log_distance_measures.case_arrival_distribution import case_arrival_distribution_distance
 
 try:
-    from config_loader import PROJECT_ROOT
+    from config_loader import PROJECT_ROOT, get_simulation_output_paths
 except ImportError:
-    from src.config_loader import PROJECT_ROOT
+    from src.config_loader import PROJECT_ROOT, get_simulation_output_paths
 
 
 def format_dur(sec):
@@ -131,26 +131,20 @@ def prepare_evaluation_dfs(df_real, df_sim, target_acts=None, max_cases=1000):
     if "lifecycle:transition" in r_filtered.columns:
         trans_vals = set(r_filtered["lifecycle:transition"].dropna().astype(str).str.upper())
         if "START" in trans_vals and "COMPLETE" in trans_vals:
-            df_start = r_filtered[r_filtered["lifecycle:transition"].str.upper() == "START"].copy()
-            df_comp = r_filtered[r_filtered["lifecycle:transition"].str.upper() == "COMPLETE"].copy()
-            df_start["_idx"] = df_start.groupby([c_col, a_col]).cumcount()
-            df_comp["_idx"] = df_comp.groupby([c_col, a_col]).cumcount()
-            merged = pd.merge(
-                df_comp,
-                df_start[[c_col, a_col, "_idx", t_col]],
-                on=[c_col, a_col, "_idx"],
-                suffixes=("", "_start"),
-                how="left"
-            )
-            merged["start_time"] = pd.to_datetime(merged[t_col + "_start"].fillna(merged[t_col]), utc=True)
-            merged["end_time"] = pd.to_datetime(merged[t_col], utc=True)
-            clean_real = pd.DataFrame({
-                "case_id": merged[c_col].astype(str),
-                "activity": merged[a_col].astype(str),
-                "start_time": merged["start_time"],
-                "end_time": merged["end_time"],
-                "resource": merged[r_col].astype(str) if r_col in merged.columns else "UNKNOWN"
-            })
+            from historical_features import execution_instances
+            events = r_filtered.rename(columns={c_col: "case:concept:name", a_col: "concept:name",
+                                                t_col: "time:timestamp"}).copy()
+            events["time:timestamp"] = pd.to_datetime(events["time:timestamp"], utc=True)
+            events["_rank"] = events["lifecycle:transition"].astype(str).str.upper().map({"START": 0, "COMPLETE": 1})
+            events = events.sort_values(["time:timestamp", "_rank"], kind="stable")
+            # Use the same chronological FIFO pairing as historical feature extraction.
+            # Unmatched completions remain instantaneous; future STARTs cannot match them.
+            clean_real = pd.DataFrame([
+                {"case_id": inst["case"], "activity": inst["act"],
+                 "start_time": inst["start"], "end_time": inst["end"],
+                 "resource": str(inst["row"].get(r_col, "UNKNOWN"))}
+                for inst in execution_instances(events)
+            ], columns=["case_id", "activity", "start_time", "end_time", "resource"])
         else:
             comp = r_filtered[r_filtered["lifecycle:transition"].str.upper() == "COMPLETE"].copy() if "COMPLETE" in trans_vals else r_filtered.copy()
             ts = pd.to_datetime(comp[t_col], utc=True)
@@ -197,16 +191,9 @@ class SimulationEvaluator:
         self.mode = mode
         self.arrival_mode = arrival_mode
         self.export_xes = export_xes
-        self.sim_log_path = sim_log_path or os.path.join(
-            PROJECT_ROOT,
-            f"data/generated/csv/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_log", "data/generated/csv/simulated_log.csv")
-        )
-        self.output_simulated_xes = output_simulated_xes or os.path.join(
-            PROJECT_ROOT,
-            f"data/generated/xes/simulated_log_{self.mode}.xes" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
-        )
+        default_csv, default_xes = get_simulation_output_paths(cfg, mode)
+        self.sim_log_path = sim_log_path or default_csv
+        self.output_simulated_xes = output_simulated_xes or default_xes
         self.workers_count = workers_count
         self.calendar = calendar
 
@@ -346,7 +333,7 @@ class SimulationEvaluator:
             result[prefix + "_mean"] = float(cycles.mean()) if len(cycles) else None
             result[prefix + "_median"] = float(cycles.median()) if len(cycles) else None
         cycle_available = len(rc) > 0 and len(sc) > 0
-        result["mae_cycle"] = calculate("mae_cycle", lambda: abs(result["real_mean"] - result["sim_mean"]), cycle_available)
+        result["mean_cycle_difference"] = calculate("mean_cycle_difference", lambda: abs(result["real_mean"] - result["sim_mean"]), cycle_available)
         bin_size = timedelta(hours=1)
         result["ctd"] = calculate("ctd", lambda: cycle_time_distribution_distance(rc, ids, sc, ids, bin_size=bin_size) * bin_size.total_seconds(), cycle_available)
         result["wd"] = result["ctd"]
@@ -358,16 +345,16 @@ class SimulationEvaluator:
         }
         result.update(mode=self.mode, cases=populations["simulated_scheduled"], events=len(df_sim), elapsed=elapsed,
                       populations=populations, metric_status=metric_status, window_metrics=window_metrics,
-                      metric_units={"ctd": "seconds", "wd": "seconds", "mae_cycle": "seconds"},
+                      metric_units={"ctd": "seconds", "wd": "seconds", "mean_cycle_difference": "seconds"},
                       completed_case_metrics_conditional=True,
                       generation_status=getattr(self, "generation_status", {"status": "unknown"}))
         lines = ["# Simulation benchmark", "", "Full-case metrics below are conditional on completion; censored and failed cases are excluded.",
                  "Replay uses paired completed IDs. Window metrics use observed intervals clipped at the cutoff; clipped endpoints are not recorded completions.", "",
                  "## Populations", "", "```json", json.dumps(populations, indent=2), "```", "",
                  "## Completed-case metrics", "", "| Metric | Value | Status |", "|---|---:|---|"]
-        for name in list(functions) + ["ctd", "mae_cycle"]:
+        for name in list(functions) + ["ctd", "mean_cycle_difference"]:
             val = result[name]
-            display = format_dur(val) if name in ("ctd", "mae_cycle") else "N/A" if val is None else f"{val:.4f}"
+            display = format_dur(val) if name in ("ctd", "mean_cycle_difference") else "N/A" if val is None else f"{val:.4f}"
             lines.append(f"| {name} | {display} | {metric_status[name]} |")
         lines.extend(["", "## Observation-window metrics", "", "```json", json.dumps(window_metrics, indent=2), "```",
                       "", "## Completed-case cycle times", "",

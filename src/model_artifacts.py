@@ -3,6 +3,41 @@ import hashlib
 import json
 from pathlib import Path
 import numpy as np
+import warnings
+
+
+def learning_settings(cfg):
+    """Record modeling settings, excluding run limits and output locations."""
+    def without_paths(value):
+        if isinstance(value, dict):
+            return {k: without_paths(v) for k, v in value.items()
+                    if k not in {"output_file", "report_file", "output_dir", "input_log"}}
+        if isinstance(value, list):
+            return [without_paths(v) for v in value]
+        return value
+    snapshot = {key: without_paths(cfg.get(key, {})) for key in
+                ("preprocessing", "discovery", "activity_profiling", "resources", "features", "tasks", "model_strategy")}
+    snapshot["target_activities"] = sorted(cfg.get("target_activities", []))
+    sim = cfg.get("simulation", {})
+    snapshot["calendar"] = sim.get("calendar", {})
+    snapshot["delay_discovery"] = {key: sim.get("extraneous_delays", {}).get(key)
+                                    for key in ("estimator", "placement")}
+    return snapshot
+
+
+def warn_learning_settings(cfg, metadata, artifact):
+    """Configuration drift is advisory; existing content/schema checks stay strict."""
+    saved = metadata.get("learning_settings")
+    current = learning_settings(cfg)
+    if saved is None:
+        warnings.warn(f"Cannot check modeling settings for {artifact}: no saved settings. "
+                      "Rebuild to record them; continuing.", UserWarning, stacklevel=2)
+    elif saved != current:
+        changed = sorted(k for k in set(saved) | set(current)
+                         if saved.get(k) != current.get(k))
+        warnings.warn(f"Modeling settings changed for {artifact}: {', '.join(changed)}. "
+                      "Rebuild the affected discovery, datasets and models; continuing.",
+                      UserWarning, stacklevel=2)
 
 
 def experiment_id(cfg, dataset):

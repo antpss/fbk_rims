@@ -3,76 +3,154 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "training_time_seconds": 1665.98,
-  "weighted_mae": 26678.96,
-  "weighted_smape": 77.45,
-  "macro_mae": 27643.69,
+  "experiment_id": "ec82f5543739141d482d291bb806691a5c113acb178c85c0b9935db9e0885f1b",
+  "selection_partition": "validation",
+  "weighted_mae": 14649.11261940241,
+  "weighted_smape": 68.45667125034038,
+  "macro_mae": 14913.735405758074,
   "activity_metrics": {
     "Authorization Requested": {
-      "count": 2469,
-      "model_source": "local_lstm (LSTM)",
-      "mae": 37757.86,
-      "smape": 134.28
+      "count": 600,
+      "mae": 13818.96456644694,
+      "smape": 123.60870919255026,
+      "model_source": "local_xgboost"
     },
     "Back-Office Adjustment Requested": {
-      "count": 516,
-      "model_source": "global_xgboost (XGBOOST)",
-      "mae": 27871.51,
-      "smape": 76.7
+      "count": 59,
+      "mae": 43011.103896318855,
+      "smape": 47.92854934167301,
+      "model_source": "local_xgboost"
     },
     "Evaluating Request (NO registered letter)": {
-      "count": 2130,
-      "model_source": "local_lstm (LSTM)",
-      "mae": 27906.82,
-      "smape": 133.39
+      "count": 537,
+      "mae": 13314.320568347555,
+      "smape": 130.14218565794937,
+      "model_source": "global_tcn"
     },
     "Evaluating Request (WITH registered letter)": {
-      "count": 379,
-      "model_source": "global_tcn (TCN)",
-      "mae": 26125.06,
-      "smape": 127.56
+      "count": 73,
+      "mae": 8991.86390999572,
+      "smape": 114.2678258840881,
+      "model_source": "local_xgboost"
     },
     "Network Adjustment Requested": {
-      "count": 249,
-      "model_source": "local_lstm (LSTM)",
-      "mae": 54960.31,
-      "smape": 200.0
+      "count": 15,
+      "mae": 5013.483984375,
+      "smape": 89.21181926299322,
+      "model_source": "local_xgboost"
     },
     "Pending Liquidation Request": {
-      "count": 5528,
-      "model_source": "local_lstm (LSTM)",
-      "mae": 2228.2,
-      "smape": 3.51
+      "count": 1305,
+      "mae": 2965.905435823755,
+      "smape": 3.4257167977941814,
+      "model_source": "local_lstm"
     },
     "Pending Request for Reservation Closure": {
-      "count": 5539,
-      "model_source": "local_xgboost (XGBOOST)",
-      "mae": 1481.82,
-      "smape": 61.85
+      "count": 1198,
+      "mae": 59.599877445048996,
+      "smape": 51.414195595244635,
+      "model_source": "local_xgboost"
     },
     "Pending Request for acquittance of heirs": {
-      "count": 362,
-      "model_source": "global_lstm (LSTM)",
-      "mae": 6246.44,
-      "smape": 58.5
+      "count": 52,
+      "mae": 5638.9402418870195,
+      "smape": 17.640500423143067,
+      "model_source": "global_tcn"
     },
     "Request created": {
-      "count": 6487,
-      "model_source": "global_xgboost (XGBOOST)",
-      "mae": 34974.61,
-      "smape": 91.92
+      "count": 1665,
+      "mae": 2331.006072972845,
+      "smape": 84.96224320699729,
+      "model_source": "local_lstm"
     },
     "Service closure Request with BO responsibility": {
-      "count": 5779,
-      "model_source": "global_tcn (TCN)",
-      "mae": 69399.85,
-      "smape": 81.07
+      "count": 1320,
+      "mae": 64738.81850010843,
+      "smape": 62.57781863225485,
+      "model_source": "local_lstm"
     },
     "Service closure Request with network responsibility": {
-      "count": 4847,
-      "model_source": "local_lstm (LSTM)",
-      "mae": 15128.08,
-      "smape": 93.67
+      "count": 1175,
+      "mae": 4167.0824096176475,
+      "smape": 85.08841942768244,
+      "model_source": "local_tcn"
     }
+  },
+  "available_count": 7999,
+  "total_count": 7999,
+  "test_metrics": {
+    "weighted_mae": 26179.79691031408,
+    "weighted_smape": 76.1939991368908,
+    "macro_mae": 32232.19750801381,
+    "activity_metrics": {
+      "Authorization Requested": {
+        "count": 2446,
+        "mae": 32710.48258372047,
+        "smape": 133.9819419974261,
+        "model_source": "local_xgboost"
+      },
+      "Back-Office Adjustment Requested": {
+        "count": 527,
+        "mae": 36315.15120782436,
+        "smape": 59.16331362303925,
+        "model_source": "local_xgboost"
+      },
+      "Evaluating Request (NO registered letter)": {
+        "count": 2150,
+        "mae": 23774.883825825535,
+        "smape": 135.55129389514448,
+        "model_source": "global_tcn"
+      },
+      "Evaluating Request (WITH registered letter)": {
+        "count": 372,
+        "mae": 20639.968085176202,
+        "smape": 124.4062867494694,
+        "model_source": "local_xgboost"
+      },
+      "Network Adjustment Requested": {
+        "count": 250,
+        "mae": 75050.79086132812,
+        "smape": 131.73507470097206,
+        "model_source": "local_xgboost"
+      },
+      "Pending Liquidation Request": {
+        "count": 5566,
+        "mae": 4688.4568684311,
+        "smape": 6.315672232493164,
+        "model_source": "local_lstm"
+      },
+      "Pending Request for Reservation Closure": {
+        "count": 4985,
+        "mae": 2076.728512790569,
+        "smape": 62.59420769186119,
+        "model_source": "local_xgboost"
+      },
+      "Pending Request for acquittance of heirs": {
+        "count": 354,
+        "mae": 45034.19294281868,
+        "smape": 57.36067409531417,
+        "model_source": "global_tcn"
+      },
+      "Request created": {
+        "count": 6409,
+        "mae": 5069.893010797023,
+        "smape": 87.37338685095189,
+        "model_source": "local_lstm"
+      },
+      "Service closure Request with BO responsibility": {
+        "count": 5789,
+        "mae": 96470.15486413676,
+        "smape": 79.7043158952741,
+        "model_source": "local_lstm"
+      },
+      "Service closure Request with network responsibility": {
+        "count": 4817,
+        "mae": 12723.469825303131,
+        "smape": 92.7234250887602,
+        "model_source": "local_tcn"
+      }
+    },
+    "available_count": 33665,
+    "total_count": 33665
   }
 }

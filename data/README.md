@@ -22,5 +22,7 @@ This directory organizes all raw, intermediate, and simulated process mining dat
 
 ## Git Tracking Policy
 
-Large raw, intermediate, and simulated logs (`*.xes`, `*.xes.gz`, `*.csv`, `data/generated/`) are excluded from version control via `.gitignore` to prevent repository bloat. Markdown evaluation reports, data manifests, and configuration weights are tracked.
+Large raw, intermediate, and simulated logs (`*.xes`, `*.xes.gz`, `*.csv`, `*.csv.gz`, `*.parquet`, `*.log`, `data/generated/`) are excluded from version control via `.gitignore` to prevent repository bloat. Per-run case assignments (`data/processed/case_split.json`) and `*.provenance.json` sidecars are also excluded. Markdown evaluation reports, small summary/metrics JSON files, and configuration weights are tracked.
+
+Generated duration and waiting-time model bundles, including `hybrid_champion`, are excluded except for their top-level `metrics.json` files. Keep generated bundles locally; a fresh clone must train and benchmark timing models (Steps 04 and 04b) before simulation. Rebuild dataset splits and provenance through the corresponding pipeline stages.
 
