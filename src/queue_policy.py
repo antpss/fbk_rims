@@ -7,10 +7,20 @@ class QueuePolicy:
     def __init__(self, config=None):
         config = config or {}
         self.type = config.get("type", "fifo")
-        if self.type not in ("fifo", "lifo", "priority"):
-            raise ValueError("simulation.queue.type must be fifo, lifo or priority")
-        if config.get("tie_breaker", "fifo") != "fifo":
-            raise ValueError("simulation.queue.tie_breaker must be fifo")
+        if self.type not in ("fifo", "lifo", "priority", "spt", "edd"):
+            raise ValueError("simulation.queue.type must be fifo, lifo, priority, spt or edd")
+        self.tie_breaker = config.get("tie_breaker", "fifo")
+        if self.tie_breaker not in ("fifo", "lifo"):
+            raise ValueError("simulation.queue.tie_breaker must be fifo or lifo")
+        if self.type == "edd":
+            edd = config.get("edd") or {}
+            if not isinstance(edd, dict):
+                raise ValueError("simulation.queue.edd must contain a column setting")
+            self.edd_column = edd.get("column")
+            if not isinstance(self.edd_column, str) or not self.edd_column.strip():
+                raise ValueError("simulation.queue.edd.column is required when queue.type is edd")
+            if self.edd_column in ("time:timestamp", "concept:name", "case:concept:name"):
+                raise ValueError("EDD requires a deadline trace column, not an event timestamp or case ID")
         self.priority_config = config.get("priority", {})
         self.attribute = self.priority_config.get("attribute", "Priority")
         if not isinstance(self.attribute, str) or not self.attribute or self.attribute.startswith("case:") or self.attribute == "concept:name":
@@ -109,9 +119,33 @@ class QueuePolicy:
         seq = request["sequence"]
         if self.type == "lifo":
             return (-seq,)
+        tie = seq if self.tie_breaker == "fifo" else -seq
         if self.type == "priority":
-            return (request["priority"], seq)
+            return (request["priority"], tie)
+        if self.type == "spt":
+            return (request["estimated_duration"], tie)
+        if self.type == "edd":
+            return (request["due_date"], tie)
         return (seq,)
+
+    @staticmethod
+    def validate_duration(value):
+        if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"SPT requires a finite, nonnegative duration estimate; got {value!r}")
+        return float(value)
+
+    @staticmethod
+    def parse_deadline(value, context="deadline"):
+        import pandas as pd
+        if value is None or isinstance(value, (Real, bool)):
+            raise ValueError(f"EDD {context}: missing or invalid deadline {value!r}; expected a date/time")
+        try:
+            stamp = pd.Timestamp(value)
+            if pd.isna(stamp):
+                raise ValueError("missing deadline")
+            return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise ValueError(f"EDD {context}: missing or invalid deadline {value!r}") from exc
 
     def source_column(self, cfg):
         """Accept either a configured ML feature alias or an independent log column."""
@@ -121,10 +155,11 @@ class QueuePolicy:
         return self.source
 
     def validate_features(self, cfg):
-        if self.type != "priority":
+        if self.type not in ("priority", "edd"):
             return
+        reserved = self.attribute if self.type == "priority" else self.edd_column.removeprefix("case:")
         for group in ("case_attributes", "event_attributes"):
             for attr in cfg.get("features", {}).get(group, []):
                 names = (attr.get("column", ""), attr.get("feature_name", "")) if isinstance(attr, dict) else (str(attr),)
-                if any(name.removeprefix("case:") == self.attribute for name in names):
-                    raise ValueError(f"Scheduling attribute {self.attribute!r} must not be configured as an ML feature")
+                if any(name.removeprefix("case:") == reserved for name in names):
+                    raise ValueError(f"Scheduling attribute {reserved!r} must not be configured as an ML feature")

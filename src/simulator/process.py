@@ -197,10 +197,14 @@ class SharedWorkerPool:
         return capacity_occupancy(self.role_data, self.worker_active_count,
                                   self.enable_concurrency_quotas)
 
-    def request_worker(self, activity, priority=None):
+    def request_worker(self, activity, priority=None, estimated_duration=None, due_date=None):
         """Enqueue every task before dispatch; policies never preempt running work."""
         if self.queue_policy.type == "priority":
             priority = self.queue_policy._check_priority(priority)
+        if self.queue_policy.type == "spt":
+            estimated_duration = self.queue_policy.validate_duration(estimated_duration)
+        if self.queue_policy.type == "edd":
+            due_date = self.queue_policy.parse_deadline(due_date)
         role = self.activity_to_role.get(activity)
         if role and role in self.role_to_workers:
             eligible = self.role_to_workers[role]
@@ -211,6 +215,7 @@ class SharedWorkerPool:
             "activity": activity, "role": role, "eligible": set(eligible),
             "event": event, "req_time": self.env.now,
             "sequence": self._request_sequence, "priority": priority,
+            "estimated_duration": estimated_duration, "due_date": due_date,
         })
         self._request_sequence += 1
         self._dispatch_all_pending()
@@ -422,6 +427,8 @@ class SimulationProcess:
 
         # Runtime Champion Predictor
         self.predictor = ChampionPredictor(cfg)
+        if self.queue_policy.type == "spt":
+            self.predictor.validate_spt_models()
 
         # Arrival Generator
         self.arrivals_generator = ArrivalGenerator(
@@ -565,7 +572,7 @@ class SimulationProcess:
                 process=self,
                 inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0),
                 case_attrs=arr.get("case_attrs", {}),
-                queue_priority=arr.get("queue_priority")
+                queue_priority=arr.get("queue_priority"), due_date=arr.get("due_date")
             )
             tokens.append(token)
             self.env.process(token.run())
@@ -582,6 +589,8 @@ class SimulationProcess:
         # Save simulated event log (CSV)
         columns = ["case_id", "activity", "start_timestamp", "complete_timestamp", "resource_id",
                    "duration_seconds", "wait_time_seconds", "queue_wait_seconds", "wip"]
+        if self.queue_policy.type == "spt":
+            columns.append("queue_estimated_duration_seconds")
         records = self.simulated_records + [record for token in tokens for record in token.pending_work]
         df_sim = pd.DataFrame(records, columns=columns)
         case_status = pd.DataFrame([{
@@ -595,6 +604,11 @@ class SimulationProcess:
             column = "case:" + self.queue_policy.attribute
             df_sim[column] = df_sim["case_id"].map(priorities)
             case_status[column] = case_status["case_id"].map(priorities)
+        if self.queue_policy.type == "edd":
+            deadlines = {token.case_id: token.due_date for token in tokens}
+            column = "case:" + self.queue_policy.edd_column.removeprefix("case:")
+            df_sim[column] = df_sim["case_id"].map(deadlines)
+            case_status[column] = case_status["case_id"].map(deadlines)
         self.evaluator.case_status = case_status
         self.evaluator.window_start = pd.to_datetime(ref_dt, utc=True)
         self.evaluator.window_end = (self.evaluator.window_start + pd.Timedelta(seconds=self.duration_seconds)

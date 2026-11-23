@@ -382,6 +382,26 @@ class ChampionPredictor:
 
         return feats
 
+    def validate_spt_models(self):
+        """Queue estimates cannot depend on a worker that has not been assigned yet."""
+        columns = set(self.feature_cols)
+        for entry in self.dur_models.get("models", {}).values():
+            suite = entry.get("suite", self.dur_models)
+            columns.update(suite.get("metadata", {}).get("feature_columns", []))
+            columns.update(entry.get("expected_cols") or [])
+            for obj in (entry.get("model"), entry.get("scaler")):
+                names = getattr(obj, "feature_names_in_", None)
+                if names is not None:
+                    columns.update(names)
+                names = getattr(obj, "feature_names", None)
+                if names is not None:
+                    columns.update(names)
+                if hasattr(obj, "get_booster"):
+                    columns.update(obj.get_booster().feature_names or [])
+        if "Resource_ID" in columns:
+            raise ValueError("SPT requires duration models trained without Resource_ID; "
+                             "the worker is unknown at queue entry. Retrain without resource_id.")
+
     def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
                          role_oc_array=None, worker_id=None, prev_dur=0.0,
                          trace_history=None, case_attrs=None):

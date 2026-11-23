@@ -61,6 +61,23 @@ class ArrivalGenerator:
                 return None if pd.isna(value) else value
         return None
 
+    def _prepare_deadlines(self, frame):
+        """Read constant trace deadlines; never infer them from completion events."""
+        column = self.queue_policy.edd_column
+        if column not in frame.columns:
+            raise ValueError(f"EDD column {column!r} is absent from the aligned log")
+        deadlines = {}
+        for cid, group in frame.groupby("case:concept:name", sort=False):
+            values = [self.queue_policy.parse_deadline(v, f"case {cid!r}, column {column!r}")
+                      for v in group[column].unique()]
+            if len(set(values)) != 1:
+                raise ValueError(f"EDD column {column!r} must be constant within case {cid!r}")
+            arrival = self.queue_policy.parse_deadline(group["time:timestamp"].min(), f"arrival of case {cid!r}")
+            deadlines[str(cid)] = (values[0], values[0] - arrival)
+        if not deadlines:
+            raise ValueError("EDD requires historical cases with deadlines to sample")
+        return deadlines
+
     def prepare_arrivals(self):
         """
         Prepares case arrival schedule:
@@ -80,11 +97,16 @@ class ArrivalGenerator:
 
         attr_imputation = {}
         case_payload_records = []
+        deadlines = {}
+        if self.queue_policy.type == "edd" and not os.path.exists(aligned_log_path):
+            raise ValueError("EDD requires an aligned log containing the configured deadline column")
         if os.path.exists(aligned_log_path):
             try:
                 df_real = pm4py.read_xes(aligned_log_path)
                 from temporal_split import training_rows
                 fit_df = training_rows(df_real, self.cfg)
+                if self.queue_policy.type == "edd":
+                    deadlines = self._prepare_deadlines(df_real if self.arrival_mode == "replay" else fit_df)
                 if amt_col and amt_col in fit_df.columns:
                     empirical_amounts = fit_df[amt_col].dropna().astype(float).tolist()
 
@@ -113,7 +135,7 @@ class ArrivalGenerator:
                         val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
                     attr_imputation[attr["feature_name"]] = val_stat
 
-                if self.queue_policy.type == "priority":
+                if self.queue_policy.type in ("priority", "edd"):
                     # Preserve nulls: groupby.first() would silently take future non-null values.
                     case_first_rows = (fit_df.sort_values("time:timestamp", kind="stable")
                                        .drop_duplicates("case:concept:name", keep="first"))
@@ -141,11 +163,14 @@ class ArrivalGenerator:
                         else:
                             val = str(val) if val is not None else str(default_val)
                         rec[feat_name] = val
-                    if rec or self.queue_policy.type == "priority":
-                        case_payload_records.append({"case_attrs": rec, "queue_source": self._queue_source(r)})
+                    if rec or self.queue_policy.type in ("priority", "edd"):
+                        record = {"case_attrs": rec, "queue_source": self._queue_source(r)}
+                        if self.queue_policy.type == "edd" and self.arrival_mode != "replay":
+                            record["deadline_allowance"] = deadlines[str(r["case:concept:name"])][1]
+                        case_payload_records.append(record)
             except Exception as e:
-                if self.queue_policy.type == "priority":
-                    raise ValueError(f"Could not load case payloads for priority scheduling: {e}") from e
+                if self.queue_policy.type in ("priority", "edd"):
+                    raise ValueError(f"Could not load case payloads for {self.queue_policy.type} scheduling: {e}") from e
                 print(f"[!] Warning: Could not read aligned log: {e}")
 
         arrivals = []
@@ -283,6 +308,7 @@ class ArrivalGenerator:
                     "arrival_time": cur_time,
                     "requested_amount": amt,
                     "queue_source": sampled_case.get("queue_source") if case_payload_records else None,
+                    "deadline_allowance": sampled_case.get("deadline_allowance") if case_payload_records else None,
                     "case_attrs": sampled_payload
                 })
                 i += 1
@@ -290,6 +316,15 @@ class ArrivalGenerator:
         # Resolve before creating tokens; scheduling metadata never enters case_attrs.
         for arrival in arrivals:
             source = arrival.pop("queue_source", None)
+            allowance = arrival.pop("deadline_allowance", None)
+            if self.queue_policy.type == "edd":
+                if self.arrival_mode == "replay":
+                    arrival["due_date"] = deadlines[arrival["case_id"]][0]
+                else:
+                    if allowance is None:
+                        raise ValueError("EDD cannot generate a case without a sampled deadline allowance")
+                    arrival["due_date"] = (self.queue_policy.parse_deadline(arrival["arrival_time"], "generated arrival")
+                                           + allowance)
             if self.queue_policy.type == "priority":
                 arrival["queue_priority"] = self.queue_policy.resolve(source, arrival["case_id"])
 
@@ -593,6 +628,7 @@ class ArrivalGenerator:
                         "arrival_time": t_arr,
                         "requested_amount": amt,
                         "queue_source": sampled_case.get("queue_source") if case_payload_records else None,
+                        "deadline_allowance": sampled_case.get("deadline_allowance") if case_payload_records else None,
                         "case_attrs": sampled_payload
                     })
                     case_idx += 1

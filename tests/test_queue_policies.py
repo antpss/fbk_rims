@@ -74,7 +74,7 @@ class QueuePolicyTests(unittest.TestCase):
             cfg['priority'].update(update)
             with self.subTest(update=update), self.assertRaises(ValueError):
                 QueuePolicy(cfg)
-        for policy_type in ('edd', 'spt', 'typo'):
+        for policy_type in ('edd', 'typo'):
             with self.assertRaises(ValueError):
                 QueuePolicy({'type': policy_type})
         cfg = priority_config()

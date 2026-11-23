@@ -22,12 +22,13 @@ class Token:
     Case Instance (Parity with Legacy token_LSTM.py / event_trace.py).
     Represents an active case token flowing through the Petri net process model.
     """
-    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, inter_arrival_seconds=0.0, case_attrs=None, queue_priority=None):
+    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, inter_arrival_seconds=0.0, case_attrs=None, queue_priority=None, due_date=None):
         self.case_id = str(case_id)
         self.arrival_offset = arrival_offset
         self.process = process
         self.env = process.env
         self.queue_priority = queue_priority
+        self.due_date = due_date
         self.case_attrs = dict(case_attrs or {})
         if requested_amount and "RequestedAmount" not in self.case_attrs:
             self.case_attrs["RequestedAmount"] = float(requested_amount)
@@ -198,9 +199,25 @@ class Token:
 
         # 6. Physical Worker Acquisition at Start of Execution
         t_req = self.env.now
-        worker_event = (self.process.workers.request_worker(act, priority=self.queue_priority)
-                        if self.queue_priority is not None
-                        else self.process.workers.request_worker(act))
+        request_options = {}
+        estimate_metadata = {}
+        if self.queue_priority is not None:
+            request_options["priority"] = self.queue_priority
+        if self.due_date is not None:
+            request_options["due_date"] = self.due_date
+        policy = getattr(self.process.workers, "queue_policy", None)
+        if policy is not None and policy.type == "spt":
+            # Freeze a prediction using only the state available at queue entry.
+            # Copies prevent prediction/feature extraction from mutating live state.
+            estimate = self.process.predictor.predict_duration(
+                act, list(self.prefix), self.process.active_cases_count,
+                dict(self.process.ac_wip), self.process.calendar.to_datetime(self.env.now),
+                self.requested_amount, self.process.workers.get_role_occupancy(self.process.target_activities),
+                worker_id=None, prev_dur=self.prev_dur,
+                trace_history=dict(self.trace_history), case_attrs=dict(self.case_attrs))
+            request_options["estimated_duration"] = policy.validate_duration(estimate)
+            estimate_metadata["queue_estimated_duration_seconds"] = request_options["estimated_duration"]
+        worker_event = self.process.workers.request_worker(act, **request_options)
         worker_id = yield worker_event
         t_start = self.env.now
         w_queue = max(0.0, t_start - t_req)
@@ -229,6 +246,7 @@ class Token:
                           "complete_timestamp": None, "resource_id": worker_id,
                           "duration_seconds": None, "wait_time_seconds": total_wait,
                           "queue_wait_seconds": w_queue, "wip": self.process.active_cases_count}
+        pending_record.update(estimate_metadata)
         self.pending_work.append(pending_record)
         yield self.env.timeout(actual_dur)
         self.pending_work.remove(pending_record)
@@ -253,6 +271,7 @@ class Token:
             "duration_seconds": round(actual_dur, 2),
             "wait_time_seconds": round(total_wait, 2),
             "queue_wait_seconds": round(w_queue, 2),
+            **estimate_metadata,
             "wip": self.process.active_cases_count
         })
 

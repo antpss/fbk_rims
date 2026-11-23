@@ -230,8 +230,13 @@ simulation:
 
   # Queue selection:
   queue:
-    type: fifo                     # fifo | lifo | priority
-    tie_breaker: fifo               # Equal priorities use fifo (only fifo supported as of now)
+    type: fifo                     # fifo | lifo | priority | spt | edd
+    tie_breaker: fifo               # fifo | lifo: equal priority, SPT estimate or EDD deadline; ignored for fifo/lifo
+
+    # Required ONLY when type: edd. No deadline is inferred from historical completion.
+    edd:
+      column: null                 # REQUIRED for edd: exact log column, e.g. "case:DueDate"
+      # Use ISO 8601 timestamps with offsets; timezone-less dates are interpreted as UTC.
 
     # Priority 1 is HIGHEST
     # Each case keeps its priority for all tasks (events).
