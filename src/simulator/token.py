@@ -36,6 +36,7 @@ class Token:
         self.requested_amount = float(requested_amount)
         self.inter_arrival_seconds = float(inter_arrival_seconds)
         self.arrival_dt = self.process.calendar.to_datetime(self.arrival_offset)
+        self.last_event_dt = self.arrival_dt
 
         # Prefix and state tracking
         self.prefix = []
@@ -50,6 +51,9 @@ class Token:
 
         # Initialize marking at source place(s)
         self.marking = self.process.im.copy()
+
+    def _record_completion_time(self):
+        self.last_event_dt = max(self.last_event_dt, self.process.calendar.to_datetime(self.env.now))
 
     def _consume_tokens(self, transition):
         """Removes input tokens for transition from marking."""
@@ -81,6 +85,8 @@ class Token:
                 dp, self.prefix, self.requested_amount,
                 trace_history=dict(self.trace_history),
                 curr_dt=self.arrival_dt,
+                trace_start_dt=self.arrival_dt,
+                last_event_dt=self.last_event_dt,
                 loop_count=loop_count,
                 inter_arrival_seconds=self.inter_arrival_seconds,
                 case_attrs=self.case_attrs
@@ -180,6 +186,7 @@ class Token:
                 "queue_wait_seconds": 0.0,
                 "wip": self.process.active_cases_count
             })
+            self._record_completion_time()
             self.trace_history[act] += 1
             self.prefix.append(act)
             self.prev_act = act
@@ -275,6 +282,7 @@ class Token:
             "wip": self.process.active_cases_count
         })
 
+        self._record_completion_time()
         self.trace_history[act] += 1
         self.prefix.append(act)
         self.prev_act = act
@@ -379,6 +387,7 @@ class Token:
                         "queue_wait_seconds": 0.0,
                         "wip": self.process.active_cases_count
                     })
+                    self._record_completion_time()
                     self.trace_history[act] += 1
                     self.prefix.append(act)
                     self.prev_act = act

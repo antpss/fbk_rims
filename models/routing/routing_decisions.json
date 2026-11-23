@@ -1,4 +1,5 @@
 {
+  "temporal_feature_version": 1,
   "routing_mode": "payload",
   "classifier_type": "decision_tree",
   "min_f1_threshold": 0.6,
@@ -6,356 +7,47 @@
   "window_size": 10,
   "include_counts": false,
   "decision_points": {
-    "exi_Pending Request for Reservation Closure__loop_split": {
-      "place_id": "exi_Pending Request for Reservation Closure__loop_split",
-      "sample_count": 19208,
-      "classes_observed": {
-        "Pending Liquidation Request": 19133,
-        "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 75
-      },
-      "branches_defined": [
-        "Pending Liquidation Request",
-        "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06"
-      ],
-      "best_parameters": {
-        "max_depth": 19,
-        "min_samples_split": 17,
-        "min_samples_leaf": 16,
-        "criterion": "entropy",
-        "class_weight": null
-      },
-      "accuracy": 0.9961,
-      "macro_f1": 0.499,
-      "weighted_f1": 0.9941,
-      "confusion_matrix": [
-        [
-          3827,
-          0
-        ],
-        [
-          15,
-          0
-        ]
-      ],
-      "label_encoding": {
-        "Pending Liquidation Request": 0,
-        "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 1
-      },
-      "features": [
-        "hour",
-        "weekday",
-        "prev_activity",
-        "loop_count",
-        "has_Authorization Requested",
-        "has_Back-Office Adjustment Requested",
-        "has_Evaluating Request (NO registered letter)",
-        "has_Evaluating Request (WITH registered letter)",
-        "has_Network Adjustment Requested",
-        "has_Pending Liquidation Request",
-        "has_Pending Request for Network Information",
-        "has_Pending Request for Reservation Closure",
-        "has_Pending Request for acquittance of heirs",
-        "has_Request completed with account closure",
-        "has_Request completed with customer recovery",
-        "has_Request created",
-        "has_Request deleted",
-        "has_Service closure Request with BO responsibility",
-        "has_Service closure Request with network responsibility"
-      ],
-      "feature_importances": {
-        "hour": 0.2582,
-        "weekday": 0.2002,
-        "prev_activity": 0.0,
-        "loop_count": 0.3487,
-        "has_Authorization Requested": 0.0497,
-        "has_Back-Office Adjustment Requested": 0.0,
-        "has_Evaluating Request (NO registered letter)": 0.0294,
-        "has_Evaluating Request (WITH registered letter)": 0.038,
-        "has_Network Adjustment Requested": 0.0483,
-        "has_Pending Liquidation Request": 0.0,
-        "has_Pending Request for Network Information": 0.0115,
-        "has_Pending Request for Reservation Closure": 0.0,
-        "has_Pending Request for acquittance of heirs": 0.0,
-        "has_Request completed with account closure": 0.0,
-        "has_Request completed with customer recovery": 0.0,
-        "has_Request created": 0.0,
-        "has_Request deleted": 0.0,
-        "has_Service closure Request with BO responsibility": 0.0065,
-        "has_Service closure Request with network responsibility": 0.0095
-      },
-      "cat_mappings": {
-        "prev_activity": [
-          "Pending Request for Reservation Closure"
-        ]
-      },
-      "strategy": "empirical_probability",
-      "probabilities": {
-        "Pending Liquidation Request": 0.9960953769262807,
-        "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 0.0039046230737192836
-      },
-      "model_file": null
-    },
-    "exi_xor_5": {
-      "place_id": "exi_xor_5",
-      "sample_count": 19133,
-      "classes_observed": {
-        "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421": 15259,
-        "Back-Office Adjustment Requested": 2470,
-        "Pending Request for acquittance of heirs": 1404
-      },
-      "branches_defined": [
-        "Back-Office Adjustment Requested",
-        "Pending Request for acquittance of heirs",
-        "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421"
-      ],
-      "best_parameters": {
-        "max_depth": 5,
-        "min_samples_split": 18,
-        "min_samples_leaf": 25,
-        "criterion": "gini",
-        "class_weight": null
-      },
-      "accuracy": 0.872,
-      "macro_f1": 0.6811,
-      "weighted_f1": 0.8594,
-      "confusion_matrix": [
-        [
-          326,
-          2,
-          198
-        ],
-        [
-          0,
-          80,
-          185
-        ],
-        [
-          46,
-          59,
-          2931
-        ]
-      ],
-      "label_encoding": {
-        "Back-Office Adjustment Requested": 0,
-        "Pending Request for acquittance of heirs": 1,
-        "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421": 2
-      },
-      "features": [
-        "hour",
-        "weekday",
-        "prev_activity",
-        "loop_count",
-        "has_Authorization Requested",
-        "has_Back-Office Adjustment Requested",
-        "has_Evaluating Request (NO registered letter)",
-        "has_Evaluating Request (WITH registered letter)",
-        "has_Network Adjustment Requested",
-        "has_Pending Liquidation Request",
-        "has_Pending Request for Network Information",
-        "has_Pending Request for Reservation Closure",
-        "has_Pending Request for acquittance of heirs",
-        "has_Request completed with account closure",
-        "has_Request completed with customer recovery",
-        "has_Request created",
-        "has_Request deleted",
-        "has_Service closure Request with BO responsibility",
-        "has_Service closure Request with network responsibility"
-      ],
-      "feature_importances": {
-        "hour": 0.1757,
-        "weekday": 0.0372,
-        "prev_activity": 0.0,
-        "loop_count": 0.0,
-        "has_Authorization Requested": 0.2156,
-        "has_Back-Office Adjustment Requested": 0.0,
-        "has_Evaluating Request (NO registered letter)": 0.0809,
-        "has_Evaluating Request (WITH registered letter)": 0.0367,
-        "has_Network Adjustment Requested": 0.0736,
-        "has_Pending Liquidation Request": 0.0,
-        "has_Pending Request for Network Information": 0.3803,
-        "has_Pending Request for Reservation Closure": 0.0,
-        "has_Pending Request for acquittance of heirs": 0.0,
-        "has_Request completed with account closure": 0.0,
-        "has_Request completed with customer recovery": 0.0,
-        "has_Request created": 0.0,
-        "has_Request deleted": 0.0,
-        "has_Service closure Request with BO responsibility": 0.0,
-        "has_Service closure Request with network responsibility": 0.0
-      },
-      "cat_mappings": {
-        "prev_activity": [
-          "Pending Liquidation Request"
-        ]
-      },
-      "strategy": "machine_learning",
-      "model_file": "routing_exi_xor_5.joblib"
-    },
-    "exi_xor_1": {
-      "place_id": "exi_xor_1",
-      "sample_count": 21122,
-      "classes_observed": {
-        "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 9802,
-        "Evaluating Request (NO registered letter)": 7073,
-        "Request deleted": 1931,
-        "Evaluating Request (WITH registered letter)": 1436,
-        "Pending Request for Network Information": 880
-      },
-      "branches_defined": [
-        "Evaluating Request (NO registered letter)",
-        "Evaluating Request (WITH registered letter)",
-        "Pending Request for Network Information",
-        "Request deleted",
-        "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5"
-      ],
-      "best_parameters": {
-        "max_depth": 21,
-        "min_samples_split": 5,
-        "min_samples_leaf": 1,
-        "criterion": "gini",
-        "class_weight": null
-      },
-      "accuracy": 0.4521,
-      "macro_f1": 0.1689,
-      "weighted_f1": 0.3602,
-      "confusion_matrix": [
-        [
-          256,
-          0,
-          0,
-          0,
-          1174
-        ],
-        [
-          54,
-          0,
-          0,
-          0,
-          253
-        ],
-        [
-          23,
-          0,
-          0,
-          0,
-          141
-        ],
-        [
-          62,
-          0,
-          0,
-          0,
-          311
-        ],
-        [
-          297,
-          0,
-          0,
-          0,
-          1654
-        ]
-      ],
-      "label_encoding": {
-        "Evaluating Request (NO registered letter)": 0,
-        "Evaluating Request (WITH registered letter)": 1,
-        "Pending Request for Network Information": 2,
-        "Request deleted": 3,
-        "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 4
-      },
-      "features": [
-        "hour",
-        "weekday",
-        "prev_activity",
-        "loop_count",
-        "has_Authorization Requested",
-        "has_Back-Office Adjustment Requested",
-        "has_Evaluating Request (NO registered letter)",
-        "has_Evaluating Request (WITH registered letter)",
-        "has_Network Adjustment Requested",
-        "has_Pending Liquidation Request",
-        "has_Pending Request for Network Information",
-        "has_Pending Request for Reservation Closure",
-        "has_Pending Request for acquittance of heirs",
-        "has_Request completed with account closure",
-        "has_Request completed with customer recovery",
-        "has_Request created",
-        "has_Request deleted",
-        "has_Service closure Request with BO responsibility",
-        "has_Service closure Request with network responsibility"
-      ],
-      "feature_importances": {
-        "hour": 0.6543,
-        "weekday": 0.3457,
-        "prev_activity": 0.0,
-        "loop_count": 0.0,
-        "has_Authorization Requested": 0.0,
-        "has_Back-Office Adjustment Requested": 0.0,
-        "has_Evaluating Request (NO registered letter)": 0.0,
-        "has_Evaluating Request (WITH registered letter)": 0.0,
-        "has_Network Adjustment Requested": 0.0,
-        "has_Pending Liquidation Request": 0.0,
-        "has_Pending Request for Network Information": 0.0,
-        "has_Pending Request for Reservation Closure": 0.0,
-        "has_Pending Request for acquittance of heirs": 0.0,
-        "has_Request completed with account closure": 0.0,
-        "has_Request completed with customer recovery": 0.0,
-        "has_Request created": 0.0,
-        "has_Request deleted": 0.0,
-        "has_Service closure Request with BO responsibility": 0.0,
-        "has_Service closure Request with network responsibility": 0.0
-      },
-      "cat_mappings": {
-        "prev_activity": [
-          "Request created"
-        ]
-      },
-      "strategy": "empirical_probability",
-      "probabilities": {
-        "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 0.4640659028501089,
-        "Evaluating Request (NO registered letter)": 0.3348641227156519,
-        "Request deleted": 0.09142126692548054,
-        "Evaluating Request (WITH registered letter)": 0.06798598617555156,
-        "Pending Request for Network Information": 0.04166272133320708
-      },
-      "model_file": null
-    },
     "exi_xor_3": {
       "place_id": "exi_xor_3",
       "sample_count": 7073,
       "classes_observed": {
-        "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 7015,
+        "sfl_50f1060c-5d0e-4115-b780-d2eaaf31b2dc": 7015,
         "Request completed with customer recovery": 58
       },
       "branches_defined": [
         "Request completed with customer recovery",
-        "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8"
+        "sfl_50f1060c-5d0e-4115-b780-d2eaaf31b2dc"
       ],
       "best_parameters": {
-        "max_depth": 19,
-        "min_samples_split": 17,
-        "min_samples_leaf": 16,
-        "criterion": "entropy",
+        "max_depth": 6,
+        "min_samples_split": 8,
+        "min_samples_leaf": 2,
+        "criterion": "gini",
         "class_weight": null
       },
-      "accuracy": 0.9915,
-      "macro_f1": 0.4979,
-      "weighted_f1": 0.9873,
+      "accuracy": 0.9887,
+      "macro_f1": 0.4972,
+      "weighted_f1": 0.9859,
       "confusion_matrix": [
         [
           0,
           12
         ],
         [
-          0,
-          1403
+          4,
+          1399
         ]
       ],
       "label_encoding": {
         "Request completed with customer recovery": 0,
-        "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 1
+        "sfl_50f1060c-5d0e-4115-b780-d2eaaf31b2dc": 1
       },
       "features": [
-        "hour",
-        "weekday",
+        "start_hour",
+        "start_weekday",
+        "last_event_hour",
+        "last_event_weekday",
+        "elapsed_since_start",
         "prev_activity",
         "loop_count",
         "has_Authorization Requested",
@@ -375,8 +67,11 @@
         "has_Service closure Request with network responsibility"
       ],
       "feature_importances": {
-        "hour": 0.5406,
-        "weekday": 0.4594,
+        "start_hour": 0.3501,
+        "start_weekday": 0.0035,
+        "last_event_hour": 0.1166,
+        "last_event_weekday": 0.0308,
+        "elapsed_since_start": 0.4989,
         "prev_activity": 0.0,
         "loop_count": 0.0,
         "has_Authorization Requested": 0.0,
@@ -402,49 +97,88 @@
       },
       "strategy": "empirical_probability",
       "probabilities": {
-        "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 0.9917998020641877,
+        "sfl_50f1060c-5d0e-4115-b780-d2eaaf31b2dc": 0.9917998020641877,
         "Request completed with customer recovery": 0.008200197935812243
       },
       "model_file": null
     },
-    "exi_xor_2": {
-      "place_id": "exi_xor_2",
-      "sample_count": 18253,
+    "exi_xor_1": {
+      "place_id": "exi_xor_1",
+      "sample_count": 21122,
       "classes_observed": {
-        "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88": 10280,
-        "Authorization Requested": 7973
+        "sfl_e0a6c37e-f626-49b5-8af0-0ea69ae92903": 9802,
+        "Evaluating Request (NO registered letter)": 7073,
+        "Request deleted": 1931,
+        "Evaluating Request (WITH registered letter)": 1436,
+        "Pending Request for Network Information": 880
       },
       "branches_defined": [
-        "Authorization Requested",
-        "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88"
+        "Evaluating Request (NO registered letter)",
+        "Evaluating Request (WITH registered letter)",
+        "Pending Request for Network Information",
+        "Request deleted",
+        "sfl_e0a6c37e-f626-49b5-8af0-0ea69ae92903"
       ],
       "best_parameters": {
-        "max_depth": 6,
-        "min_samples_split": 3,
-        "min_samples_leaf": 2,
+        "max_depth": 21,
+        "min_samples_split": 7,
+        "min_samples_leaf": 4,
         "criterion": "entropy",
         "class_weight": null
       },
-      "accuracy": 0.9293,
-      "macro_f1": 0.9286,
-      "weighted_f1": 0.9296,
+      "accuracy": 0.417,
+      "macro_f1": 0.2703,
+      "weighted_f1": 0.404,
       "confusion_matrix": [
         [
-          1510,
-          59
+          676,
+          55,
+          21,
+          51,
+          627
         ],
         [
-          199,
-          1883
+          109,
+          31,
+          4,
+          11,
+          152
+        ],
+        [
+          62,
+          5,
+          17,
+          3,
+          77
+        ],
+        [
+          150,
+          15,
+          6,
+          46,
+          156
+        ],
+        [
+          764,
+          86,
+          38,
+          71,
+          992
         ]
       ],
       "label_encoding": {
-        "Authorization Requested": 0,
-        "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88": 1
+        "Evaluating Request (NO registered letter)": 0,
+        "Evaluating Request (WITH registered letter)": 1,
+        "Pending Request for Network Information": 2,
+        "Request deleted": 3,
+        "sfl_e0a6c37e-f626-49b5-8af0-0ea69ae92903": 4
       },
       "features": [
-        "hour",
-        "weekday",
+        "start_hour",
+        "start_weekday",
+        "last_event_hour",
+        "last_event_weekday",
+        "elapsed_since_start",
         "prev_activity",
         "loop_count",
         "has_Authorization Requested",
@@ -464,14 +198,115 @@
         "has_Service closure Request with network responsibility"
       ],
       "feature_importances": {
-        "hour": 0.0996,
-        "weekday": 0.0318,
+        "start_hour": 0.1197,
+        "start_weekday": 0.0998,
+        "last_event_hour": 0.1051,
+        "last_event_weekday": 0.0982,
+        "elapsed_since_start": 0.5773,
         "prev_activity": 0.0,
         "loop_count": 0.0,
         "has_Authorization Requested": 0.0,
         "has_Back-Office Adjustment Requested": 0.0,
-        "has_Evaluating Request (NO registered letter)": 0.6436,
-        "has_Evaluating Request (WITH registered letter)": 0.225,
+        "has_Evaluating Request (NO registered letter)": 0.0,
+        "has_Evaluating Request (WITH registered letter)": 0.0,
+        "has_Network Adjustment Requested": 0.0,
+        "has_Pending Liquidation Request": 0.0,
+        "has_Pending Request for Network Information": 0.0,
+        "has_Pending Request for Reservation Closure": 0.0,
+        "has_Pending Request for acquittance of heirs": 0.0,
+        "has_Request completed with account closure": 0.0,
+        "has_Request completed with customer recovery": 0.0,
+        "has_Request created": 0.0,
+        "has_Request deleted": 0.0,
+        "has_Service closure Request with BO responsibility": 0.0,
+        "has_Service closure Request with network responsibility": 0.0
+      },
+      "cat_mappings": {
+        "prev_activity": [
+          "Request created"
+        ]
+      },
+      "strategy": "empirical_probability",
+      "probabilities": {
+        "sfl_e0a6c37e-f626-49b5-8af0-0ea69ae92903": 0.4640659028501089,
+        "Evaluating Request (NO registered letter)": 0.3348641227156519,
+        "Request deleted": 0.09142126692548054,
+        "Evaluating Request (WITH registered letter)": 0.06798598617555156,
+        "Pending Request for Network Information": 0.04166272133320708
+      },
+      "model_file": null
+    },
+    "exi_xor_2": {
+      "place_id": "exi_xor_2",
+      "sample_count": 18253,
+      "classes_observed": {
+        "sfl_2fd022e9-257c-44de-b67d-2acf8e113dd2": 10280,
+        "Authorization Requested": 7973
+      },
+      "branches_defined": [
+        "Authorization Requested",
+        "sfl_2fd022e9-257c-44de-b67d-2acf8e113dd2"
+      ],
+      "best_parameters": {
+        "max_depth": 6,
+        "min_samples_split": 3,
+        "min_samples_leaf": 2,
+        "criterion": "entropy",
+        "class_weight": null
+      },
+      "accuracy": 0.9833,
+      "macro_f1": 0.983,
+      "weighted_f1": 0.9833,
+      "confusion_matrix": [
+        [
+          1563,
+          6
+        ],
+        [
+          55,
+          2027
+        ]
+      ],
+      "label_encoding": {
+        "Authorization Requested": 0,
+        "sfl_2fd022e9-257c-44de-b67d-2acf8e113dd2": 1
+      },
+      "features": [
+        "start_hour",
+        "start_weekday",
+        "last_event_hour",
+        "last_event_weekday",
+        "elapsed_since_start",
+        "prev_activity",
+        "loop_count",
+        "has_Authorization Requested",
+        "has_Back-Office Adjustment Requested",
+        "has_Evaluating Request (NO registered letter)",
+        "has_Evaluating Request (WITH registered letter)",
+        "has_Network Adjustment Requested",
+        "has_Pending Liquidation Request",
+        "has_Pending Request for Network Information",
+        "has_Pending Request for Reservation Closure",
+        "has_Pending Request for acquittance of heirs",
+        "has_Request completed with account closure",
+        "has_Request completed with customer recovery",
+        "has_Request created",
+        "has_Request deleted",
+        "has_Service closure Request with BO responsibility",
+        "has_Service closure Request with network responsibility"
+      ],
+      "feature_importances": {
+        "start_hour": 0.1163,
+        "start_weekday": 0.015,
+        "last_event_hour": 0.0007,
+        "last_event_weekday": 0.0003,
+        "elapsed_since_start": 0.1707,
+        "prev_activity": 0.0,
+        "loop_count": 0.0,
+        "has_Authorization Requested": 0.0,
+        "has_Back-Office Adjustment Requested": 0.0,
+        "has_Evaluating Request (NO registered letter)": 0.5164,
+        "has_Evaluating Request (WITH registered letter)": 0.1805,
         "has_Network Adjustment Requested": 0.0,
         "has_Pending Liquidation Request": 0.0,
         "has_Pending Request for Network Information": 0.0,
@@ -492,44 +327,57 @@
       "strategy": "machine_learning",
       "model_file": "routing_exi_xor_2.joblib"
     },
-    "exi_xor_4": {
-      "place_id": "exi_xor_4",
-      "sample_count": 19641,
+    "exi_xor_5": {
+      "place_id": "exi_xor_5",
+      "sample_count": 19133,
       "classes_observed": {
-        "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 18253,
-        "Network Adjustment Requested": 1388
+        "sfl_561efb47-a917-4bc9-9dec-c047710778d0": 15259,
+        "Back-Office Adjustment Requested": 2468,
+        "Pending Request for acquittance of heirs": 1406
       },
       "branches_defined": [
-        "Network Adjustment Requested",
-        "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee"
+        "Back-Office Adjustment Requested",
+        "Pending Request for acquittance of heirs",
+        "sfl_561efb47-a917-4bc9-9dec-c047710778d0"
       ],
       "best_parameters": {
-        "max_depth": 11,
-        "min_samples_split": 2,
+        "max_depth": 7,
+        "min_samples_split": 8,
         "min_samples_leaf": 1,
-        "criterion": "gini",
+        "criterion": "log_loss",
         "class_weight": null
       },
-      "accuracy": 0.9245,
-      "macro_f1": 0.487,
-      "weighted_f1": 0.8924,
+      "accuracy": 0.884,
+      "macro_f1": 0.7006,
+      "weighted_f1": 0.8712,
       "confusion_matrix": [
         [
+          334,
           2,
-          282
+          190
         ],
         [
-          15,
-          3636
+          0,
+          82,
+          183
+        ],
+        [
+          19,
+          50,
+          2967
         ]
       ],
       "label_encoding": {
-        "Network Adjustment Requested": 0,
-        "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 1
+        "Back-Office Adjustment Requested": 0,
+        "Pending Request for acquittance of heirs": 1,
+        "sfl_561efb47-a917-4bc9-9dec-c047710778d0": 2
       },
       "features": [
-        "hour",
-        "weekday",
+        "start_hour",
+        "start_weekday",
+        "last_event_hour",
+        "last_event_weekday",
+        "elapsed_since_start",
         "prev_activity",
         "loop_count",
         "has_Authorization Requested",
@@ -549,15 +397,204 @@
         "has_Service closure Request with network responsibility"
       ],
       "feature_importances": {
-        "hour": 0.2595,
-        "weekday": 0.1553,
+        "start_hour": 0.0372,
+        "start_weekday": 0.0167,
+        "last_event_hour": 0.0855,
+        "last_event_weekday": 0.0086,
+        "elapsed_since_start": 0.1458,
         "prev_activity": 0.0,
-        "loop_count": 0.1019,
-        "has_Authorization Requested": 0.3468,
+        "loop_count": 0.0,
+        "has_Authorization Requested": 0.2581,
         "has_Back-Office Adjustment Requested": 0.0,
-        "has_Evaluating Request (NO registered letter)": 0.013,
-        "has_Evaluating Request (WITH registered letter)": 0.0134,
-        "has_Network Adjustment Requested": 0.1101,
+        "has_Evaluating Request (NO registered letter)": 0.2178,
+        "has_Evaluating Request (WITH registered letter)": 0.135,
+        "has_Network Adjustment Requested": 0.0271,
+        "has_Pending Liquidation Request": 0.0,
+        "has_Pending Request for Network Information": 0.0683,
+        "has_Pending Request for Reservation Closure": 0.0,
+        "has_Pending Request for acquittance of heirs": 0.0,
+        "has_Request completed with account closure": 0.0,
+        "has_Request completed with customer recovery": 0.0,
+        "has_Request created": 0.0,
+        "has_Request deleted": 0.0,
+        "has_Service closure Request with BO responsibility": 0.0,
+        "has_Service closure Request with network responsibility": 0.0
+      },
+      "cat_mappings": {
+        "prev_activity": [
+          "Pending Liquidation Request"
+        ]
+      },
+      "strategy": "machine_learning",
+      "model_file": "routing_exi_xor_5.joblib"
+    },
+    "exi_Pending Request for Reservation Closure__loop_split": {
+      "place_id": "exi_Pending Request for Reservation Closure__loop_split",
+      "sample_count": 19208,
+      "classes_observed": {
+        "Pending Liquidation Request": 19133,
+        "sfl_7038d207-7fda-4bc5-91ce-ce8815f38d19": 75
+      },
+      "branches_defined": [
+        "Pending Liquidation Request",
+        "sfl_7038d207-7fda-4bc5-91ce-ce8815f38d19"
+      ],
+      "best_parameters": {
+        "max_depth": 7,
+        "min_samples_split": 11,
+        "min_samples_leaf": 3,
+        "criterion": "entropy",
+        "class_weight": null
+      },
+      "accuracy": 0.9956,
+      "macro_f1": 0.5515,
+      "weighted_f1": 0.9943,
+      "confusion_matrix": [
+        [
+          3824,
+          3
+        ],
+        [
+          14,
+          1
+        ]
+      ],
+      "label_encoding": {
+        "Pending Liquidation Request": 0,
+        "sfl_7038d207-7fda-4bc5-91ce-ce8815f38d19": 1
+      },
+      "features": [
+        "start_hour",
+        "start_weekday",
+        "last_event_hour",
+        "last_event_weekday",
+        "elapsed_since_start",
+        "prev_activity",
+        "loop_count",
+        "has_Authorization Requested",
+        "has_Back-Office Adjustment Requested",
+        "has_Evaluating Request (NO registered letter)",
+        "has_Evaluating Request (WITH registered letter)",
+        "has_Network Adjustment Requested",
+        "has_Pending Liquidation Request",
+        "has_Pending Request for Network Information",
+        "has_Pending Request for Reservation Closure",
+        "has_Pending Request for acquittance of heirs",
+        "has_Request completed with account closure",
+        "has_Request completed with customer recovery",
+        "has_Request created",
+        "has_Request deleted",
+        "has_Service closure Request with BO responsibility",
+        "has_Service closure Request with network responsibility"
+      ],
+      "feature_importances": {
+        "start_hour": 0.1074,
+        "start_weekday": 0.0259,
+        "last_event_hour": 0.0292,
+        "last_event_weekday": 0.1027,
+        "elapsed_since_start": 0.3032,
+        "prev_activity": 0.0,
+        "loop_count": 0.3095,
+        "has_Authorization Requested": 0.0,
+        "has_Back-Office Adjustment Requested": 0.0,
+        "has_Evaluating Request (NO registered letter)": 0.0535,
+        "has_Evaluating Request (WITH registered letter)": 0.0305,
+        "has_Network Adjustment Requested": 0.0382,
+        "has_Pending Liquidation Request": 0.0,
+        "has_Pending Request for Network Information": 0.0,
+        "has_Pending Request for Reservation Closure": 0.0,
+        "has_Pending Request for acquittance of heirs": 0.0,
+        "has_Request completed with account closure": 0.0,
+        "has_Request completed with customer recovery": 0.0,
+        "has_Request created": 0.0,
+        "has_Request deleted": 0.0,
+        "has_Service closure Request with BO responsibility": 0.0,
+        "has_Service closure Request with network responsibility": 0.0
+      },
+      "cat_mappings": {
+        "prev_activity": [
+          "Pending Request for Reservation Closure"
+        ]
+      },
+      "strategy": "empirical_probability",
+      "probabilities": {
+        "Pending Liquidation Request": 0.9960953769262807,
+        "sfl_7038d207-7fda-4bc5-91ce-ce8815f38d19": 0.0039046230737192836
+      },
+      "model_file": null
+    },
+    "exi_xor_4": {
+      "place_id": "exi_xor_4",
+      "sample_count": 19641,
+      "classes_observed": {
+        "sfl_21a49c78-d678-4688-b0ff-04163f9436e5": 18253,
+        "Network Adjustment Requested": 1388
+      },
+      "branches_defined": [
+        "Network Adjustment Requested",
+        "sfl_21a49c78-d678-4688-b0ff-04163f9436e5"
+      ],
+      "best_parameters": {
+        "max_depth": 21,
+        "min_samples_split": 5,
+        "min_samples_leaf": 3,
+        "criterion": "log_loss",
+        "class_weight": null
+      },
+      "accuracy": 0.8849,
+      "macro_f1": 0.5294,
+      "weighted_f1": 0.8794,
+      "confusion_matrix": [
+        [
+          31,
+          253
+        ],
+        [
+          200,
+          3451
+        ]
+      ],
+      "label_encoding": {
+        "Network Adjustment Requested": 0,
+        "sfl_21a49c78-d678-4688-b0ff-04163f9436e5": 1
+      },
+      "features": [
+        "start_hour",
+        "start_weekday",
+        "last_event_hour",
+        "last_event_weekday",
+        "elapsed_since_start",
+        "prev_activity",
+        "loop_count",
+        "has_Authorization Requested",
+        "has_Back-Office Adjustment Requested",
+        "has_Evaluating Request (NO registered letter)",
+        "has_Evaluating Request (WITH registered letter)",
+        "has_Network Adjustment Requested",
+        "has_Pending Liquidation Request",
+        "has_Pending Request for Network Information",
+        "has_Pending Request for Reservation Closure",
+        "has_Pending Request for acquittance of heirs",
+        "has_Request completed with account closure",
+        "has_Request completed with customer recovery",
+        "has_Request created",
+        "has_Request deleted",
+        "has_Service closure Request with BO responsibility",
+        "has_Service closure Request with network responsibility"
+      ],
+      "feature_importances": {
+        "start_hour": 0.1162,
+        "start_weekday": 0.0587,
+        "last_event_hour": 0.1306,
+        "last_event_weekday": 0.0716,
+        "elapsed_since_start": 0.4736,
+        "prev_activity": 0.0,
+        "loop_count": 0.0385,
+        "has_Authorization Requested": 0.086,
+        "has_Back-Office Adjustment Requested": 0.0,
+        "has_Evaluating Request (NO registered letter)": 0.0094,
+        "has_Evaluating Request (WITH registered letter)": 0.0067,
+        "has_Network Adjustment Requested": 0.0087,
         "has_Pending Liquidation Request": 0.0,
         "has_Pending Request for Network Information": 0.0,
         "has_Pending Request for Reservation Closure": 0.0,
@@ -576,7 +613,7 @@
       },
       "strategy": "empirical_probability",
       "probabilities": {
-        "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 0.9293315004327682,
+        "sfl_21a49c78-d678-4688-b0ff-04163f9436e5": 0.9293315004327682,
         "Network Adjustment Requested": 0.07066849956723181
       },
       "model_file": null

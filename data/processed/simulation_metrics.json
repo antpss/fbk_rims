@@ -1,34 +1,34 @@
 {
-  "cfld": 0.027576800976800975,
-  "l_traces": 0.101,
-  "ngram_2": 0.01837339479749753,
-  "ngram_3": 0.026942100669188247,
-  "aed": 69.30952940567411,
-  "ced": 1.3554717300279595,
-  "red_dist": 115.47161023676429,
-  "cwd": 1.5545276373422818,
-  "car": 0.6870000000000002,
-  "real_mean": 1189947.45,
-  "real_median": 657849.5,
-  "sim_mean": 598553.398357913,
-  "sim_median": 575546.907319,
-  "mean_cycle_difference": 591394.0516420869,
-  "ctd": 635403.6000000002,
-  "wd": 635403.6000000002,
+  "cfld": 0.09995687280555701,
+  "l_traces": 0.903,
+  "ngram_2": 0.10768661776490168,
+  "ngram_3": 0.13592712506173518,
+  "aed": 2091.8645636413885,
+  "ced": 1.520748037900127,
+  "red_dist": 1998.9040699862894,
+  "cwd": 1.940359470237636,
+  "car": 0.27400000000000024,
+  "real_mean": 12723563.64,
+  "real_median": 9401343.5,
+  "sim_mean": 1824894.043465614,
+  "sim_median": 1425705.9744435,
+  "mean_cycle_difference": 10898669.596534386,
+  "ctd": 10898499.599999998,
+  "wd": 10898499.599999998,
   "mode": "hybrid_residual",
-  "cases": 32429,
-  "events": 216705,
-  "elapsed": 1482.0042266845703,
+  "cases": 1000,
+  "events": 6660,
+  "elapsed": 49.67022490501404,
   "populations": {
-    "simulated_scheduled": 32429,
+    "simulated_scheduled": 1000,
     "simulated_statuses": {
-      "completed": 32429
+      "completed": 1000
     },
-    "reference_cases": 32429,
+    "reference_cases": 1000,
     "completed_reference_evaluated": 1000,
     "completed_simulated_evaluated": 1000,
-    "window_reference_intervals": 215314,
-    "window_simulated_intervals": 216705
+    "window_reference_intervals": 7563,
+    "window_simulated_intervals": 6660
   },
   "metric_status": {
     "cfld": {
@@ -75,9 +75,9 @@
     }
   },
   "window_metrics": {
-    "aed": 110.43794076541903,
-    "ced": 1.5076062827829164,
-    "cwd": 0.8526935661946767
+    "aed": 2091.8645636413885,
+    "ced": 1.520748037900127,
+    "cwd": 1.940359470237636
   },
   "metric_units": {
     "ctd": "seconds",

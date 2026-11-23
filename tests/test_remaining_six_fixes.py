@@ -72,10 +72,10 @@ class DelayAndRoutingTests(unittest.TestCase):
              patch.object(routing.alignments, 'apply', return_value=[moves, moves]):
             samples = routing.extract_decision_samples_via_alignment('unused', 'unused', {'xor': {'branches': {'b': {}}}},
                                                                        case_attrs_cfg=[], routing_mode='both')['xor'].set_index('case_id')
-        self.assertEqual(samples.loc['x', 'hour'], 9)
-        self.assertEqual(samples.loc['y', 'hour'], 10)
+        self.assertEqual(samples.loc['x', 'start_hour'], 9)
+        self.assertEqual(samples.loc['y', 'start_hour'], 10)
         self.assertEqual(samples.loc['y', 'inter_arrival_seconds'], 3600)
-        self.assertEqual(samples.loc['x', 'weekday'], 0)
+        self.assertEqual(samples.loc['x', 'start_weekday'], 0)
         self.assertEqual(samples.prev_activity.tolist(), ['A', 'A'])
         self.assertEqual(samples.has_A.tolist(), [1, 1])
 

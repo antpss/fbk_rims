@@ -123,7 +123,11 @@ class ChampionPredictor:
         )
         routing_manifest_path = os.path.join(routing_dir, "routing_decisions.json")
         with open(routing_manifest_path) as f:
-            self.routing_manifest = json.load(f)["decision_points"]
+            routing_data = json.load(f)
+            self.routing_temporal_version = routing_data.get("temporal_feature_version", 0)
+            if self.routing_temporal_version not in (0, 1):
+                raise ValueError("Unsupported routing temporal feature version; retrain routing models")
+            self.routing_manifest = routing_data["decision_points"]
         self.routing_models = {}
         for p_id, p_info in self.routing_manifest.items():
             if p_info.get("strategy") == "machine_learning":
@@ -620,8 +624,15 @@ class ChampionPredictor:
         return default_fallback
 
     def predict_routing(self, place_id, prefix, requested_amount=0.0, trace_history=None, curr_dt=None, loop_count=0.0,
-                        inter_arrival_seconds=0.0, case_attrs=None):
+                        inter_arrival_seconds=0.0, case_attrs=None, *, trace_start_dt=None, last_event_dt=None):
         """Predicts outgoing transition branch at an XOR split place."""
+        try:
+            from routing_features import (TEMPORAL_COLUMNS, routing_temporal_features,
+                                          validate_routing_attribute_names)
+        except ImportError:
+            from src.routing_features import (TEMPORAL_COLUMNS, routing_temporal_features,
+                                              validate_routing_attribute_names)
+        validate_routing_attribute_names((case_attrs or {}).keys())
         p_info = self.routing_manifest.get(place_id)
         if not p_info:
             return None
@@ -668,6 +679,14 @@ class ChampionPredictor:
                     row[col] = float(cnt)
                 elif col not in row:
                     row[col] = 0.0
+
+            uses_temporal = bool(set(feat_cols).intersection(TEMPORAL_COLUMNS))
+            if getattr(self, "routing_temporal_version", 0) == 1 or uses_temporal:
+                if not set(TEMPORAL_COLUMNS).issubset(feat_cols):
+                    raise ValueError("Incomplete routing temporal feature schema; retrain routing models")
+                row.update(routing_temporal_features(trace_start_dt, last_event_dt))
+            elif trace_start_dt is not None:
+                row.update(hour=trace_start_dt.hour, weekday=trace_start_dt.weekday())
 
             cat_map = p_info.get("cat_mappings", {})
             is_xgb = "xgb" in str(type(clf)).lower()

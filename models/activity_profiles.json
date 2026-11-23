@@ -1,6 +1,6 @@
 {
   "__metadata__": {
-    "generated_at": "2026-11-16 12:11:59",
+    "generated_at": "2026-11-23 12:22:14",
     "zero_duration_threshold": 0.95,
     "min_automated_wait_seconds": 60.0,
     "total_activities": 15,
@@ -32,14 +32,14 @@
       "type": "HUMAN_WORK_ITEM",
       "total_events": 7973,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 2561.0,
+      "median_duration_seconds": 2568.0,
       "median_wait_seconds": 156.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Back-Office Adjustment Requested": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 2470,
+      "total_events": 2468,
       "p_zero_duration": 0.0,
       "median_duration_seconds": 49660.0,
       "median_wait_seconds": 143357.0,
@@ -96,15 +96,15 @@
       "total_events": 19208,
       "p_zero_duration": 0.0028,
       "median_duration_seconds": 129.0,
-      "median_wait_seconds": 265386.5,
+      "median_wait_seconds": 265454.5,
       "human_resource_ratio": 0.999,
       "has_start_lifecycle": true
     },
     "Pending Request for acquittance of heirs": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 1404,
+      "total_events": 1406,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 25868.0,
+      "median_duration_seconds": 25835.0,
       "median_wait_seconds": 145196.5,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
@@ -150,7 +150,7 @@
       "total_events": 19641,
       "p_zero_duration": 0.0037,
       "median_duration_seconds": 260498.0,
-      "median_wait_seconds": 2327.0,
+      "median_wait_seconds": 2325.0,
       "human_resource_ratio": 0.9963,
       "has_start_lifecycle": true
     },
@@ -166,10 +166,10 @@
   },
   "__cache_validation__": {
     "log_path": "/home/antonio/fbk_rims/data/processed/aligned_BAC.xes",
-    "log_mtime": 1794827490.1316066,
+    "log_mtime": 1795432892.9289532,
     "zero_duration_threshold": 0.95,
     "min_automated_wait_seconds": 60.0,
     "overrides": {}
   },
-  "split_id": "aeac39dae080e74daba027976bf63c8ea64eb3889c20142f26eeb6d143f21a53"
+  "split_id": "90b2e943661416719b7d3a42d7422671dcf16038f25839734ef3c53734b56f02"
 }

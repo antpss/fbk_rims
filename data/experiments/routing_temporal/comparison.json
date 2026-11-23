@@ -1,0 +1,207 @@
+{
+  "evaluation": "shared temporal validation cases; deterministic argmax classification; mean predicted branch probabilities",
+  "validation_cases": 1682,
+  "results": {
+    "baseline": {
+      "exi_Pending Request for Reservation Closure__loop_split": {
+        "samples": 1312,
+        "strategy": "empirical_probability",
+        "accuracy": 0.9977134146341463,
+        "macro_f1": 0.4994276993513926,
+        "observed_probabilities": {
+          "Pending Liquidation Request": 0.9977134146341463,
+          "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 0.0022865853658536584
+        },
+        "mean_predicted_probabilities": {
+          "Pending Liquidation Request": 0.9960953769262807,
+          "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 0.0039046230737192836
+        }
+      },
+      "exi_xor_5": {
+        "samples": 1309,
+        "strategy": "machine_learning",
+        "accuracy": 0.9167303284950343,
+        "macro_f1": 0.40478069778174586,
+        "observed_probabilities": {
+          "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421": 0.9136745607333843,
+          "Back-Office Adjustment Requested": 0.04660045836516425,
+          "Pending Request for acquittance of heirs": 0.03972498090145149
+        },
+        "mean_predicted_probabilities": {
+          "Back-Office Adjustment Requested": 0.055929894424905306,
+          "Pending Request for acquittance of heirs": 0.06675903093446311,
+          "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421": 0.8773110746406312
+        }
+      },
+      "exi_xor_1": {
+        "samples": 1682,
+        "strategy": "empirical_probability",
+        "accuracy": 0.41914387633769323,
+        "macro_f1": 0.14767490573942188,
+        "observed_probabilities": {
+          "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 0.41914387633769323,
+          "Evaluating Request (NO registered letter)": 0.32045184304399527,
+          "Request deleted": 0.2146254458977408,
+          "Evaluating Request (WITH registered letter)": 0.045778834720570746
+        },
+        "mean_predicted_probabilities": {
+          "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 0.4640659028501089,
+          "Evaluating Request (NO registered letter)": 0.3348641227156519,
+          "Request deleted": 0.09142126692548054,
+          "Evaluating Request (WITH registered letter)": 0.06798598617555156,
+          "Pending Request for Network Information": 0.04166272133320708
+        }
+      },
+      "exi_xor_3": {
+        "samples": 539,
+        "strategy": "empirical_probability",
+        "accuracy": 0.9777365491651205,
+        "macro_f1": 0.49437148217636023,
+        "observed_probabilities": {
+          "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 0.9777365491651205,
+          "Request completed with customer recovery": 0.022263450834879406
+        },
+        "mean_predicted_probabilities": {
+          "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 0.9917998020641877,
+          "Request completed with customer recovery": 0.008200197935812243
+        }
+      },
+      "exi_xor_2": {
+        "samples": 1309,
+        "strategy": "machine_learning",
+        "accuracy": 0.8968678380443086,
+        "macro_f1": 0.8967982129560685,
+        "observed_probabilities": {
+          "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88": 0.5378151260504201,
+          "Authorization Requested": 0.46218487394957986
+        },
+        "mean_predicted_probabilities": {
+          "Authorization Requested": 0.45842204107328244,
+          "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88": 0.541577958926717
+        }
+      },
+      "exi_xor_4": {
+        "samples": 1324,
+        "strategy": "empirical_probability",
+        "accuracy": 0.9886706948640483,
+        "macro_f1": 0.4971515381693885,
+        "observed_probabilities": {
+          "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 0.9886706948640483,
+          "Network Adjustment Requested": 0.011329305135951661
+        },
+        "mean_predicted_probabilities": {
+          "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 0.9293315004327682,
+          "Network Adjustment Requested": 0.07066849956723181
+        }
+      }
+    },
+    "temporal": {
+      "exi_Pending Request for Reservation Closure__loop_split": {
+        "samples": 1312,
+        "strategy": "empirical_probability",
+        "accuracy": 0.9977134146341463,
+        "macro_f1": 0.4994276993513926,
+        "observed_probabilities": {
+          "Pending Liquidation Request": 0.9977134146341463,
+          "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 0.0022865853658536584
+        },
+        "mean_predicted_probabilities": {
+          "Pending Liquidation Request": 0.9960953769262807,
+          "sfl_8be35a7d-6ee2-433b-a6b6-76d628cb1c06": 0.0039046230737192836
+        }
+      },
+      "exi_xor_5": {
+        "samples": 1309,
+        "strategy": "machine_learning",
+        "accuracy": 0.9136745607333843,
+        "macro_f1": 0.3429640489483219,
+        "observed_probabilities": {
+          "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421": 0.9136745607333843,
+          "Back-Office Adjustment Requested": 0.04660045836516425,
+          "Pending Request for acquittance of heirs": 0.03972498090145149
+        },
+        "mean_predicted_probabilities": {
+          "Back-Office Adjustment Requested": 0.053348775029248875,
+          "Pending Request for acquittance of heirs": 0.04392931213583505,
+          "sfl_dd71433a-0b69-4dcb-8ade-6ada8bf46421": 0.902721912834918
+        }
+      },
+      "exi_xor_1": {
+        "samples": 1682,
+        "strategy": "empirical_probability",
+        "accuracy": 0.41914387633769323,
+        "macro_f1": 0.14767490573942188,
+        "observed_probabilities": {
+          "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 0.41914387633769323,
+          "Evaluating Request (NO registered letter)": 0.32045184304399527,
+          "Request deleted": 0.2146254458977408,
+          "Evaluating Request (WITH registered letter)": 0.045778834720570746
+        },
+        "mean_predicted_probabilities": {
+          "sfl_2bc18ade-93e9-4aae-9020-1fd1f1da25c5": 0.4640659028501089,
+          "Evaluating Request (NO registered letter)": 0.3348641227156519,
+          "Request deleted": 0.09142126692548054,
+          "Evaluating Request (WITH registered letter)": 0.06798598617555156,
+          "Pending Request for Network Information": 0.04166272133320708
+        }
+      },
+      "exi_xor_3": {
+        "samples": 539,
+        "strategy": "empirical_probability",
+        "accuracy": 0.9777365491651205,
+        "macro_f1": 0.49437148217636023,
+        "observed_probabilities": {
+          "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 0.9777365491651205,
+          "Request completed with customer recovery": 0.022263450834879406
+        },
+        "mean_predicted_probabilities": {
+          "sfl_add97c5c-12d9-4ef2-9791-1d5e46c83db8": 0.9917998020641877,
+          "Request completed with customer recovery": 0.008200197935812243
+        }
+      },
+      "exi_xor_2": {
+        "samples": 1309,
+        "strategy": "machine_learning",
+        "accuracy": 0.985485103132162,
+        "macro_f1": 0.9854279197331548,
+        "observed_probabilities": {
+          "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88": 0.5378151260504201,
+          "Authorization Requested": 0.46218487394957986
+        },
+        "mean_predicted_probabilities": {
+          "Authorization Requested": 0.45870436238273476,
+          "sfl_7bdf1800-6eed-4547-9ad7-03158bb2ac88": 0.5412956376172655
+        }
+      },
+      "exi_xor_4": {
+        "samples": 1324,
+        "strategy": "empirical_probability",
+        "accuracy": 0.9886706948640483,
+        "macro_f1": 0.4971515381693885,
+        "observed_probabilities": {
+          "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 0.9886706948640483,
+          "Network Adjustment Requested": 0.011329305135951661
+        },
+        "mean_predicted_probabilities": {
+          "sfl_7e6fcbd2-5566-4459-8dfb-2d5eefceb7ee": 0.9293315004327682,
+          "Network Adjustment Requested": 0.07066849956723181
+        }
+      }
+    }
+  },
+  "simulation": {
+    "baseline": {
+      "status": "failed",
+      "error": "FileNotFoundError(2, 'No such file or directory')"
+    },
+    "temporal": {
+      "status": "failed",
+      "error": "FileNotFoundError(2, 'No such file or directory')"
+    }
+  },
+  "limitations": [
+    "Saved pre-change baseline compared against retrained models; not a repeated-seed ablation.",
+    "Internal training holdout is distinct from shared temporal validation.",
+    "Simulation path comparison blocked by missing duration hybrid_champion/dispatch_config.json; timing models were not rebuilt."
+  ]
+}

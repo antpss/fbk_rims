@@ -143,8 +143,15 @@ class TestZeroDurationSimulation(unittest.TestCase):
 
         proc = MockProcess(env)
         token = Token("C1", arrival_offset=0, process=proc)
+        completion_times = []
+        original_record = token._record_completion_time
+        def record_completion():
+            original_record()
+            completion_times.append(token.last_event_dt)
+        token._record_completion_time = record_completion
         env.process(token.run())
         env.run(until=10000)
+        self.assertEqual(completion_times, [proc.calendar.to_datetime(t) for t in (0, 1800, 5400)])
 
         # 1. Verify that all 3 activities fired
         acts = [e["activity"] for e in recorded_events]

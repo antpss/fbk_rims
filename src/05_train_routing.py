@@ -10,7 +10,7 @@ Implements the RIMS & RIMS_tool methodology:
   3. Feature engineering:
      - Dynamic prefix history (token sequence window and activity presence flags).
      - Case attributes (e.g., RequestedAmount).
-     - Temporal arrival context (weekday, hour).
+     - Arrival and last-completion calendar context plus elapsed case age.
   4. White-box model training:
      - DecisionTreeClassifier (DTC, default): Classical interpretable tree with depth pruning
        and exportable human-readable decision rules (tree.export_text).
@@ -58,6 +58,10 @@ try:
     from config_loader import load_config, PROJECT_ROOT
 except ImportError:
     from src.config_loader import load_config, PROJECT_ROOT
+
+
+from routing_features import (TEMPORAL_FEATURE_VERSION, routing_temporal_features,
+                              validate_routing_attribute_names)
 
 
 # =====================================================================
@@ -124,9 +128,10 @@ def discover_xor_decision_points(pnml_path):
 def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload", include_counts=False, cfg=None):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
-    Extracts prefix history, loop counts, case attributes (payload), inter-arrival times,
-    case attributes (payload), inter-arrival times, and temporal features at each XOR split encounter.
+    Extracts prefix history, loop counts, payload, inter-arrival times and
+    causal temporal features at each XOR split encounter.
     """
+    validate_routing_attribute_names(a["feature_name"] for a in (case_attrs_cfg or []))
     print(f"Loading Petri net: {pnml_path}...")
     net, im, fm = pm4py.read_pnml(pnml_path)
 
@@ -142,6 +147,16 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
     # Arrival context precedes COMPLETE-only filtering for control-flow alignment.
     df_log["case:concept:name"] = df_log["case:concept:name"].astype(str)
+    # Validate before filtering so arrival cannot silently skip a malformed event.
+    for idx, row in df_log.iterrows():
+        try:
+            ts = pd.Timestamp(row.get("time:timestamp"))
+            if pd.isna(ts):
+                raise ValueError("missing timestamp")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"Invalid routing timestamp for case {row['case:concept:name']!r}") from exc
+        df_log.at[idx, "time:timestamp"] = ts
+    df_log = df_log.sort_values(["case:concept:name", "time:timestamp"], kind="stable")
     case_first_times = df_log.groupby("case:concept:name")["time:timestamp"].min()
     if "lifecycle:transition" in df_log.columns:
         print("Filtering event log to COMPLETE lifecycle events for 1-to-1 Petri net alignment...")
@@ -249,8 +264,8 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
         # Temporal context from first event
         first_dt = case_first_times.get(str(case_id))
-        hour = first_dt.hour if first_dt is not None else 12
-        weekday = first_dt.weekday() if first_dt is not None else 0
+        last_event_dt = first_dt
+        event_index = 0
 
         # Inter-arrival gap for current case
         inter_arr = case_inter_arrivals.get(str(case_id), 0.0)
@@ -260,9 +275,15 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
         for move in trace_res["alignment"]:
             model_t_id = move[0][1]
+            consumes_log = move[0][0] != ">>"
+            observed_dt = None
+            if consumes_log:
+                observed_dt = trace[event_index]["time:timestamp"]
+                event_index += 1
 
             # 1. Skip if transition did not fire in Petri net
             if model_t_id == ">>":
+                last_event_dt = max(last_event_dt, observed_dt)
                 continue
 
             chosen_label = id2label.get(model_t_id, model_t_id)
@@ -273,8 +294,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                     sample = {
                         "case_id": case_id,
                         "chosen_target": chosen_label,
-                        "hour": hour,
-                        "weekday": weekday,
+                        **routing_temporal_features(first_dt, last_event_dt),
                         "prev_activity": prefix_labels[-1] if prefix_labels else "<START>",
                         "loop_count": float(dp_counts[p_id]),
                     }
@@ -298,6 +318,8 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
             if model_t_id in observable_ids:
                 prefix_labels.append(chosen_label)
+            if observed_dt is not None:
+                last_event_dt = max(last_event_dt, observed_dt)
 
     decision_dfs = {p_id: pd.DataFrame(samples) for p_id, samples in decision_data.items()}
     return decision_dfs
@@ -423,6 +445,7 @@ def main():
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
     dispatch_manifest = {
+        "temporal_feature_version": TEMPORAL_FEATURE_VERSION,
         "routing_mode": routing_mode,
         "classifier_type": clf_type,
         "min_f1_threshold": min_f1,

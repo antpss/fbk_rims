@@ -3,7 +3,7 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "experiment_id": "f64dbcac995cd1292bd8959f74a41b3fa06f04db943b01f799a0c1a279193a7a",
+  "experiment_id": "9cb899e45b30964eb07d83d066b5fa83bf65ce75069e9c2ca54aa8492158f8b2",
   "selection_partition": "validation",
   "weighted_mae": 788.7999898394635,
   "weighted_smape": 6.340174760715696,
@@ -97,18 +97,18 @@
   "available_count": 9842,
   "total_count": 9842,
   "test_metrics": {
-    "weighted_mae": 2895.865679476537,
-    "weighted_smape": 7.173201815788777,
-    "macro_mae": 7193.586116425627,
+    "weighted_mae": 2895.856450510279,
+    "weighted_smape": 7.1585526629986225,
+    "macro_mae": 7193.646685085872,
     "activity_metrics": {
       "Authorization Requested": {
         "count": 2477,
-        "mae": 2251.2365765038353,
-        "smape": 3.4719418648631315,
+        "mae": 2252.884537747275,
+        "smape": 3.4719418648657725,
         "model_source": "global_tcn"
       },
       "Back-Office Adjustment Requested": {
-        "count": 528,
+        "count": 525,
         "mae": 0.0,
         "smape": 0.0,
         "model_source": "global_tcn"
@@ -144,15 +144,15 @@
         "model_source": "global_tcn"
       },
       "Pending Request for acquittance of heirs": {
-        "count": 354,
+        "count": 357,
         "mae": 0.0,
         "smape": 0.0,
         "model_source": "global_tcn"
       },
       "Request completed with account closure": {
         "count": 5575,
-        "mae": 0.911390134529148,
-        "smape": 0.14349775784380775,
+        "mae": 0.11139013452914798,
+        "smape": 0.03587443946072803,
         "model_source": "global_tcn"
       },
       "Request completed with customer recovery": {

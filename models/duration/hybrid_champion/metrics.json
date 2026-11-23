@@ -3,151 +3,151 @@
   "strategy": "hybrid",
   "model_type": "champion",
   "folder_name": "hybrid_champion",
-  "experiment_id": "ec82f5543739141d482d291bb806691a5c113acb178c85c0b9935db9e0885f1b",
+  "experiment_id": "e495dd4bff20b0fffafcd01be1a6f0b577fc553c216613bb193e09d7e97db5da",
   "selection_partition": "validation",
-  "weighted_mae": 14649.11261940241,
-  "weighted_smape": 68.45667125034038,
-  "macro_mae": 14913.735405758074,
+  "weighted_mae": 14275.123899099543,
+  "weighted_smape": 68.37976074385213,
+  "macro_mae": 14600.75349720967,
   "activity_metrics": {
     "Authorization Requested": {
       "count": 600,
-      "mae": 13818.96456644694,
-      "smape": 123.60870919255026,
+      "mae": 13822.822227986653,
+      "smape": 123.80147970607096,
       "model_source": "local_xgboost"
     },
     "Back-Office Adjustment Requested": {
       "count": 59,
-      "mae": 43011.103896318855,
-      "smape": 47.92854934167301,
+      "mae": 41959.47267280191,
+      "smape": 48.24229856551078,
       "model_source": "local_xgboost"
     },
     "Evaluating Request (NO registered letter)": {
       "count": 537,
-      "mae": 13314.320568347555,
-      "smape": 130.14218565794937,
+      "mae": 13337.263412504,
+      "smape": 130.42684549989414,
       "model_source": "global_tcn"
     },
     "Evaluating Request (WITH registered letter)": {
       "count": 73,
-      "mae": 8991.86390999572,
-      "smape": 114.2678258840881,
+      "mae": 9014.302244421553,
+      "smape": 114.25551821959642,
       "model_source": "local_xgboost"
     },
     "Network Adjustment Requested": {
       "count": 15,
-      "mae": 5013.483984375,
-      "smape": 89.21181926299322,
+      "mae": 3979.8303385416666,
+      "smape": 81.95770254233494,
       "model_source": "local_xgboost"
     },
     "Pending Liquidation Request": {
       "count": 1305,
-      "mae": 2965.905435823755,
-      "smape": 3.4257167977941814,
+      "mae": 3151.840586087165,
+      "smape": 3.6532306584224608,
       "model_source": "local_lstm"
     },
     "Pending Request for Reservation Closure": {
       "count": 1198,
-      "mae": 59.599877445048996,
-      "smape": 51.414195595244635,
+      "mae": 58.39896913124046,
+      "smape": 50.09393044126953,
       "model_source": "local_xgboost"
     },
     "Pending Request for acquittance of heirs": {
       "count": 52,
-      "mae": 5638.9402418870195,
-      "smape": 17.640500423143067,
+      "mae": 6483.442119891827,
+      "smape": 17.0193684976497,
       "model_source": "global_tcn"
     },
     "Request created": {
       "count": 1665,
-      "mae": 2331.006072972845,
-      "smape": 84.96224320699729,
-      "model_source": "local_lstm"
+      "mae": 2331.169631119462,
+      "smape": 85.23536845866263,
+      "model_source": "local_tcn"
     },
     "Service closure Request with BO responsibility": {
       "count": 1320,
-      "mae": 64738.81850010843,
-      "smape": 62.57781863225485,
-      "model_source": "local_lstm"
+      "mae": 62303.17002447302,
+      "smape": 62.53250768457337,
+      "model_source": "local_tcn"
     },
     "Service closure Request with network responsibility": {
       "count": 1175,
-      "mae": 4167.0824096176475,
-      "smape": 85.08841942768244,
-      "model_source": "local_tcn"
+      "mae": 4166.57624234788,
+      "smape": 85.19871309139285,
+      "model_source": "global_tcn"
     }
   },
   "available_count": 7999,
   "total_count": 7999,
   "test_metrics": {
-    "weighted_mae": 26179.79691031408,
-    "weighted_smape": 76.1939991368908,
-    "macro_mae": 32232.19750801381,
+    "weighted_mae": 26406.924343405615,
+    "weighted_smape": 76.27228283687482,
+    "macro_mae": 30758.425738800273,
     "activity_metrics": {
       "Authorization Requested": {
         "count": 2446,
-        "mae": 32710.48258372047,
-        "smape": 133.9819419974261,
+        "mae": 34003.2823816956,
+        "smape": 135.05993687529732,
         "model_source": "local_xgboost"
       },
       "Back-Office Adjustment Requested": {
-        "count": 527,
-        "mae": 36315.15120782436,
-        "smape": 59.16331362303925,
+        "count": 524,
+        "mae": 37180.11012419489,
+        "smape": 60.38991512998446,
         "model_source": "local_xgboost"
       },
       "Evaluating Request (NO registered letter)": {
         "count": 2150,
-        "mae": 23774.883825825535,
-        "smape": 135.55129389514448,
+        "mae": 23748.536013183595,
+        "smape": 134.65410604837643,
         "model_source": "global_tcn"
       },
       "Evaluating Request (WITH registered letter)": {
         "count": 372,
-        "mae": 20639.968085176202,
-        "smape": 124.4062867494694,
+        "mae": 21526.047157861853,
+        "smape": 124.24876538596068,
         "model_source": "local_xgboost"
       },
       "Network Adjustment Requested": {
         "count": 250,
-        "mae": 75050.79086132812,
-        "smape": 131.73507470097206,
+        "mae": 79748.77265527344,
+        "smape": 130.77387115927488,
         "model_source": "local_xgboost"
       },
       "Pending Liquidation Request": {
         "count": 5566,
-        "mae": 4688.4568684311,
-        "smape": 6.315672232493164,
+        "mae": 4625.324754227677,
+        "smape": 6.178749868742929,
         "model_source": "local_lstm"
       },
       "Pending Request for Reservation Closure": {
         "count": 4985,
-        "mae": 2076.728512790569,
-        "smape": 62.59420769186119,
+        "mae": 2079.1209349350083,
+        "smape": 63.459167828044,
         "model_source": "local_xgboost"
       },
       "Pending Request for acquittance of heirs": {
-        "count": 354,
-        "mae": 45034.19294281868,
-        "smape": 57.36067409531417,
+        "count": 357,
+        "mae": 19066.235975249474,
+        "smape": 39.9158980377157,
         "model_source": "global_tcn"
       },
       "Request created": {
         "count": 6409,
-        "mae": 5069.893010797023,
-        "smape": 87.37338685095189,
-        "model_source": "local_lstm"
+        "mae": 5069.845966421845,
+        "smape": 87.35670581647265,
+        "model_source": "local_tcn"
       },
       "Service closure Request with BO responsibility": {
         "count": 5789,
-        "mae": 96470.15486413676,
-        "smape": 79.7043158952741,
-        "model_source": "local_lstm"
+        "mae": 98572.24864473539,
+        "smape": 80.33296887961917,
+        "model_source": "local_tcn"
       },
       "Service closure Request with network responsibility": {
         "count": 4817,
-        "mae": 12723.469825303131,
-        "smape": 92.7234250887602,
-        "model_source": "local_tcn"
+        "mae": 12723.158519024222,
+        "smape": 92.87598311133912,
+        "model_source": "global_tcn"
       }
     },
     "available_count": 33665,
