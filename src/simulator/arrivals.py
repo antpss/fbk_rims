@@ -23,6 +23,11 @@ import numpy as np
 import pandas as pd
 import pm4py
 
+try:
+    from queue_policy import QueuePolicy
+except ImportError:
+    from src.queue_policy import QueuePolicy
+
 PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
 
 
@@ -33,6 +38,8 @@ class ArrivalGenerator:
     """
     def __init__(self, cfg, num_cases=None, arrival_mode="replay", calendar=None, duration_days=None, force_retrain_prophet=False):
         self.cfg = cfg
+        self.queue_policy = QueuePolicy(cfg.get("simulation", {}).get("queue"))
+        self.queue_policy.validate_features(cfg)
         self.num_cases = num_cases
         self.duration_days = duration_days if duration_days is not None else cfg.get("simulation", {}).get("duration_simulation")
         arr_cfg = cfg.get("simulation", {}).get("arrival", {})
@@ -42,6 +49,17 @@ class ArrivalGenerator:
         self.force_retrain_prophet = force_retrain_prophet
         self.origin = None
         self.generation_status = {"status": "ok"}
+
+    def _queue_source(self, row):
+        if self.queue_policy.type != "priority":
+            return None
+        column = self.queue_policy.source_column(self.cfg)
+        for candidate in dict.fromkeys((column, column.removeprefix("case:"),
+                                        "case:" + column.removeprefix("case:"))):
+            if candidate in row:
+                value = row[candidate]
+                return None if pd.isna(value) else value
+        return None
 
     def prepare_arrivals(self):
         """
@@ -95,7 +113,12 @@ class ArrivalGenerator:
                         val_stat = str(clean_s.mode().iloc[0]) if not clean_s.empty else str(attr.get("fill_value", "UNKNOWN"))
                     attr_imputation[attr["feature_name"]] = val_stat
 
-                case_first_rows = fit_df.groupby("case:concept:name", sort=False).first().reset_index()
+                if self.queue_policy.type == "priority":
+                    # Preserve nulls: groupby.first() would silently take future non-null values.
+                    case_first_rows = (fit_df.sort_values("time:timestamp", kind="stable")
+                                       .drop_duplicates("case:concept:name", keep="first"))
+                else:
+                    case_first_rows = fit_df.groupby("case:concept:name", sort=False).first().reset_index()
                 for r in case_first_rows.to_dict("records"):
                     rec = {}
                     for attr in case_attrs:
@@ -118,9 +141,11 @@ class ArrivalGenerator:
                         else:
                             val = str(val) if val is not None else str(default_val)
                         rec[feat_name] = val
-                    if rec:
-                        case_payload_records.append(rec)
+                    if rec or self.queue_policy.type == "priority":
+                        case_payload_records.append({"case_attrs": rec, "queue_source": self._queue_source(r)})
             except Exception as e:
+                if self.queue_policy.type == "priority":
+                    raise ValueError(f"Could not load case payloads for priority scheduling: {e}") from e
                 print(f"[!] Warning: Could not read aligned log: {e}")
 
         arrivals = []
@@ -186,6 +211,7 @@ class ArrivalGenerator:
                     "case_id": str(cid),
                     "arrival_time": t_first,
                     "requested_amount": float(amt) if pd.notna(amt) else 0.0,
+                    "queue_source": self._queue_source(grp_sorted.iloc[0]),
                     "case_attrs": extracted_case_attrs
                 })
 
@@ -245,7 +271,8 @@ class ArrivalGenerator:
                     break
 
                 if case_payload_records:
-                    sampled_payload = dict(random.choice(case_payload_records))
+                    sampled_case = random.choice(case_payload_records)
+                    sampled_payload = dict(sampled_case["case_attrs"])
                     amt = float(sampled_payload.get("RequestedAmount", 0.0)) if amt_col else 0.0
                 else:
                     amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
@@ -255,9 +282,16 @@ class ArrivalGenerator:
                     "case_id": cid,
                     "arrival_time": cur_time,
                     "requested_amount": amt,
+                    "queue_source": sampled_case.get("queue_source") if case_payload_records else None,
                     "case_attrs": sampled_payload
                 })
                 i += 1
+
+        # Resolve before creating tokens; scheduling metadata never enters case_attrs.
+        for arrival in arrivals:
+            source = arrival.pop("queue_source", None)
+            if self.queue_policy.type == "priority":
+                arrival["queue_priority"] = self.queue_policy.resolve(source, arrival["case_id"])
 
         # Compute case inter-arrival time in seconds across sorted arrivals
         if arrivals:
@@ -547,7 +581,8 @@ class ArrivalGenerator:
 
                     cid = f"prophet_case_{case_idx:05d}"
                     if case_payload_records:
-                        sampled_payload = dict(random.choice(case_payload_records))
+                        sampled_case = random.choice(case_payload_records)
+                        sampled_payload = dict(sampled_case["case_attrs"])
                         amt = float(sampled_payload.get("RequestedAmount", 0.0)) if amt_col else 0.0
                     else:
                         amt = float(random.choice(empirical_amounts)) if empirical_amounts else 0.0
@@ -557,6 +592,7 @@ class ArrivalGenerator:
                         "case_id": cid,
                         "arrival_time": t_arr,
                         "requested_amount": amt,
+                        "queue_source": sampled_case.get("queue_source") if case_payload_records else None,
                         "case_attrs": sampled_payload
                     })
                     case_idx += 1

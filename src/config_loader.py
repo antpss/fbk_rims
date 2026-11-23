@@ -49,6 +49,12 @@ def load_config(config_path=None):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
         
+    try:
+        from queue_policy import QueuePolicy
+    except ImportError:
+        from src.queue_policy import QueuePolicy
+    QueuePolicy(config.get("simulation", {}).get("queue")).validate_features(config)
+
     # Pre-resolve all path keys for convenience
     if "paths" in config and isinstance(config["paths"], dict):
         for k in list(config["paths"].keys()):

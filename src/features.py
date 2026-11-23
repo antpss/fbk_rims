@@ -129,6 +129,11 @@ class FeatureManager:
     """
     def __init__(self, cfg: Optional[Dict[str, Any]] = None):
         self.cfg = cfg or {}
+        try:
+            from queue_policy import QueuePolicy
+        except ImportError:
+            from src.queue_policy import QueuePolicy
+        QueuePolicy(self.cfg.get("simulation", {}).get("queue")).validate_features(self.cfg)
         feat_cfg = self.cfg.get("features", {})
 
         # Priority 1: Explicit selected_features list in YAML

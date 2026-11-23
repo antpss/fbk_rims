@@ -228,6 +228,41 @@ simulation:
   export_xes: true                # Also export standard IEEE XES log (.xes)
   output_simulated_xes: "data/generated/xes/simulated_log.xes"
 
+  # Queue selection:
+  queue:
+    type: fifo                     # fifo | lifo | priority
+    tie_breaker: fifo               # Equal priorities use fifo (only fifo supported as of now)
+
+    # Priority 1 is HIGHEST
+    # Each case keeps its priority for all tasks (events).
+    # Priority is exported as case:Priority, but never passed to ML models.
+    priority:
+      attribute: Priority          # Scheduling-only trace attribute; do NOT list it in features
+      levels: 4                    # Allowed priorities: 1..4; change this and the mapping together
+      source_attribute: RequestedAmount  # ML feature alias OR raw log column (e.g. case:reqamount)
+      # The source can remain a continuous ML feature; it need not be an ML feature at all.
+      # Missing source values are checked BEFORE ML feature imputation.
+      mapping:
+        kind: numeric_ranges       # numeric_ranges | categorical; custom simulator keys, not YAML keywords
+        ranges:                    # Lower bound inclusive, upper exclusive; omitted bound is unbounded
+          - {max_exclusive: 1000, priority: 4}
+          - {min_inclusive: 1000, max_exclusive: 5000, priority: 3}
+          - {min_inclusive: 5000, max_exclusive: 10000, priority: 2}
+          - {min_inclusive: 10000, priority: 1}
+      on_missing: error            # error | default; default requires default_priority below
+      # default_priority: 4        # Used ONLY for missing/null source values, not invalid/unmapped values
+
+      # Hospital example: replace source_attribute and mapping above with:
+      # source_attribute: TriageCode
+      # mapping:
+      #   kind: categorical        # categorical | numeric_ranges
+      #   values: {red: 1, yellow: 2, green: 3, white: 4}
+      # Category names match exactly; quote numeric-looking strings such as "001".
+      #
+      # Existing priorities in the input log: remove mapping (or use mapping: null),
+      # set source_attribute: Priority, and set levels to the allowed maximum.
+      # Values must already be integer priorities from 1 to levels.
+
   # Extraneous Activity Delays (Chapela-Campa & Dumas)
   extraneous_delays:
     enabled: true                 # Simulate discovered extraneous activity delays

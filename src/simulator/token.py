@@ -22,11 +22,12 @@ class Token:
     Case Instance (Parity with Legacy token_LSTM.py / event_trace.py).
     Represents an active case token flowing through the Petri net process model.
     """
-    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, inter_arrival_seconds=0.0, case_attrs=None):
+    def __init__(self, case_id, arrival_offset, requested_amount=0.0, process=None, inter_arrival_seconds=0.0, case_attrs=None, queue_priority=None):
         self.case_id = str(case_id)
         self.arrival_offset = arrival_offset
         self.process = process
         self.env = process.env
+        self.queue_priority = queue_priority
         self.case_attrs = dict(case_attrs or {})
         if requested_amount and "RequestedAmount" not in self.case_attrs:
             self.case_attrs["RequestedAmount"] = float(requested_amount)
@@ -197,7 +198,9 @@ class Token:
 
         # 6. Physical Worker Acquisition at Start of Execution
         t_req = self.env.now
-        worker_event = self.process.workers.request_worker(act)
+        worker_event = (self.process.workers.request_worker(act, priority=self.queue_priority)
+                        if self.queue_priority is not None
+                        else self.process.workers.request_worker(act))
         worker_id = yield worker_event
         t_start = self.env.now
         w_queue = max(0.0, t_start - t_req)

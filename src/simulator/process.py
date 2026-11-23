@@ -26,6 +26,10 @@ try:
     from config_loader import PROJECT_ROOT, get_role_mapping_path, get_simulation_output_paths
 except ImportError:
     from src.config_loader import PROJECT_ROOT, get_role_mapping_path, get_simulation_output_paths
+try:
+    from queue_policy import QueuePolicy
+except ImportError:
+    from src.queue_policy import QueuePolicy
 from .calendar import CalendarManager
 from .predictor import ChampionPredictor
 from .arrivals import ArrivalGenerator
@@ -40,8 +44,10 @@ class SharedWorkerPool:
     perform one task at a time across all business activities.
     Supports Kolmogorov-Smirnov fitted refractory latency cooldowns.
     """
-    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None, enable_concurrency_quotas=True):
+    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None, enable_concurrency_quotas=True, queue_cfg=None):
         self.env = env
+        self.queue_policy = QueuePolicy(queue_cfg)
+        self._request_sequence = 0
         self.latency_cfg = latency_cfg or {}
         self.calendar = calendar
         self.enable_concurrency_quotas = enable_concurrency_quotas
@@ -143,6 +149,8 @@ class SharedWorkerPool:
         Evaluates shift status on a per-request role basis so active shifts are never blocked by off-shift roles.
         Skips scanning exhausted roles where no workers are free to prevent quadratic overhead.
         """
+        if self.queue_policy.type != "fifo":
+            self.pending_requests.sort(key=self.queue_policy.sort_key)
         exhausted_roles = set()
         i = 0
         while i < len(self.pending_requests):
@@ -189,52 +197,24 @@ class SharedWorkerPool:
         return capacity_occupancy(self.role_data, self.worker_active_count,
                                   self.enable_concurrency_quotas)
 
-    def request_worker(self, activity):
-        """
-        Routes the task by organizational role and dispatches to an eligible multi-skilled
-        worker using Longest-Idle-First (LIF) without creating worker ubiquity.
-        """
-        # Step 1: Route by Role
+    def request_worker(self, activity, priority=None):
+        """Enqueue every task before dispatch; policies never preempt running work."""
+        if self.queue_policy.type == "priority":
+            priority = self.queue_policy._check_priority(priority)
         role = self.activity_to_role.get(activity)
         if role and role in self.role_to_workers:
             eligible = self.role_to_workers[role]
         else:
             eligible = self.activity_pools.get(activity, self.all_workers)
-
-        free_workers = [w for w in sorted(eligible) if self._is_worker_free(w)]
-        is_working = self._is_activity_working_now(activity)
-
-        # If no free workers, check if an eligible resting worker can be interrupted
-        if is_working and not free_workers:
-            interrupted = self._interrupt_cooldown_if_eligible(eligible)
-            if interrupted:
-                free_workers = [interrupted]
-
-        if is_working and free_workers:
-            # Longest Idle First: select the worker who has been waiting idle the longest
-            min_idle = min(self.worker_idle_since[w] for w in free_workers)
-            candidates = [w for w in free_workers if self.worker_idle_since[w] == min_idle]
-            chosen = random.choice(candidates) if len(candidates) > 1 else candidates[0]
-
-            self.worker_active_count[chosen] += 1
-            self.worker_busy[chosen] = not self._is_worker_free(chosen)
-            self.worker_activities[chosen].append(activity)
-            self.worker_activity[chosen] = activity
-            ev = self.env.event()
-            ev.succeed(value=chosen)
-            return ev
-        else:
-            ev = self.env.event()
-            self.pending_requests.append({
-                "activity": activity,
-                "role": role,
-                "eligible": set(eligible),
-                "event": ev,
-                "req_time": self.env.now
-            })
-            if not is_working:
-                self._ensure_shift_alarm(activity)
-            return ev
+        event = self.env.event()
+        self.pending_requests.append({
+            "activity": activity, "role": role, "eligible": set(eligible),
+            "event": event, "req_time": self.env.now,
+            "sequence": self._request_sequence, "priority": priority,
+        })
+        self._request_sequence += 1
+        self._dispatch_all_pending()
+        return event
 
     def release_worker(self, worker_id, activity=None):
         """Releases worker; if human latency modeling is active and queue is calm, worker enters refractory buffer."""
@@ -328,6 +308,8 @@ class SimulationProcess:
         from config_loader import validate_delay_placement
         validate_delay_placement(cfg.get("simulation", {}).get("extraneous_delays", {}).get("placement", "ex_ante"))
         self.cfg = cfg
+        self.queue_policy = QueuePolicy(cfg.get("simulation", {}).get("queue"))
+        self.queue_policy.validate_features(cfg)
         seed = cfg.get("project", {}).get("random_seed", 42)
         random.seed(seed)
         np.random.seed(seed)
@@ -435,7 +417,7 @@ class SimulationProcess:
         enable_quotas = cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True)
         self.workers = SharedWorkerPool(
             self.env, role_mapping_path, latency_cfg=latency_cfg, calendar=self.calendar,
-            enable_concurrency_quotas=enable_quotas
+            enable_concurrency_quotas=enable_quotas, queue_cfg=cfg.get("simulation", {}).get("queue")
         )
 
         # Runtime Champion Predictor
@@ -582,7 +564,8 @@ class SimulationProcess:
                 requested_amount=arr.get("requested_amount", 0.0),
                 process=self,
                 inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0),
-                case_attrs=arr.get("case_attrs", {})
+                case_attrs=arr.get("case_attrs", {}),
+                queue_priority=arr.get("queue_priority")
             )
             tokens.append(token)
             self.env.process(token.run())
@@ -606,6 +589,12 @@ class SimulationProcess:
             "status": "censored" if token.status in ("running", "scheduled") and self.duration_seconds is not None else token.status,
             "end": self.calendar.to_datetime(token.finished_at) if token.finished_at is not None else None,
         } for token in tokens], columns=["case_id", "arrival", "status", "end"])
+        if self.queue_policy.type == "priority":
+            priorities = {token.case_id: token.queue_priority for token in tokens}
+            # PM4Py recognizes case: columns as XES trace attributes.
+            column = "case:" + self.queue_policy.attribute
+            df_sim[column] = df_sim["case_id"].map(priorities)
+            case_status[column] = case_status["case_id"].map(priorities)
         self.evaluator.case_status = case_status
         self.evaluator.window_start = pd.to_datetime(ref_dt, utc=True)
         self.evaluator.window_end = (self.evaluator.window_start + pd.Timedelta(seconds=self.duration_seconds)
