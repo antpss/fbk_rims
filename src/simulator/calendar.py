@@ -12,10 +12,10 @@ import json
 from datetime import datetime, timedelta
 
 try:
-    from config_loader import PROJECT_ROOT
+    from config_loader import PROJECT_ROOT, get_role_mapping_path
 except ImportError:
     try:
-        from src.config_loader import PROJECT_ROOT
+        from src.config_loader import PROJECT_ROOT, get_role_mapping_path
     except ImportError:
         PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -67,11 +67,7 @@ class CalendarManager:
         discovered_role_calendars = {}
         if activity_to_role is None or use_discovered:
             if role_mapping_path is None:
-                models_dir = cfg.get("paths", {}).get("models_dir", "models")
-                if not os.path.isabs(models_dir):
-                    role_mapping_path = os.path.join(PROJECT_ROOT, models_dir, "role_mapping.json")
-                else:
-                    role_mapping_path = os.path.join(models_dir, "role_mapping.json")
+                role_mapping_path = get_role_mapping_path(cfg)
 
             if os.path.exists(role_mapping_path):
                 try:
@@ -178,10 +174,8 @@ class CalendarManager:
         work_left = duration_seconds - today_window
         curr_dt = day_end
 
-        # Jump to next working morning
-        w = curr_dt.weekday()
-        days_ahead = min(((d - w - 1) % 7) + 1 for d in self.work_days)
-        curr_dt = (curr_dt + timedelta(days=days_ahead)).replace(hour=self.hour_start, minute=0, second=0, microsecond=0)
+        # day_end may already be the following midnight (hour_end == 24).
+        curr_dt += timedelta(seconds=self.get_gap_to_next_work_window(curr_dt))
 
         shift_len = (self.hour_end - self.hour_start) * 3600.0
         full_shifts, rem_seconds = divmod(work_left, shift_len)
@@ -208,8 +202,8 @@ class CalendarManager:
         """
         Computes effective business working duration (excluding nights and weekends) with full-week chunking.
         Uses specialized per-role calendar if defined, otherwise falls back to global calendar.
-        If allow_zero is True (e.g. for waiting times), zero net seconds across off-shift
-        hours is returned without applying duration-specific overtime fallbacks.
+        Returns only overlap with working windows; disabled calendars return elapsed time.
+        Zero is always valid. allow_zero is retained for caller compatibility only.
         """
         cal = self.get_calendar(role_or_act)
         if cal is not self:
@@ -270,16 +264,4 @@ class CalendarManager:
                 if win_e > shift_s:
                     net_seconds += (win_e - shift_s).total_seconds()
 
-        if allow_zero:
-            return net_seconds
-
-        # If an activity starts on a scheduled working day and finishes on the same calendar day
-        # (e.g. worker stayed late past shift end to complete an active call or application),
-        # credit the continuous single-session working duration rather than truncating to near-zero.
-        if s_dt.date() == e_dt.date() and s_dt.date().weekday() in self.work_days and raw_seconds <= 4 * 3600.0:
-            net_seconds = max(net_seconds, raw_seconds)
-        elif net_seconds <= 0:
-            net_seconds = min(raw_seconds, 3600.0)
-
         return net_seconds
-

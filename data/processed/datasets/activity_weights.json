@@ -1,14 +1,14 @@
 {
-  "Authorization Requested": 0.9998746783039746,
-  "Back-Office Adjustment Requested": 0.9998746783039745,
-  "Evaluating Request (NO registered letter)": 0.9998746783039746,
-  "Evaluating Request (WITH registered letter)": 0.9998746783039746,
-  "Network Adjustment Requested": 0.9998746783039745,
-  "Pending Liquidation Request": 0.9998746783039746,
-  "Pending Request for Network Information": 0.9998746783039745,
-  "Pending Request for Reservation Closure": 1.0006485951965685,
-  "Pending Request for acquittance of heirs": 0.9998746783039746,
-  "Request created": 0.9998746783039746,
-  "Service closure Request with BO responsibility": 0.9998746783039746,
-  "Service closure Request with network responsibility": 0.9998746783039746
+  "Authorization Requested": 0.9935052766593165,
+  "Back-Office Adjustment Requested": 0.9903226568101884,
+  "Evaluating Request (NO registered letter)": 0.9932100036610721,
+  "Evaluating Request (WITH registered letter)": 1.002258915538143,
+  "Network Adjustment Requested": 0.9903226568101884,
+  "Pending Liquidation Request": 0.9903226568101885,
+  "Pending Request for Network Information": 0.9903226568101884,
+  "Pending Request for Reservation Closure": 1.0320700877543911,
+  "Pending Request for acquittance of heirs": 0.9903226568101884,
+  "Request created": 0.9973990242807392,
+  "Service closure Request with BO responsibility": 0.9922513312980602,
+  "Service closure Request with network responsibility": 0.9986314548896701
 }

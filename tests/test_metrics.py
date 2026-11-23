@@ -140,7 +140,7 @@ class TestMetrics(unittest.TestCase):
         self.assertIn("red_dist", results)
         self.assertIn("car", results)
         self.assertIn("ctd", results)
-        self.assertIn("mae_cycle", results)
+        self.assertIn("mean_cycle_difference", results)
 
         # Control-flow should be identical (A -> B in both traces)
         self.assertAlmostEqual(results["cfld"], 0.0)

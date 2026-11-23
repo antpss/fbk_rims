@@ -120,6 +120,11 @@ preprocessing:
 
   # Optional activity renaming/translation map. Empty {} applies no renaming.
   activity_mapping: {}
+  # Example:
+  # activity_mapping:
+  #   "Richiesta creazione": "Request created"
+  #   "Valutazione richiesta": "Evaluating Request"
+  #   "Richiesta completata": "Request completed"
 
 # Activities to model (Duration, Waiting Time, Routing)
 # If empty list [] or omitted, RIMS++ automatically discovers and models all activities in the log.
@@ -217,17 +222,53 @@ simulation:
   mode: "hybrid_residual"         # Options: "hybrid_residual", "pure_physics"
   duration_simulation: null       # Duration horizon in days (RIMS duration_simulation). If null, bounded by num_cases
   num_cases: 1000                 # Number of cases to simulate (null for all cases)
+  max_silent_transitions: 500    # Abort with a diagnostic if a silent chain exceeds this limit
   max_events_per_case: 80         # Safety ceiling to prevent non-terminating loops
   output_simulated_log: "data/generated/csv/simulated_log.csv"
   export_xes: true                # Also export standard IEEE XES log (.xes)
   output_simulated_xes: "data/generated/xes/simulated_log.xes"
 
+  # Queue selection:
+  queue:
+    type: fifo                     # fifo | lifo | priority
+    tie_breaker: fifo               # Equal priorities use fifo (only fifo supported as of now)
+
+    # Priority 1 is HIGHEST
+    # Each case keeps its priority for all tasks (events).
+    # Priority is exported as case:Priority, but never passed to ML models.
+    priority:
+      attribute: Priority          # Scheduling-only trace attribute; do NOT list it in features
+      levels: 4                    # Allowed priorities: 1..4; change this and the mapping together
+      source_attribute: RequestedAmount  # ML feature alias OR raw log column (e.g. case:reqamount)
+      # The source can remain a continuous ML feature; it need not be an ML feature at all.
+      # Missing source values are checked BEFORE ML feature imputation.
+      mapping:
+        kind: numeric_ranges       # numeric_ranges | categorical; custom simulator keys, not YAML keywords
+        ranges:                    # Lower bound inclusive, upper exclusive; omitted bound is unbounded
+          - {max_exclusive: 1000, priority: 4}
+          - {min_inclusive: 1000, max_exclusive: 5000, priority: 3}
+          - {min_inclusive: 5000, max_exclusive: 10000, priority: 2}
+          - {min_inclusive: 10000, priority: 1}
+      on_missing: error            # error | default; default requires default_priority below
+      # default_priority: 4        # Used ONLY for missing/null source values, not invalid/unmapped values
+
+      # Hospital example: replace source_attribute and mapping above with:
+      # source_attribute: TriageCode
+      # mapping:
+      #   kind: categorical        # categorical | numeric_ranges
+      #   values: {red: 1, yellow: 2, green: 3, white: 4}
+      # Category names match exactly; quote numeric-looking strings such as "001".
+      #
+      # Existing priorities in the input log: remove mapping (or use mapping: null),
+      # set source_attribute: Priority, and set levels to the allowed maximum.
+      # Values must already be integer priorities from 1 to levels.
+
   # Extraneous Activity Delays (Chapela-Campa & Dumas)
   extraneous_delays:
     enabled: true                 # Simulate discovered extraneous activity delays
     estimator: "eclaw_plus"       # Options: "eclaw_plus", "eclaw", "naive"
-    placement: "ex_ante"          # Options: "ex_ante", "ex_post", "causal_pair"
-    include_internal_queue_delays: false # If true, also simulates internal queue delays
+    placement: "ex_ante"          # Only supported placement: before the target activity
+    include_internal_queue_delays: false # Also sample discovered internal case delays; NOT worker queues or human_latency cooldowns
   
   # Human Inter-Ticket Latency (Worker Refractory Cooldowns / Coffee Breaks)
   human_latency:
@@ -253,6 +294,7 @@ simulation:
       daily_seasonality: true             # Model diurnal intra-day arrival variations
       weekly_seasonality: true            # Model weekly / day-of-week arrival variations
       intra_hour_distribution: "uniform"  # Intra-hour case arrival dispersion: "uniform" or "normal"
+      max_search_days: 3650            # Finite search limit for count-only forecasts; report shortfall
       cache_model: true                   # Enable disk serialization and caching of fitted model
       model_cache_dir: "models/prophet"   # Directory for cached model JSON and metadata
 
@@ -268,7 +310,7 @@ simulation:
     # Tier 2: Discovered role calendars from models/role_mapping.json (active if use_discovered_role_calendars: true).
     # Tier 3 (Fallback): Global calendar (work_days, hour_start, hour_end above).
     # IMPORTANT: Changing role calendars requires re-running Steps 02b, 03, and 04 so training features match simulation.
-    use_discovered_role_calendars: false
+    use_discovered_role_calendars: true
 
     # Optional Per-Role / Per-Activity Calendars (Tier 1 overrides)
     # If not specified for a role/activity, it defaults to Tier 2 (if enabled) or Tier 3 global calendar.

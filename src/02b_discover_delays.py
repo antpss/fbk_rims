@@ -26,6 +26,7 @@ Outputs:
 ================================================================================
 """
 
+from log_utils import normalize_optional_columns
 import os
 import sys
 import json
@@ -44,8 +45,9 @@ import pm4py
 # Project Path Setup
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(PROJECT_ROOT, "src"))
-from config_loader import load_config
+from config_loader import load_config, resolve_path
 from simulator.calendar import CalendarManager
+from activity_profiler import load_or_discover_activity_profiles
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -196,6 +198,8 @@ class ChapelaDelayDiscoveryEngine:
         self.cfg = cfg
         self.estimator = estimator.lower()
         self.placement = placement.lower()
+        from config_loader import validate_delay_placement
+        validate_delay_placement(self.placement)
         self.min_delay_seconds = min_delay_hours * 3600.0
         self.min_samples = min_samples
         self.zeta = zeta
@@ -203,7 +207,7 @@ class ChapelaDelayDiscoveryEngine:
         self.min_break_seconds = min_break_seconds
 
         self.log_path = cfg["paths"]["aligned_log"]
-        self.output_dir = os.path.join(PROJECT_ROOT, "models/delays")
+        self.output_dir = os.path.join(resolve_path(cfg["paths"].get("models_dir", "models")), "delays")
         os.makedirs(self.output_dir, exist_ok=True)
         self.calendar_mgr = CalendarManager.from_config(cfg)
 
@@ -215,7 +219,10 @@ class ChapelaDelayDiscoveryEngine:
 
         start_time = time.time()
         print(f"Loading aligned event log: {self.log_path}...")
-        df = pm4py.read_xes(self.log_path)
+        from temporal_split import require_artifact, stamp_artifact
+        require_artifact(self.cfg, self.log_path)
+        df = normalize_optional_columns(pm4py.convert_to_dataframe(pm4py.read_xes(self.log_path)))
+        activity_types = load_or_discover_activity_profiles(self.cfg).get("activity_types", {})
         print(f"Loaded {len(df):,} events across {df['case:concept:name'].nunique():,} cases.")
 
         df["time:timestamp"] = pd.to_datetime(df["time:timestamp"])
@@ -275,7 +282,10 @@ class ChapelaDelayDiscoveryEngine:
         for inst in instances:
             instances_by_case[inst["case"]].append(inst)
 
-        oracle = ConcurrencyOracle(zeta=self.zeta).fit(instances_by_case)
+        from temporal_split import training_rows
+        train_df = training_rows(df, self.cfg)
+        train_ids = set(train_df["case:concept:name"].astype(str))
+        oracle = ConcurrencyOracle(zeta=self.zeta).fit({c: v for c, v in instances_by_case.items() if c in train_ids})
         print(f"Discovered {len(oracle.concurrent_pairs)} concurrent activity relations.")
 
         # Reconstruct Worker Timelines & Slicing Arrays
@@ -321,6 +331,7 @@ class ChapelaDelayDiscoveryEngine:
 
         for case_id, insts in instances_by_case.items():
             insts_sorted = sorted(insts, key=lambda x: (x["start"], x["end"]))
+            positions = {id(inst): i for i, inst in enumerate(insts_sorted)}
 
             for idx, inst_t in enumerate(insts_sorted):
                 act_t = inst_t["act"]
@@ -332,7 +343,8 @@ class ChapelaDelayDiscoveryEngine:
                     p for p in insts_sorted
                     if p["end"] <= inst_t["start"]
                     and not oracle.are_concurrent(p["act"], act_t)
-                    and p != inst_t
+                    and p is not inst_t
+                    and (p["end"] < inst_t["start"] or positions[id(p)] < idx)
                 ]
                 if not preds:
                     # Initial activity in trace (no causal predecessor in case)
@@ -364,10 +376,12 @@ class ChapelaDelayDiscoveryEngine:
                 total_causal_pairs += 1
 
                 res_t = inst_t["res"]
+                automated = activity_types.get(act_t) == "AUTOMATED_TASK"
                 unavail = []
 
                 # 1. Busy intervals of target worker
-                busy_list = resource_busy.get(res_t, [])
+                # Match runtime: automated timers need neither a human slot nor a shift.
+                busy_list = [] if automated else resource_busy.get(res_t, [])
                 ends = resource_busy_ends.get(res_t, [])
                 starts = resource_busy_starts.get(res_t, [])
                 worker_busy_sec = 0.0
@@ -384,6 +398,7 @@ class ChapelaDelayDiscoveryEngine:
                 # 2. Calendar non-working periods NW(ρ) for target activity's role
                 cal_nw_sec = 0.0
                 cal_t = self.calendar_mgr.get_calendar(act_t)
+                calendar_unavailable = []
                 if cal_t.enabled:
                     work_days = cal_t.work_days
                     h_start, h_end = cal_t.hour_start, cal_t.hour_end
@@ -397,21 +412,29 @@ class ChapelaDelayDiscoveryEngine:
                             win_s = max(S, c_day)
                             win_e = min(E, c_day + timedelta(days=1))
                             if win_s < win_e:
-                                unavail.append((win_s, win_e))
+                                calendar_unavailable.append((win_s, win_e))
                                 cal_nw_sec += (win_e - win_s).total_seconds()
                         else:
                             if h_start > 0:
                                 m_s = max(S, c_day)
                                 m_e = min(E, c_day.replace(hour=h_start))
                                 if m_s < m_e:
-                                    unavail.append((m_s, m_e))
+                                    calendar_unavailable.append((m_s, m_e))
                                     cal_nw_sec += (m_e - m_s).total_seconds()
                             if h_end < 24:
                                 e_s = max(S, c_day.replace(hour=h_end))
                                 e_e = min(E, c_day + timedelta(days=1))
                                 if e_s < e_e:
-                                    unavail.append((e_s, e_e))
+                                    calendar_unavailable.append((e_s, e_e))
                                     cal_nw_sec += (e_e - e_s).total_seconds()
+
+                # Human off-hours remain descriptive evidence for delay classification,
+                # but they are not unavailable time for a 24/7 automated task.
+                off_ratio = cal_nw_sec / max(1.0, raw_wait)
+                if automated:
+                    cal_nw_sec = 0.0
+                else:
+                    unavail.extend(calendar_unavailable)
 
                 # 3. Merge unavailable intervals
                 valid_unavail = [u for u in unavail if u[0] < u[1]]
@@ -463,7 +486,6 @@ class ChapelaDelayDiscoveryEngine:
                     omega_ex = max(0.0, (E - max(tau_rat, S)).total_seconds())
 
                 omega_ex = min(raw_wait, max(0.0, float(omega_ex)))
-                off_ratio = cal_nw_sec / max(1.0, raw_wait)
                 wip_at_s = lookup_wip(S)
 
                 record = {
@@ -475,9 +497,10 @@ class ChapelaDelayDiscoveryEngine:
                     "target_act": act_t
                 }
 
-                delay_samples_ex_ante[act_t].append(record)
-                delay_samples_ex_post[act_s].append(record)
-                delay_samples_arcs[(act_s, act_t)].append(record)
+                if str(case_id) in train_ids:
+                    delay_samples_ex_ante[act_t].append(record)
+                    delay_samples_ex_post[act_s].append(record)
+                    delay_samples_arcs[(act_s, act_t)].append(record)
 
                 epoch = int(E.timestamp()) if hasattr(E, "timestamp") else int(pd.to_datetime(E).timestamp())
                 instance_level_records.append({
@@ -607,7 +630,7 @@ class ChapelaDelayDiscoveryEngine:
         # STEP 5: Human Inter-Ticket Latency (Worker Refractory Mining)
         # -------------------------------------------------------------
         print("\n[Step 4/4] Mining Human Inter-Ticket Latency (Worker Refractory Gaps)...")
-        df_shifts = df[df["lifecycle:transition"].isin(["START", "COMPLETE"])].sort_values(by="time:timestamp")
+        df_shifts = train_df[train_df["lifecycle:transition"].isin(["START", "COMPLETE"])].sort_values(by="time:timestamp")
 
         res_events = defaultdict(list)
         needed_shift_cols = [c for c in ["org:resource", "lifecycle:transition", "time:timestamp"] if c in df_shifts.columns]
@@ -694,12 +717,18 @@ class ChapelaDelayDiscoveryEngine:
 
             try:
                 df_instances.to_parquet(parquet_path, index=False)
+                stamp_artifact(self.cfg, parquet_path)
                 print(f"[✓] Saved instance-level causal delays ({len(df_instances):,} records) to: {parquet_path}")
             except Exception as e:
                 print(f"[!] Warning: failed to save parquet ({e}).")
+                # Never leave an older preferred table ahead of this run's CSV.
+                for old_path in (parquet_path, parquet_path + ".provenance.json"):
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
 
             try:
                 df_instances.to_csv(csv_path, index=False, compression="gzip")
+                stamp_artifact(self.cfg, csv_path)
                 print(f"[✓] Saved instance-level causal delays ({len(df_instances):,} records) to: {csv_path}")
             except Exception as e:
                 print(f"[!] Warning: failed to save compressed csv ({e}).")
@@ -750,8 +779,8 @@ def main():
     parser.add_argument("--config", type=str, default=None, help="Path to config.yaml")
     parser.add_argument("--estimator", type=str, default=None, choices=["eclaw_plus", "eclaw", "naive"],
                         help="Delay estimator: 'eclaw_plus' (extrapolated eclipse-aware), 'eclaw', or 'naive'")
-    parser.add_argument("--placement", type=str, default=None, choices=["ex_ante", "ex_post", "causal_pair"],
-                        help="Delay placement strategy: 'ex_ante' (before target), 'ex_post' (after source), or 'causal_pair'")
+    parser.add_argument("--placement", type=str, default=None, choices=["ex_ante"],
+                        help="Delay placement: ex_ante (before target)")
     parser.add_argument("--min_delay_hours", type=float, default=1.0, help="Minimum median delay threshold in hours")
     parser.add_argument("--min_samples", type=int, default=30, help="Minimum sample count")
     parser.add_argument("--zeta", type=float, default=0.20, help="Concurrency overlap threshold ζ")

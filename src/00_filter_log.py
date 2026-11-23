@@ -1,3 +1,4 @@
+from log_utils import normalize_optional_columns
 import os
 import argparse
 import warnings
@@ -64,6 +65,8 @@ def filter_log(config_path=None):
         trans_upper = df["lifecycle:transition"].astype(str).str.strip().str.upper()
         df.loc[trans_upper.isin(start_aliases), "lifecycle:transition"] = "START"
         df.loc[trans_upper.isin(comp_aliases), "lifecycle:transition"] = "COMPLETE"
+
+    df = normalize_optional_columns(df)
 
     # Filtering by prefix if specified
     if prefixes_to_keep:

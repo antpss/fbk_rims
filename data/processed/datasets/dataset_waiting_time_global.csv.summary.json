@@ -1,0 +1,14 @@
+{
+  "observed_instances": 215314,
+  "emitted_rows": 211910,
+  "excluded": {
+    "synthetic": 3404
+  },
+  "rows_after_target_filter": 211910,
+  "partition_rows": {
+    "train": 138689,
+    "test": 40958,
+    "excluded": 22421,
+    "validation": 9842
+  }
+}

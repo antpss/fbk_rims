@@ -191,7 +191,7 @@ class ActivityProfiler:
         }
         return result
 
-    def profile_log_file(self, log_path: str) -> dict:
+    def profile_log_file(self, log_path: str, cfg=None) -> dict:
         """Loads an XES or CSV log and computes activity profiles."""
         if not os.path.exists(log_path):
             raise FileNotFoundError(f"Log file not found: {log_path}")
@@ -202,6 +202,9 @@ class ActivityProfiler:
         else:
             df = pd.read_csv(log_path)
 
+        if cfg is not None:
+            from temporal_split import training_rows
+            df = training_rows(df, cfg)
         data = self.profile_dataframe(df)
         abs_log = os.path.abspath(log_path)
         data["__cache_validation__"] = {
@@ -251,12 +254,8 @@ def load_or_discover_activity_profiles(cfg: dict, force_retrain: bool = False) -
     if not prof_cfg.get("enabled", True):
         return {"activity_types": {}, "profiles": {}, "__metadata__": {}}
 
-    models_dir = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("models_dir", "models"))
-    default_out = os.path.join(models_dir, "activity_profiles.json")
-    default_rep = os.path.join(models_dir, "activity_profiles_report.md")
-
-    output_path = os.path.join(PROJECT_ROOT, prof_cfg.get("output_file", default_out))
-    report_path = os.path.join(PROJECT_ROOT, prof_cfg.get("report_file", default_rep))
+    from config_loader import get_profile_paths
+    output_path, report_path = get_profile_paths(cfg)
 
     # Resolve active log path
     log_rel = cfg.get("paths", {}).get("aligned_log", cfg.get("paths", {}).get("raw_log"))
@@ -268,6 +267,8 @@ def load_or_discover_activity_profiles(cfg: dict, force_retrain: bool = False) -
             log_path = raw_log if os.path.exists(raw_log) else log_path
 
     profiler = ActivityProfiler.from_config(cfg)
+    from temporal_split import split_manifest
+    split_id = split_manifest(cfg)["split_id"] if "model_strategy" in cfg else None
 
     # Check cache validity
     if os.path.exists(output_path) and not force_retrain:
@@ -278,7 +279,7 @@ def load_or_discover_activity_profiles(cfg: dict, force_retrain: bool = False) -
             if c_meta and os.path.exists(log_path):
                 abs_log = os.path.abspath(log_path)
                 current_mtime = os.path.getmtime(abs_log)
-                if (c_meta.get("log_path") == abs_log and
+                if (cached_data.get("split_id") == split_id and c_meta.get("log_path") == abs_log and
                     abs(float(c_meta.get("log_mtime", 0.0)) - current_mtime) < 1e-4 and
                     float(c_meta.get("zero_duration_threshold", -1.0)) == float(profiler.zero_duration_threshold) and
                     float(c_meta.get("min_automated_wait_seconds", -1.0)) == float(profiler.min_automated_wait_seconds) and
@@ -286,14 +287,15 @@ def load_or_discover_activity_profiles(cfg: dict, force_retrain: bool = False) -
                     return cached_data
                 else:
                     print(f"[i] Activity profiles cache invalid (log or configuration changed). Re-profiling...")
-            elif not c_meta:
+            elif not c_meta and split_id is None:
                 # Legacy cache without validation metadata - return if force_retrain is False
                 return cached_data
         except Exception as e:
             print(f"[!] Error reading cached activity profiles: {e}. Re-profiling...")
 
     # Automatically discover from log
-    data = profiler.profile_log_file(log_path)
+    data = profiler.profile_log_file(log_path, cfg)
+    data["split_id"] = split_id
     profiler.save_profiles(data, output_path, report_path)
     return data
 
@@ -309,11 +311,12 @@ def main():
     log_path = args.log or os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("aligned_log", cfg.get("paths", {}).get("raw_log")))
 
     profiler = ActivityProfiler.from_config(cfg)
-    data = profiler.profile_log_file(log_path)
+    data = profiler.profile_log_file(log_path, cfg)
+    from temporal_split import split_manifest
+    data["split_id"] = split_manifest(cfg)["split_id"] if "model_strategy" in cfg else None
 
-    models_dir = os.path.join(PROJECT_ROOT, cfg.get("paths", {}).get("models_dir", "models"))
-    out_file = os.path.join(models_dir, "activity_profiles.json")
-    rep_file = os.path.join(models_dir, "activity_profiles_report.md")
+    from config_loader import get_profile_paths
+    out_file, rep_file = get_profile_paths(cfg)
     profiler.save_profiles(data, out_file, rep_file)
 
 

@@ -1,13 +1,12 @@
 import os
 import json
 import time
+import random
 import argparse
 import joblib
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from sklearn.metrics import mean_absolute_error
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 import torch
@@ -25,10 +24,10 @@ except ImportError:
 # Prefix Parsing Helper (supports both JSON arrays and legacy comma strings)
 # =====================================================================
 def parse_prefix(p):
-    if pd.isna(p) or p == "" or p == "[]":
-        return []
     if isinstance(p, list):
         return p
+    if pd.isna(p) or p == "" or p == "[]":
+        return []
     p_str = str(p).strip()
     if p_str.startswith("[") and p_str.endswith("]"):
         try:
@@ -190,6 +189,19 @@ class DurationTCN(nn.Module):
         x = torch.cat(tensors, dim=1)
         return F.softplus(self.fc(x).squeeze(-1))
 
+def seed_training(seed):
+    """Seed model initialization, dropout, minibatch shuffling and estimator RNGs."""
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+
+
 # =====================================================================
 # Main Unified Training Engine
 # =====================================================================
@@ -203,7 +215,11 @@ def main():
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    seed = int(cfg.get("project", {}).get("random_seed", 42))
+    seed_training(seed)
     task_name = args.task
+    from features import validate_prediction_inputs
+    validate_prediction_inputs(cfg, task_name)
     task_cfg = cfg["tasks"][task_name]
     strat_cfg = cfg.get("model_strategy", {})
 
@@ -225,6 +241,11 @@ def main():
     
     models_base_dir = os.path.join(PROJECT_ROOT, cfg["paths"]["models_dir"], task_name, f"{strategy}_{model_type}")
     os.makedirs(models_base_dir, exist_ok=True)
+    # Invalidate the old candidate before training; a failed run cannot enter a tournament.
+    for name in ("metrics.json", "dispatch_config.json"):
+        path = os.path.join(models_base_dir, name)
+        if os.path.exists(path):
+            os.remove(path)
 
     print(f"============================================================")
     print(f"  RIMS++ UNIFIED TRAINING ENGINE")
@@ -238,14 +259,21 @@ def main():
     if not os.path.exists(data_path):
         raise FileNotFoundError(f"Dataset not found at {data_path}. Run 03_dataset_builder.py first.")
 
-    df = pd.read_csv(data_path)
+    from temporal_split import require_artifact
+    require_artifact(cfg, data_path)
+    categorical_columns = {a['feature_name']: str for a in cfg.get('features', {}).get('case_attributes', [])
+                           if a.get('type') != 'continuous'}
+    categorical_columns['Resource_ID'] = str
+    df = pd.read_csv(data_path, dtype=categorical_columns)
     df['Target_Duration'] = df[target_col]
     print(f"Loaded master dataset: {len(df)} samples across {df['Target_Activity'].nunique()} activities.")
 
     feature_mgr = FeatureManager(cfg)
     include_resource = feature_mgr.is_feature_active("resource_id")
 
+    from temporal_split import METADATA_COLUMNS
     ignored_cols = {'Case_ID', 'case_id', 'Prefix', 'Duration_Seconds', 'Wait_Time_Seconds', 'Target_Duration', 'Sample_Weight', 'Target_Activity'}
+    ignored_cols |= METADATA_COLUMNS
     if not include_resource:
         ignored_cols.add('Resource_ID')
 
@@ -263,7 +291,16 @@ def main():
     # -----------------------------------------------------------------
     # STRATEGY DEFINITION: Determine Local vs Global Allocation
     # -----------------------------------------------------------------
-    counts = df['Target_Activity'].value_counts().to_dict()
+    if "Partition" not in df:
+        raise ValueError("Dataset lacks the shared case split; rebuild Step 03")
+    train_df = df[df.Partition == "train"].reset_index(drop=True)
+    val_df = df[df.Partition == "validation"].reset_index(drop=True)
+    held_out = df[df.Partition == "test"].reset_index(drop=True)
+    if any(part.empty for part in (train_df, val_df, held_out)):
+        raise ValueError("Train, validation and test must each contain usable samples; inspect case_split.json")
+    from feature_encoding import fit_encoding, encode_frame
+    feature_encoding = fit_encoding(train_df, feature_cols, cfg, model_type)
+    counts = train_df['Target_Activity'].value_counts().to_dict()
 
     local_targets = []
     global_targets = []
@@ -289,50 +326,14 @@ def main():
         print(f"  Local Models  ({len(local_targets)}): {local_targets}")
         print(f"  Global Models ({len(global_targets)}): {global_targets}")
 
-    # Case-level 70/10/20 train/val/test split to prevent cross-event data leakage
-    seed = cfg["project"]["random_seed"]
-    split_strat = strat_cfg.get("split_strategy", "temporal")
-    case_col = 'Case_ID' if 'Case_ID' in df.columns else ('case_id' if 'case_id' in df.columns else None)
-
-    if case_col is not None:
-        unique_cases = df[case_col].unique()
-        if split_strat == "temporal":
-            # Out-Of-Time (OOT) Chronological Split: preserves arrival order, zero cross-case temporal leakage
-            n_cases = len(unique_cases)
-            n_train = int(n_cases * 0.70)
-            n_val = int(n_cases * 0.10)
-            train_cases = unique_cases[:n_train]
-            val_cases = unique_cases[n_train:n_train + n_val]
-            test_cases = unique_cases[n_train + n_val:]
-            print(f"\n[Chronological Out-Of-Time 70/10/20 Split] Unique cases: {len(unique_cases)}")
-        else:
-            train_val_cases, test_cases = train_test_split(unique_cases, test_size=0.20, random_state=seed)
-            train_cases, val_cases = train_test_split(train_val_cases, test_size=0.125, random_state=seed) # 0.125 * 0.8 = 0.10
-            print(f"\n[Case-Level Random 70/10/20 Split] Unique cases: {len(unique_cases)}")
-
-        train_df = df[df[case_col].isin(train_cases)].reset_index(drop=True)
-        val_df = df[df[case_col].isin(val_cases)].reset_index(drop=True)
-        test_df = df[df[case_col].isin(test_cases)].reset_index(drop=True)
-        print(f"  Train: {len(train_cases)} cases ({len(train_df)} events, {len(train_df)/len(df)*100:.1f}%)")
-        print(f"  Val:   {len(val_cases)} cases ({len(val_df)} events, {len(val_df)/len(df)*100:.1f}%)")
-        print(f"  Test:  {len(test_cases)} cases ({len(test_df)} events, {len(test_df)/len(df)*100:.1f}%)")
-    else:
-        train_val_df, test_df = train_test_split(df, test_size=0.20, random_state=seed, stratify=df['Target_Activity'])
-        train_df, val_df = train_test_split(train_val_df, test_size=0.125, random_state=seed, stratify=train_val_df['Target_Activity'])
-        train_df = train_df.reset_index(drop=True)
-        val_df = val_df.reset_index(drop=True)
-        test_df = test_df.reset_index(drop=True)
-        print(f"\n[Stratified Event-Level 70/10/20 Split]")
-        print(f"  Train: {len(train_df)} events ({len(train_df)/len(df)*100:.1f}%)")
-        print(f"  Val:   {len(val_df)} events ({len(val_df)/len(df)*100:.1f}%)")
-        print(f"  Test:  {len(test_df)} events ({len(test_df)/len(df)*100:.1f}%)")
-
+    # Both partitions are predicted, but only validation metrics select candidates.
+    # Test predictions are kept separately for the frozen dispatch evaluation.
+    test_df = pd.concat([val_df, held_out], ignore_index=True)
     test_predictions = pd.DataFrame({
-        'Target_Activity': test_df['Target_Activity'].values,
-        'Actual': test_df['Target_Duration'].values,
-        'Predicted': np.zeros(len(test_df)),
-        'Source_Model': [''] * len(test_df)
-    })
+        "Case_ID": test_df.Case_ID, "Instance_ID": test_df.Instance_ID,
+        "Partition": test_df.Partition, "Target_Activity": test_df.Target_Activity,
+        "Actual": test_df.Target_Duration, "Predicted": np.full(len(test_df), np.nan),
+        "Source_Model": [""] * len(test_df)})
 
     dispatch_table = {
         "strategy": strategy,
@@ -348,8 +349,8 @@ def main():
     # EXECUTION: XGBOOST ENGINE
     # =================================================================
     if model_type == "xgboost":
-        all_acts_in_data = set(df['Target_Activity'].unique())
-        for p in df['Prefix']:
+        all_acts_in_data = set(train_df['Target_Activity'].unique())
+        for p in train_df['Prefix']:
             all_acts_in_data.update(parse_prefix(p))
         act_categories = sorted(list(all_acts_in_data))
         prefix_cat_dtype = pd.CategoricalDtype(categories=act_categories + ["NONE"], ordered=False)
@@ -361,7 +362,7 @@ def main():
             "prefix_categories": act_categories + ["NONE"],
         }
         if "Resource_ID" in feature_cols:
-            categories_meta["resources"] = sorted(df["Resource_ID"].dropna().astype(str).unique().tolist())
+            categories_meta["resources"] = sorted(train_df["Resource_ID"].dropna().astype(str).unique().tolist())
         categories_path = os.path.join(models_base_dir, "categories.json")
         with open(categories_path, "w") as f:
             json.dump(categories_meta, f, indent=2)
@@ -377,8 +378,7 @@ def main():
                 p_df[c] = p_df[c].astype(prefix_cat_dtype)
             act_cat = data_subset[['Target_Activity']].astype(target_act_dtype)
             sub_feats = data_subset[feature_cols].copy()
-            if 'Resource_ID' in sub_feats.columns:
-                sub_feats['Resource_ID'] = sub_feats['Resource_ID'].astype('category')
+            sub_feats = encode_frame(sub_feats, feature_encoding)
             return pd.concat([p_df, act_cat, sub_feats], axis=1)
 
         # 1. Train Global Model
@@ -399,7 +399,7 @@ def main():
                 max_depth=6,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                random_state=42,
+                random_state=seed,
                 enable_categorical=True,
                 early_stopping_rounds=20,
                 eval_metric="mae",
@@ -412,7 +412,7 @@ def main():
             global_xgb.save_model(global_model_path)
             dispatch_table["dispatch"]["__default__"] = {"model_type": "xgboost", "file": os.path.basename(global_model_path), "log1p_target": True}
 
-            for act in global_targets:
+            for act in sorted(set(test_df.Target_Activity) | set(global_targets)):
                 act_mask = (test_df['Target_Activity'] == act)
                 if act_mask.sum() > 0:
                     X_act = X_test_all[act_mask]
@@ -441,7 +441,7 @@ def main():
                 max_depth=6,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                random_state=42,
+                random_state=seed,
                 enable_categorical=True,
                 early_stopping_rounds=20,
                 eval_metric="mae",
@@ -468,7 +468,7 @@ def main():
         print(f"Using compute device: {device}")
 
         all_prefix_acts = set()
-        for p_str in df['Prefix']:
+        for p_str in train_df['Prefix']:
             all_prefix_acts.update(parse_prefix(p_str))
         vocab = {'<PAD>': 0, '<UNK>': 1}
         for idx, act in enumerate(sorted(all_prefix_acts), start=2):
@@ -476,12 +476,16 @@ def main():
         act_to_idx = {act: i for i, act in enumerate(sorted(counts.keys()))}
 
         scaler = StandardScaler()
+        encoded_train = encode_frame(train_df[feature_cols], feature_encoding)
+        encoded_val = encode_frame(val_df[feature_cols], feature_encoding)
+        encoded_test = encode_frame(test_df[feature_cols], feature_encoding)
+        feature_cols = list(encoded_train.columns)
         train_df_scaled = train_df.copy()
         val_df_scaled = val_df.copy()
         test_df_scaled = test_df.copy()
-        train_df_scaled[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-        val_df_scaled[feature_cols] = scaler.transform(val_df[feature_cols])
-        test_df_scaled[feature_cols] = scaler.transform(test_df[feature_cols])
+        train_df_scaled[feature_cols] = scaler.fit_transform(encoded_train)
+        val_df_scaled[feature_cols] = scaler.transform(encoded_val)
+        test_df_scaled[feature_cols] = scaler.transform(encoded_test)
         joblib.dump(scaler, os.path.join(models_base_dir, f"scaler_{strategy}.pkl"))
         with open(os.path.join(models_base_dir, "vocab.json"), "w") as f:
             json.dump({"vocab": vocab, "act_to_idx": act_to_idx}, f, indent=2)
@@ -569,7 +573,7 @@ def main():
             with torch.no_grad():
                 loader = DataLoader(te_ds, batch_size=batch_size, shuffle=False)
                 all_preds = np.concatenate([np.expm1(np.clip(nn_global(s.to(device), a.to(device), f.to(device)).cpu().numpy(), 0.0, 25.0)) for s, a, f, _, _ in loader])
-            for act in global_targets:
+            for act in sorted(set(test_df.Target_Activity) | set(global_targets)):
                 act_mask = (test_df['Target_Activity'] == act)
                 if act_mask.sum() > 0:
                     test_predictions.loc[act_mask, 'Predicted'] = all_preds[act_mask]
@@ -585,9 +589,10 @@ def main():
 
             if len(tr_sub) < min_samples_local_dl:
                 print(f"\n[Skip Local {model_type.upper()} for {act}]: {len(tr_sub)} training samples < {min_samples_local_dl} threshold.")
-                print(f"  --> Fallback to Global {model_type.upper()} and Local XGBoost.")
+                print("  --> This local candidate is unavailable; the tournament can select a trained global candidate.")
                 act_mask = (test_df['Target_Activity'] == act)
                 if 'all_preds' in locals() and act_mask.sum() > 0:
+                    dispatch_table["dispatch"][act] = dict(dispatch_table["dispatch"]["__default__"])
                     test_predictions.loc[act_mask, 'Predicted'] = all_preds[act_mask]
                     test_predictions.loc[act_mask, 'Source_Model'] = f'Global {model_type.upper()} (Fallback)'
                 continue
@@ -620,58 +625,34 @@ def main():
     with open(dispatch_file, "w") as f:
         json.dump(dispatch_table, f, indent=2)
 
-    # =================================================================
-    # EVALUATION RESULTS & BENCHMARK TABLE
-    # =================================================================
-    print("\n" + "=" * 88)
-    print(f"  RIMS++ [{strategy.upper()}] STRATEGY EVALUATION ({model_type.upper()})")
-    print(f"  Total Training Time: {total_training_time:.2f} seconds")
-    print("=" * 88)
-    print(f"{'Activity':<32} | {'Count':>5} | {'Model Source':<15} | {'MAE':>18} | {'SMAPE (%)':>9}")
-    print("-" * 88)
-
-    act_maes = []
-    act_metrics_summary = {}
-    for act, sub in test_predictions.groupby('Target_Activity'):
-        mae = float(mean_absolute_error(sub['Actual'], sub['Predicted']))
-        smape = float(calculate_smape(sub['Actual'], sub['Predicted']))
-        src = sub['Source_Model'].iloc[0] if len(sub) > 0 else 'Unknown'
-        act_maes.append(mae)
-        act_metrics_summary[act] = {
-            "count": int(len(sub)),
-            "model_source": src,
-            "mae": round(mae, 2),
-            "smape": round(smape, 2)
-        }
-        print(f"{act:<32} | {len(sub):>5} | {src:<15} | {format_time_duration(mae):>18} | {smape:>8.2f}%")
-
-    weighted_mae = float(mean_absolute_error(test_predictions['Actual'], test_predictions['Predicted']))
-    weighted_smape = float(calculate_smape(test_predictions['Actual'], test_predictions['Predicted']))
-    macro_mae = float(np.mean(act_maes)) if len(act_maes) > 0 else 0.0
-
-    print("-" * 88)
-    print(f"{'WEIGHTED AVERAGE':<32} | {len(test_predictions):>5} | {'---':<15} | {format_time_duration(weighted_mae):>18} | {weighted_smape:>8.2f}%")
-    print(f"{'MACRO AVERAGE':<32} | {len(test_predictions):>5} | {'---':<15} | {format_time_duration(macro_mae):>18} | {'---':>9}")
-    print("=" * 88)
-
-    # Save metrics.json for benchmarking
+    from model_artifacts import prediction_metrics, experiment_id, learning_settings
+    identity = experiment_id(cfg, data_path)
     metrics_summary = {
-        "task": task_name,
-        "strategy": strategy,
-        "model_type": model_type,
-        "output_dir": models_base_dir,
-        "training_time_seconds": round(total_training_time, 2),
-        "weighted_mae": round(weighted_mae, 2),
-        "weighted_smape": round(weighted_smape, 2),
-        "macro_mae": round(macro_mae, 2),
-        "activity_metrics": act_metrics_summary
+        "task": task_name, "strategy": strategy, "model_type": model_type,
+        "experiment_id": identity, "selection_partition": "validation", "schema_version": 2,
+        "training_time_seconds": total_training_time,
+        **prediction_metrics(test_predictions[test_predictions.Partition == "validation"])}
+    test_predictions.to_csv(os.path.join(models_base_dir, "predictions.csv"), index=False)
+    with open(os.path.join(models_base_dir, "metrics.json"), "w") as f:
+        json.dump(metrics_summary, f, indent=2, allow_nan=False)
+    stats = {
+        "feature_encoding": feature_encoding,
+        "learning_settings": learning_settings(cfg),
+        "feature_columns": feature_cols,
+        "feature_config": cfg.get("features", {}),
+        "capacity_quotas": cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True),
+        "feature_caps": {c: float(train_df[c].quantile(.99)) for c in ("WIP", "AC_WIP", "Prev_Proc_Time") if c in train_df},
+        "activity_caps": train_df.groupby("Target_Activity")[target_col].quantile(.99).to_dict(),
+        "global_cap": float(train_df[target_col].quantile(.99)),
+        "experiment_id": identity, "schema_version": 2,
     }
-    metrics_file = os.path.join(models_base_dir, "metrics.json")
-    with open(metrics_file, "w") as f:
-        json.dump(metrics_summary, f, indent=2)
-
-    print(f"Saved deployment dispatch configuration to: {dispatch_file}")
-    print(f"Saved evaluation metrics summary to:       {metrics_file}\n")
+    with open(os.path.join(models_base_dir, "training_metadata.json"), "w") as f:
+        json.dump(stats, f, indent=2)
+    dispatch_table.update(schema_version=2, experiment_id=identity)
+    with open(dispatch_file, "w") as f:
+        json.dump(dispatch_table, f, indent=2)
+    print(f"Validation MAE: {format_time_duration(metrics_summary['weighted_mae'])}; "
+          f"coverage {metrics_summary['available_count']}/{metrics_summary['total_count']}")
 
 if __name__ == "__main__":
     main()

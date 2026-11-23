@@ -1,6 +1,6 @@
 {
   "__metadata__": {
-    "generated_at": "2026-11-05 11:45:15",
+    "generated_at": "2026-11-16 12:11:59",
     "zero_duration_threshold": 0.95,
     "min_automated_wait_seconds": 60.0,
     "total_activities": 15,
@@ -30,115 +30,115 @@
   "profiles": {
     "Authorization Requested": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 12491,
+      "total_events": 7973,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 2822.0,
-      "median_wait_seconds": 150.0,
+      "median_duration_seconds": 2561.0,
+      "median_wait_seconds": 156.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Back-Office Adjustment Requested": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 3217,
+      "total_events": 2470,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 47117.0,
-      "median_wait_seconds": 143725.0,
+      "median_duration_seconds": 49660.0,
+      "median_wait_seconds": 143357.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Evaluating Request (NO registered letter)": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 11091,
-      "p_zero_duration": 0.0014,
-      "median_duration_seconds": 1791.0,
+      "total_events": 7073,
+      "p_zero_duration": 0.0016,
+      "median_duration_seconds": 1784.0,
       "median_wait_seconds": 0.0,
-      "human_resource_ratio": 0.9986,
+      "human_resource_ratio": 0.9984,
       "has_start_lifecycle": true
     },
     "Evaluating Request (WITH registered letter)": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 2064,
+      "total_events": 1436,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 2784.0,
+      "median_duration_seconds": 2264.0,
       "median_wait_seconds": 0.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Network Adjustment Requested": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 2075,
+      "total_events": 1388,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 79764.0,
-      "median_wait_seconds": 530460.0,
+      "median_duration_seconds": 86263.0,
+      "median_wait_seconds": 603616.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Pending Liquidation Request": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 29031,
-      "p_zero_duration": 0.0011,
-      "median_duration_seconds": 141870.0,
-      "median_wait_seconds": 133.0,
-      "human_resource_ratio": 0.9989,
+      "total_events": 19133,
+      "p_zero_duration": 0.0008,
+      "median_duration_seconds": 142241.0,
+      "median_wait_seconds": 132.0,
+      "human_resource_ratio": 0.9992,
       "has_start_lifecycle": true
     },
     "Pending Request for Network Information": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 881,
-      "p_zero_duration": 0.0568,
-      "median_duration_seconds": 1303573.0,
+      "total_events": 880,
+      "p_zero_duration": 0.0557,
+      "median_duration_seconds": 1303738.5,
       "median_wait_seconds": 0.0,
-      "human_resource_ratio": 0.9432,
+      "human_resource_ratio": 0.9443,
       "has_start_lifecycle": true
     },
     "Pending Request for Reservation Closure": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 29132,
-      "p_zero_duration": 0.0025,
-      "median_duration_seconds": 130.0,
-      "median_wait_seconds": 262743.0,
+      "total_events": 19208,
+      "p_zero_duration": 0.0028,
+      "median_duration_seconds": 129.0,
+      "median_wait_seconds": 265386.5,
       "human_resource_ratio": 0.999,
       "has_start_lifecycle": true
     },
     "Pending Request for acquittance of heirs": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 2119,
+      "total_events": 1404,
       "p_zero_duration": 0.0,
-      "median_duration_seconds": 26028.0,
-      "median_wait_seconds": 143983.0,
+      "median_duration_seconds": 25868.0,
+      "median_wait_seconds": 145196.5,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Request completed with account closure": {
       "type": "AUTOMATED_TASK",
-      "total_events": 29031,
+      "total_events": 19133,
       "p_zero_duration": 1.0,
       "median_duration_seconds": 0.0,
-      "median_wait_seconds": 140088.0,
+      "median_wait_seconds": 140277.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Request completed with customer recovery": {
       "type": "AUTOMATED_TASK",
-      "total_events": 86,
+      "total_events": 58,
       "p_zero_duration": 1.0,
       "median_duration_seconds": 0.0,
-      "median_wait_seconds": 151857.0,
+      "median_wait_seconds": 236757.0,
       "human_resource_ratio": 1.0,
       "has_start_lifecycle": true
     },
     "Request created": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 32429,
-      "p_zero_duration": 0.0016,
-      "median_duration_seconds": 61.0,
+      "total_events": 21122,
+      "p_zero_duration": 0.0022,
+      "median_duration_seconds": 60.0,
       "median_wait_seconds": 0.0,
-      "human_resource_ratio": 0.9984,
+      "human_resource_ratio": 0.9978,
       "has_start_lifecycle": true
     },
     "Request deleted": {
       "type": "INSTANT_GATEWAY",
-      "total_events": 3312,
+      "total_events": 1931,
       "p_zero_duration": 1.0,
       "median_duration_seconds": 0.0,
       "median_wait_seconds": 0.0,
@@ -147,21 +147,29 @@
     },
     "Service closure Request with BO responsibility": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 30225,
-      "p_zero_duration": 0.0031,
-      "median_duration_seconds": 261342.0,
-      "median_wait_seconds": 2607.0,
-      "human_resource_ratio": 0.9969,
+      "total_events": 19641,
+      "p_zero_duration": 0.0037,
+      "median_duration_seconds": 260498.0,
+      "median_wait_seconds": 2327.0,
+      "human_resource_ratio": 0.9963,
       "has_start_lifecycle": true
     },
     "Service closure Request with network responsibility": {
       "type": "HUMAN_WORK_ITEM",
-      "total_events": 28150,
-      "p_zero_duration": 0.1116,
-      "median_duration_seconds": 100.0,
+      "total_events": 18253,
+      "p_zero_duration": 0.1206,
+      "median_duration_seconds": 101.0,
       "median_wait_seconds": 0.0,
-      "human_resource_ratio": 0.8884,
+      "human_resource_ratio": 0.8794,
       "has_start_lifecycle": true
     }
-  }
+  },
+  "__cache_validation__": {
+    "log_path": "/home/antonio/fbk_rims/data/processed/aligned_BAC.xes",
+    "log_mtime": 1794827490.1316066,
+    "zero_duration_threshold": 0.95,
+    "min_automated_wait_seconds": 60.0,
+    "overrides": {}
+  },
+  "split_id": "aeac39dae080e74daba027976bf63c8ea64eb3889c20142f26eeb6d143f21a53"
 }

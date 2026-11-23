@@ -121,7 +121,7 @@ def discover_xor_decision_points(pnml_path):
 # =====================================================================
 # 2. PM4Py Log Alignment & Decision Sample Extraction
 # =====================================================================
-def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload", include_counts=False):
+def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_points, case_attrs_cfg=None, routing_mode="payload", include_counts=False, cfg=None):
     """
     Performs optimal state-equation A* alignment of the event log against the Petri net model.
     Extracts prefix history, loop counts, case attributes (payload), inter-arrival times,
@@ -132,11 +132,17 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
 
     print(f"Loading event log: {log_path}...")
     log_raw = pm4py.read_xes(log_path)
+    if cfg is not None:
+        from temporal_split import training_rows
+        log_raw = training_rows(pm4py.convert_to_dataframe(log_raw), cfg)
     if not isinstance(log_raw, pd.DataFrame):
         df_log = pm4py.convert_to_dataframe(log_raw)
     else:
         df_log = log_raw.copy()
 
+    # Arrival context precedes COMPLETE-only filtering for control-flow alignment.
+    df_log["case:concept:name"] = df_log["case:concept:name"].astype(str)
+    case_first_times = df_log.groupby("case:concept:name")["time:timestamp"].min()
     if "lifecycle:transition" in df_log.columns:
         print("Filtering event log to COMPLETE lifecycle events for 1-to-1 Petri net alignment...")
         df_log = df_log[df_log["lifecycle:transition"].str.upper() == "COMPLETE"].copy()
@@ -145,7 +151,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
         df_log = df_log[df_log["case:concept:name"].isin(valid_cases)].copy()
 
     # Precompute case inter-arrival times across chronologically sorted traces
-    case_first_times = df_log.groupby("case:concept:name")["time:timestamp"].min().sort_values()
+    case_first_times = case_first_times.loc[df_log["case:concept:name"].unique()].sort_values()
     case_inter_arrivals = {}
     prev_t = None
     for cid, t in case_first_times.items():
@@ -161,6 +167,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
     id2label = {}
     for t in net.transitions:
         id2label[t.name] = t.label if t.label is not None else t.name
+    observable_ids = {t.name for t in net.transitions if t.label is not None}
 
     # Identify frequent process activities for presence tracking
     all_acts = set()
@@ -241,7 +248,7 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
             case_features["RequestedAmount"] = float(amt) if amt is not None else 0.0
 
         # Temporal context from first event
-        first_dt = trace[0]["time:timestamp"] if len(trace) > 0 and "time:timestamp" in trace[0] else None
+        first_dt = case_first_times.get(str(case_id))
         hour = first_dt.hour if first_dt is not None else 12
         weekday = first_dt.weekday() if first_dt is not None else 0
 
@@ -289,7 +296,8 @@ def extract_decision_samples_via_alignment(log_path, pnml_path, xor_decision_poi
                     decision_data[p_id].append(sample)
                     dp_counts[p_id] += 1
 
-            prefix_labels.append(chosen_label)
+            if model_t_id in observable_ids:
+                prefix_labels.append(chosen_label)
 
     decision_dfs = {p_id: pd.DataFrame(samples) for p_id, samples in decision_data.items()}
     return decision_dfs
@@ -410,6 +418,7 @@ def main():
         case_attrs_cfg=case_attrs_cfg,
         routing_mode=routing_mode,
         include_counts=include_counts,
+        cfg=cfg,
     )
     print(f"\nExtracted training samples across {len(decision_dfs)} decision points.")
 
@@ -423,14 +432,8 @@ def main():
         "decision_points": {},
     }
     manifest_path = os.path.join(output_dir, "routing_decisions.json")
-    if os.path.exists(manifest_path):
-        try:
-            with open(manifest_path, "r") as mf:
-                old_data = json.load(mf)
-                if isinstance(old_data.get("decision_points"), dict):
-                    dispatch_manifest["decision_points"] = dict(old_data["decision_points"])
-        except Exception:
-            pass
+    # Rebuild the manifest from this training partition; old decision points may
+    # have been learned from a different log or from the held-out population.
 
     results_table = []
     tree_rules_map = {}
@@ -438,7 +441,7 @@ def main():
     # 3. Train Classifier or Compute Empirical Probabilities
     for p_id, df in decision_dfs.items():
         safe_name = p_id.replace(" ", "_").replace(":", "_").replace("/", "_")
-        targets_available = list(set([b["raw_trans"] for b in xor_points[p_id]["branches"].values()]))
+        targets_available = sorted({b["raw_trans"] for b in xor_points[p_id]["branches"].values()})
         n_samples = len(df)
 
         if n_samples == 0:
@@ -520,7 +523,7 @@ def main():
                 cat_mappings[c] = list(X[c].cat.categories)
 
         # 80/20 Case-Level Train/Test Split
-        unique_cases = np.array(list(set(df["case_id"])))
+        unique_cases = np.array(sorted(set(df["case_id"])))
         try:
             tr_cases, te_cases = train_test_split(unique_cases, test_size=0.2, random_state=seed)
             tr_mask = df["case_id"].isin(set(tr_cases)).values

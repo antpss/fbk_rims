@@ -3,9 +3,9 @@
 **RIMS++** is a Business Process Simulation (BPS) framework that combines Petri net process models with Machine Learning. It discovers process structure, organizational roles, external delays, and routing rules directly from event logs, and simulates process executions in SimPy.
 
 What the framework does:
-* **Discovers and Executes Petri Nets**: Mines sound workflow nets from the event log (via Split Miner) and executes them using token marking semantics in SimPy.
+* **Discovers and Executes Petri Nets**: Mines workflow nets from the training log (via Split Miner) and checks soundness and executes them using token marking semantics in SimPy.
 * **Predicts Durations & Waiting Times with ML**: Trains machine learning models (XGBoost, TCN, LSTM) to predict activity processing and waiting times based on real-time process state (WIP, time of day, queue congestion).
-* **Mines Organizational Roles & Manages Workers**: Discovers roles from the log (*Burattin, Sperduti, & Veluscek, 2013*) and simulates named workers across departments, tracking individual availability, multi-tasking limits, and preventing workers from being in two places at once.
+* **Mines Organizational Roles & Manages Workers**: Discovers roles from the log (*Burattin, Sperduti, & Veluscek, 2013*) and simulates named workers across departments, tracking individual availability, multi-tasking limits, and enforcing shared capacity limits across their assignments.
 * **Identifies External Delays & Cooldowns**: Detects delays caused by external factors (e.g. waiting for a customer response) or worker post-task cooldowns using causal estimators (*Chapela-Campa & Dumas, 2022, 2024*).
 * **Learns Decision-Based Routing**: Trains white-box decision trees at XOR split places to route cases based on data attributes and past trace history, falling back to probabilities when needed.
 * **Models Case Arrivals**: Generates new cases through historical replay, statistical distributions, or time-series forecasting with Facebook Prophet.
@@ -22,20 +22,25 @@ fbk_rims/
 ├── context.md                         # Detailed project context, evolution, and architectural blueprint
 ├── README.md                          # Primary reference documentation
 ├── docs/                              # Flowcharts and architecture documentation
-│   └── causal_discovery_flowchart.md  # Triple causal test flowchart for extraneous delays
+│   ├── causal_discovery_flowchart.md  # Causal test flowchart for extraneous delays
+│   ├── code_audit_2026-11-06.md        # Audit findings, including remaining limitations
+│   └── first16_fixes.md               # Implemented fixes, semantics and rebuild instructions
 ├── data/                              # Data directories
 │   ├── raw/                           # Raw input event logs (.xes / .csv)
 │   ├── processed/                     # Cleaned logs, training tables, and benchmark reports
 │   │   ├── <log_name>_filtered.xes    # Preprocessed and standardized event log
-│   │   ├── aligned_<log_name>.xes     # Repaired & aligned log (100% synchronous moves)
+│   │   ├── aligned_<log_name>.xes     # Alignment-repaired log, including synthetic model moves
 │   │   ├── datasets/                  # Feature-engineered tabular datasets
 │   │   │   ├── dataset_duration_global.csv     # Duration dataset (0-duration filtered)
 │   │   │   ├── dataset_waiting_time_global.csv # Waiting time dataset (0-waiting preserved)
 │   │   │   └── activity_weights.json           # Smoothed inverse sample importance weights
+│   │   ├── case_split.json            # Shared source-case boundaries and train/validation/test assignments
+│   │   ├── simulation_metrics.json    # Metrics, populations, units and error statuses
 │   │   ├── simulation_report.md       # Latest simulation run benchmark report
 │   │   └── ablation_report.md         # Simulation ablation study leaderboard
 │   └── generated/                     # Ephemeral simulation outputs (ignored by Git)
-│       ├── csv/simulated_log.csv      # Output simulated event log (flat CSV)
+│       ├── csv/simulated_log.csv      # Events; unfinished executions have no completion timestamp
+│       ├── csv/simulated_log_cases.csv # Case completion/censoring/failure statuses
 │       └── xes/simulated_log.xes      # Output simulated event log (standard IEEE XES)
 ├── models/                            # Trained model artifacts and manifests
 │   ├── activity_profiles.json         # Data-driven activity behavior profiles (Human vs. Automated vs. Instant)
@@ -48,10 +53,10 @@ fbk_rims/
 │   │   ├── delay_manifest.json        # Machine-readable delay manifest with KS-fitted distributions
 │   │   └── delay_discovery_report.md  # Statistical delay discovery report
 │   ├── duration/                      # Activity duration models (XGBoost, TCN, LSTM)
-│   │   ├── hybrid_champion/           # Best-of-All-Worlds Hybrid Champion dispatch manifest
+│   │   ├── hybrid_champion/           # Validation-selected dispatch and separate candidate bundles
 │   │   ├── global_{xgboost|tcn|lstm}/  # Global model checkpoints & scalers
 │   │   ├── local_{xgboost|tcn|lstm}/   # Activity-specialized local model checkpoints & scalers
-│   │   └── benchmark_report.md        # Duration benchmark leaderboard & activity breakdown
+│   │   └── benchmark_report.md        # Validation coverage and separate champion test results
 │   ├── waiting_time/                  # Activity waiting time models (XGBoost, TCN, LSTM)
 │   │   ├── hybrid_champion/           # Waiting time champion dispatch & scalers
 │   │   ├── global_{xgboost|tcn|lstm}/  # Global model checkpoints & scalers
@@ -70,6 +75,9 @@ fbk_rims/
 │   ├── view_models.py                 # Step 1c: Petri net visualization (.png export)
 │   ├── 02_align_and_repair_log.py     # Step 2: Log alignment & replay repair (PM4Py A* state space)
 │   ├── 02b_discover_delays.py         # Step 2b: Causal external delay & worker latency discovery
+│   ├── historical_features.py         # Historical event sweep and prediction-time snapshots
+│   ├── temporal_split.py              # Shared case split, training filters and artifact provenance
+│   ├── model_artifacts.py             # Experiment identity and valid-prediction scoring
 │   ├── 03_dataset_builder.py          # Step 3: Feature engineering & state vector extraction
 │   ├── activity_profiler.py           # Activity behavioral profiling (Human vs. Automated vs. Gateway)
 │   ├── features.py                    # Declarative Feature Registry & context builder
@@ -89,6 +97,20 @@ fbk_rims/
 ├── RIMS/                              # Cloned Reference / Legacy Repo (baseline, NOT the simulator)
 └── RIMS_tool/                         # Cloned Reference / Legacy Repo (BPM 2023 demo tool, NOT the simulator)
 ```
+
+---
+
+## Shared helper modules
+
+These modules are imported by the existing pipeline stages; they are not additional commands or pipeline steps:
+
+| Module | Responsibility | Main callers |
+|---|---|---|
+| `historical_features.py` | Pair observed executions, maintain historical case/activity/worker state, and capture duration-at-START and waiting-at-eligibility snapshots. | Step 03 dataset builder |
+| `temporal_split.py` | Create/reuse one case split, filter fitting data to training cases, and check source-split/artifact provenance. | Discovery, profiling, dataset building, training and arrival fitting |
+| `model_artifacts.py` | Identify compatible training experiments and calculate scores only for available predictions. | Step 04 training and Step 04b champion synthesis |
+
+They keep shared rules in one place rather than duplicating them across scripts. `features.py` still defines the feature extractors; `historical_features.py` supplies their historical inputs.
 
 ---
 
@@ -297,6 +319,8 @@ tasks:
 ```yaml
 simulation:
   mode: "hybrid_residual"         # Options: "hybrid_residual" (ML + physics) or "pure_physics"
+  max_silent_transitions: 500     # Abort with a diagnostic on excessive silent firing
+  duration_simulation: null      # Optional hard cutoff in days; unfinished cases are censored
   output_simulated_log: "data/generated/csv/simulated_log.csv"
   output_simulated_xes: "data/generated/xes/simulated_log.xes"
   extraneous_delays:
@@ -315,6 +339,7 @@ simulation:
       sampling_method: "triangular"
       daily_seasonality: true
       weekly_seasonality: true
+      max_search_days: 3650       # Count-only forecast search bound; report unmet case counts
       model_cache_dir: "models/prophet"
   calendar:
     enabled: true                 # If true, shifts work to business hours & pauses weekends
@@ -424,7 +449,7 @@ python src/activity_profiler.py
 
 ### Step 2: Log Alignment & Replay Repair (`src/02_align_and_repair_log.py`)
 
-Replays the event log against the discovered Petri net using $A^*$ state-space alignment to produce a repaired log containing strictly synchronous moves. This guarantees that every trace in the dataset can be replayed inside the simulation model without deadlock:
+Aligns the COMPLETE-event projection against the discovered Petri net. Reconstruction consumes exactly the paired work items submitted for alignment: synchronous moves preserve observed START/COMPLETE records, log moves are excluded, and visible model moves become explicitly synthetic COMPLETE events. Other lifecycle states (such as SCHEDULE/ASSIGN) are excluded from this work-item projection and counted. Only a null model label denotes a silent transition; visible activity names starting with `tau` remain visible. Failed or inconsistent alignments raise an error rather than exporting an unrepaired trace.
 
 ```bash
 python src/02_align_and_repair_log.py
@@ -455,29 +480,29 @@ python src/02b_discover_delays.py
 
 ### Step 3: Feature Engineering & Dataset Creation (`src/03_dataset_builder.py`)
 
-Sweeps the aligned log chronologically to construct state feature vectors without future data leakage:
+Sweeps observed lifecycle events and estimated eligibility timestamps chronologically. Duration features are captured at START, after assignment; waiting features are captured at estimated eligibility, before the target starts. Step 02b supplies the eligibility estimate; this is not exact timed Petri-net replay. See [the feature conventions and limitations](docs/first16_fixes.md).
 
 * **Universal Process Features**:
-  * `Prefix`: Historical sequence of recent activities executed within the case (configurable window size $k$, default 10).
-  * `Prev_Proc_Time`: Duration of the immediately preceding activity within the case.
+  * `Prefix`: Historical sequence of recent activities completed within the case (configurable window size $k$, default 10).
+  * `Prev_Proc_Time`: Duration of the most recently completed activity in the case at the snapshot time.
   * `WIP`: Process-level Work-In-Progress (total active cases across the entire system at time $t$).
-  * `AC_WIP`: Activity-Centric Work-In-Progress (cases active or queued for this specific activity at time $t$).
+  * `AC_WIP`: Number of running instances of the target activity at time $t$; queued instances are excluded. The target is included at its duration snapshot and excluded at its waiting snapshot.
   * `Daytime`: Continuous normalized time-of-day feature in $[0, 1]$.
   * `Weekday_0` $\dots$ `Weekday_6`: One-hot indicators for day of the week.
 * **Dynamic Departmental Occupancy (`Role_k_OC`)**:
-  Computes the real-time utilization vector for each discovered organizational role:
+  For the worker roster eligible for role $k$, divide occupied nominal capacity slots by total nominal slots:
 
 $$
-\text{Role}_k^{\text{OC}}(t) = \min\left(1.0, \frac{\text{Active Workers in Role } k \text{ at time } t}{\text{Effective Staffing Capacity of Role } k}\right)
+\text{Role}_k^{\text{OC}}(t) = \frac{\sum_{w \in R_k} \min(n_w(t), C_w)}{\sum_{w \in R_k} C_w}
 $$
 
-  providing ML regressors with continuous macro-level departmental congestion signals.
+  Here $n_w(t)$ counts all running assignments of worker $w$, including assignments in other roles. $C_w$ is the worker's concurrency quota (one when quotas are disabled). This measures occupied work capacity, not calendar availability or unobserved breaks.
 * **Declarative Case & Event Attributes**:
-  Extracts case-level attributes (e.g. case category, cost, requested amount, customer tier) with empirical median/mode imputation governed by `treat_zero_as_missing`.
+  Fits case-attribute imputation on training cases only. Waiting inputs may use case attributes known on arrival; eventual resource IDs and execution-event attributes are rejected for waiting prediction.
 * **Cumulative Trace History (`trace_history`)**:
-  Tracks strictly causal, leak-free presence indicators (`has_<activity>`) for activities executed within the case prior to time $t$. Configured via `mode: "profile_aware"`, RIMS++ automatically monitors past occurrences of non-human activities (`INSTANT_GATEWAY` and `AUTOMATED_TASK`) discovered by the `ActivityProfiler`, providing downstream ML models (e.g. routing decision trees or duration predictors) with structural process context.
+  Tracks snapshot-time completed-activity presence indicators (`has_<activity>`) for activities executed within the case prior to time $t$. Configured via `mode: "profile_aware"`, RIMS++ automatically monitors past occurrences of non-human activities (`INSTANT_GATEWAY` and `AUTOMATED_TASK`) discovered by the `ActivityProfiler`, providing duration/waiting predictors with historical process context. Routing has a separate extraction path; remaining routing inconsistencies are recorded in the audit.
 * **Task-Specific Filtering**:
-  * **Duration Dataset**: Filters out 0.0s events (automated transitions) and applies smoothed inverse sample weights (`activity_weights.json`).
+  * **Duration Dataset**: Filters out 0.0s events (automated transitions) and applies smoothed sample-weight corrections for filtering (`activity_weights.json`).
   * **Waiting Time Dataset**: Preserves 0.0s events (representing immediate resource pickups from queue).
 
 ```bash
@@ -490,8 +515,52 @@ python src/03_dataset_builder.py --task waiting_time
 * **Outputs**:
   * `data/processed/datasets/dataset_duration_global.csv` & `activity_weights.json`
   * `data/processed/datasets/dataset_waiting_time_global.csv`
+  * Dataset `.summary.json` files record exclusions and partition counts; `.provenance.json` sidecars identify the source split and artifact contents.
 
 ---
+
+### Duration clocks and external work
+
+For paired executions, dataset creation calls `calculate_net_working_seconds` using the activity/role calendar. Simulation expands the predicted working duration with `calculate_calendar_duration`. This avoids the original blanket double-counting of nights and weekends, and was already present before the first-16 fixes.
+
+Duration targets now use **strict overlap with the effective working calendar**, without overtime allowances or minimum-effort fallbacks. Disabled calendars continue to use elapsed time. `allow_zero` remains accepted for compatibility; zero is always a valid calculation result. The default configuration enables discovered role calendars, mined from training cases only. Explicit activity/role overrides take precedence over discovered calendars, with the global calendar as fallback.
+
+Matched positive-duration human executions with zero working-time overlap are excluded from duration training regardless of `filter_zero_duration`. The extraction console summary and dataset `.summary.json` count these under `excluded.zero_working_time_overlap`. Their observed START/COMPLETE events still contribute workload, occupancy and completed history; their previous-duration value is zero, and otherwise valid waiting samples remain eligible. Missing STARTs, synthetic events and legitimate instantaneous activities retain their existing treatment. Dataset creation fails clearly if no usable rows remain.
+
+Calendar consistency does not guarantee reproduction of observations outside the selected operating policy: under an 08:00–20:00 shift, Monday 19:00–21:00 supplies one working hour, which simulation completes at 20:00. Friday 19:00–Monday 09:00 supplies two working hours and expands back to 62 elapsed hours. Discovered calendars describe the selected operating policy, not proof of actual human effort.
+
+**Rebuild required:** regenerate role discovery if its artifacts predate the training-only split, then rerun delay discovery, both dataset builders and both model tournaments. With current training-only discovery artifacts, run `venv/bin/python run_pipeline.py --steps 2b,3,4b`; add `1b` if role discovery must be regenerated. For older first-16 artifacts, follow the full rebuild instructions in `docs/first16_fixes.md`. Existing artifact formats are unchanged; the exclusion counter is additive. Do not reuse models trained with the former duration convention.
+
+There are remaining limitations:
+- A positive START–COMPLETE interval is not proof of uninterrupted human work. Long asynchronous/external processing is currently classified as `HUMAN_WORK_ITEM` unless overridden, and consumes worker capacity.
+- `AUTOMATED_TASK` means **zero execution duration plus possible waiting**, not nonzero continuous external processing. Overriding a long task to this type would discard its execution duration.
+- A per-activity calendar override with `enabled: false` already supports continuous duration arithmetic for that activity, but does **not** remove its worker allocation. A positive-duration, worker-free external-task type is not implemented.
+
+Therefore, the complete external-processing proposal in the old notes is not implemented. Changing its semantics requires deciding whether the logged interval represents staffed work, an external timer, or a combination. The remaining audit findings and `docs/first16_fixes.md` describe the repair boundary; the repository is not claimed to be free of all audit issues.
+
+### Follow-up audit fixes: delays, routing, evaluation and execution safety
+
+Delay discovery uses the same activity profiles as simulation. Automated-task waits run continuously and exclude neither human worker-busy time nor human calendar closures. Human off-hours remain descriptive evidence for the existing external-delay classification; they are not subtracted from automated residual targets. Human-task availability correction remains in place.
+
+Routing arrival hour, weekday and inter-arrival features come from the full lifecycle log before COMPLETE-only alignment filtering. Previous-activity history includes observable activities only. Evaluation uses chronological FIFO lifecycle pairing shared with historical feature extraction: unmatched completions are instantaneous, and future STARTs cannot match them.
+
+Worker cooldowns read the fitted per-worker distribution/parameter schema (with global fallback for workers without a profile) and apply the configured maximum to fallback samples too. A worker takes one break only after all active tasks finish. Queue-aware breaks can be interrupted; an obsolete break cannot clear a newer break's state.
+
+The per-case event ceiling reserves observable-event slots before launching parallel work, including automated tasks and instant milestones. Already admitted work finishes while the case remains active in WIP. Silent completion paths may still fire at the ceiling. Reaching the final marking is reported as completed; requiring further observable events is reported as `limit_failed`. A configured simulation horizon can still censor work before it finishes.
+
+**Rebuild after these fixes:** rerun delay discovery, the waiting dataset/tournament and routing training. When combined with the calendar fix above, rebuild both prediction tasks and routing with `venv/bin/python run_pipeline.py --steps 2b,3,4b,5`. If artifacts predate the first-16 fixes, use the full discovery-onward rebuild instead. Existing supplied artifacts were not regenerated by the code changes. Rerun evaluation to obtain corrected lifecycle-based metrics.
+
+### Further audit repairs: log conventions, reproducibility and paths
+
+Repeated activities now use the predicted/sampled waits directly; the unconditional halving on each revisit has been removed. The existing external/residual `max` composition remains.
+
+`log_utils.normalize_optional_columns` supplies the pipeline conventions for absent fields: unspecified lifecycle means COMPLETE, and unspecified resource means UNKNOWN. It never creates a START or invents human effort. Activity profiling still supplies the execution type: completion-only automated/instantaneous events can provide waiting targets under the zero-execution convention, while human executions without a START provide neither duration nor pre-execution waiting targets. Such observations remain historical context. Profiling is a heuristic modeling choice; a missing START alone does not establish that real execution was instantaneous. Logs without resource identities retain the existing anonymous-pool assumption; their staffing and worker occupancy cannot be learned from absent identities.
+
+Training seeds Python, NumPy and PyTorch, including model initialization, dropout and minibatch order. XGBoost honors `project.random_seed`; routing case splits and worker tie-breaking use stable orderings. PyTorch requests deterministic algorithms and disables cuDNN benchmarking; unsupported nondeterministic kernels fail explicitly. Repeatability is scoped to the same inputs, configuration and software/hardware environment. XGBoost routing receives categorical columns with the persisted training categories; unseen values become missing. Sklearn routing keeps its training-time integer representation.
+
+Role discovery, dataset creation, delay calendars and runtime worker/calendar loading share `resources.discovery.output_file`. Profile CLI/helper outputs honor `activity_profiling.output_file` and `report_file`. Comparison reports use `paths.output_base_dir`. Simulation CSV/XES paths honor the configured directories in both modes; pure-physics exports append `_pure_physics` to the configured basename. Relative paths are resolved against the project root.
+
+**Rebuild:** rerun preprocessing when relying on the new optional-column convention, then alignment, delay discovery, both affected datasets/tournaments and routing. For the supplied pre-repair artifacts, run the full pipeline. Reproducibility fixes affect newly trained models; removing loop decay affects runtime immediately. Rerun evaluation and update report consumers to use `mean_cycle_difference` instead of `mae_cycle`.
 
 ### Step 4: Predictive Modeling & Multi-Architecture Benchmark Suite
 
@@ -504,7 +573,9 @@ The predictive modeling engine (`src/04_train.py`) and benchmarking suite (`src/
 3. **`single_global`**:
    Fast single-model training with zero benchmark overhead.
 
-All models are evaluated on a strict **Case-Level 70/10/20 train/val/test split** (partitioned by `Case_ID` to eliminate temporal data leakage).
+The default temporal evaluation uses shared case-arrival cutoffs near 70% and 80%. Training cases must finish before the first cutoff; validation cases must arrive after it and finish before the second cutoff; test cases arrive after the second cutoff. Boundary-crossing cases are excluded, so the retained proportions are not exactly 70/10/20. Discovery and fitted preprocessing use training cases only. Champion selection uses validation MAE; the frozen champion is evaluated on test cases separately.
+
+**Artifact rebuild required after the first-16 audit fixes:** old datasets and deployments have incompatible feature semantics. Run the pipeline from discovery onward; see [the migration and behavior notes](docs/first16_fixes.md).
 
 #### Automated Benchmarking (`src/04b_benchmark_models.py`)
 
@@ -581,7 +652,7 @@ python src/05_train_routing.py --classifier xgboost
 
 The simulation engine is structured as a modular object-oriented package in `src/simulator/`, orchestrated via the CLI runner `src/06_simulate.py`:
 
-* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, applies loopback damping ($0.5^{\text{loop}}$), and provides safe deadlock detection warnings:
+* **`Token` (`src/simulator/token.py`)**: Case token advancing through Petri net places and transitions using formal PM4Py marking semantics ($M' = M - \text{Preset}(t) + \text{Postset}(t)$). Supports **true concurrent execution of parallel branches (AND-splits)** via SimPy subprocesses, evaluates XOR decision trees with empirical probability fallback for enabled transitions, uses predicted/sampled waits without automatic repeat-activity decay, and provides safe deadlock detection warnings:
   * **3-Way Archetype Execution**: Coordinates with `ActivityProfiler` to execute transitions according to their operational archetype:
     * `INSTANT_GATEWAY`: Fires in $0.0\text{s}$ SimPy time without requesting workers or shift checks, advancing marking immediately.
     * `AUTOMATED_TASK`: Runs 24/7 without consuming human staff capacity, evaluating external/batch waiting time distributions while executing with $0.0\text{s}$ duration.
@@ -596,7 +667,7 @@ The simulation engine is structured as a modular object-oriented package in `src
 * **`ChampionPredictor` (`src/simulator/predictor.py`)**: Unified runtime inference wrapper serving winning XGBoost, PyTorch TCN, and LSTM models from `dispatch_config.json`, dynamically aligning categorical data types via `categories.json` to prevent single-row encoding discrepancies.
 * **`CalendarManager` (`src/simulator/calendar.py`)**: Manages operational shifts (e.g. 08:00 – 20:00 Mon–Fri) and custom per-role work schedules, pausing and advancing time over nights and weekends.
 * **`ArrivalGenerator` (`src/simulator/arrivals.py`)**: Spawns cases via historical replay from the aligned log, synthetic generative distributions (exponential, uniform, constant), or non-linear time-series forecasting via **Facebook Prophet** (bounded logistic growth, diurnal/weekly seasonality, and sub-second model caching in `models/prophet/`). In Generative and Prophet modes, realistic case attributes are drawn via empirical bootstrap sampling from historical cases.
-* **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`data/generated/csv/simulated_log.csv`) and standard IEEE XES (`data/generated/xes/simulated_log.xes`), and evaluates cycle time MAE, median, 1D Wasserstein distance, and Relative Event Distribution (RED / Earth Mover's Distance) against historical ground truth.
+* **`SimulationEvaluator` (`src/simulator/metrics.py`)**: Exports flat CSV (`data/generated/csv/simulated_log.csv`) and standard IEEE XES (`data/generated/xes/simulated_log.xes`), and evaluates cycle time MAE, median, 1D Wasserstein distance, and Relative Event Distribution (RED / Earth Mover's Distance) against the defined historical cohort. Failed metrics are unavailable with diagnostics; completed-case metrics exclude censored/failed cases and are labeled conditional on completion.
 
 ```bash
 # 1. Run 2-way comparison study (Pure Physics vs. Hybrid Residual side-by-side)
@@ -627,6 +698,8 @@ python src/06_simulate.py --duration 365 --arrival_mode generative
 * **Outputs**:
   * Simulated event log (CSV): `data/generated/csv/simulated_log.csv`
   * Simulated event log (IEEE XES): `data/generated/xes/simulated_log.xes`
+  * Case statuses: `data/generated/csv/simulated_log_cases.csv`
+  * Machine-readable results and metric statuses: `data/processed/simulation_metrics.json`
   * Markdown benchmark report: `data/processed/simulation_report.md`
   * Ablation study leaderboard: `data/processed/ablation_report.md`
 
@@ -646,6 +719,8 @@ RIMS++ directly integrates the official [`log-distance-measures`](https://github
   └─ L_traces (Length Diff)     └─ RED (Relative Trace Start)                           └─ Mean, Median, MAE
 ```
 
+Replay references are restricted to scheduled case IDs. Full-case replay metrics use paired IDs completed on both sides within the observation window. Generated-arrival references use the corresponding historical arrival window. Completed-case scores are conditional on completion; separate window metrics use clipped observed intervals. Missing/error metrics are `null` with a status, not zero. A hard horizon does not drain unfinished cases.
+
 ### 1. Control-Flow Perspective
 * **Control-flow Log Distance (CFLD)**: Measures structural trace divergence by computing the normalized string edit distance (Damerau-Levenshtein) between trace variants and solving the minimum-weight bipartite matching via the **Hungarian algorithm** (Kuhn 1955).
 * **Trace Length Error ($L^{traces}$)**: Average absolute difference in case length between paired traces in $\mathcal{L}_{sim}$ and $\mathcal{L}_{real}$ under optimal Hungarian matching.
@@ -660,19 +735,27 @@ RIMS++ directly integrates the official [`log-distance-measures`](https://github
 * **Circadian Workforce Distribution (CWD)**: Measures the concurrency of active resources across the 168-hour weekly cycle ($7 \text{ days} \times 24 \text{ hours}$), computing 1WD between the real and simulated staff availability profiles.
 
 ### 4. Congestion & Cycle Time Perspective
-* **Cycle Time Distribution (CTD / 1WD)**: Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
+* **Cycle Time Distribution (CTD / 1WD)**: Stored in seconds (`wd` is an alias); the library’s hourly-bin result is converted before reporting. Measures the minimum work required to transform the simulated cycle time distribution into the true historical cycle time distribution:
   $$W_1(P, Q) = \int_{-\infty}^{+\infty} |F_P(x) - F_Q(x)| \, dx$$
 * **Case Arrival Rate (CAR)**: Evaluates arrival burstiness and concurrency by computing 1WD across binned case arrival timestamps.
-* **Cycle Time Mean, Median & MAE**: Macro turnaround statistics ensuring turnaround times are replicated without systemic under- or over-estimation.
+* **Cycle Time Mean, Median & Absolute Mean Difference**: Completed-cohort turnaround summaries. `mean_cycle_difference` is the absolute difference between reference and simulated cohort means, in seconds. It replaces the misleading `mae_cycle` field; it does not measure paired case error.
 
-### Illustrative Simulation Leaderboard Structure (`data/processed/ablation_report.md`)
+### Simulation comparison reports (`data/processed/ablation_report.md`)
 
-When executing `--compare_modes`, RIMS++ generates a comprehensive comparison against the ground-truth historical benchmark:
+`--compare_modes` reports measured scores for `hybrid_residual` and `pure_physics`, displaying unavailable scores as `N/A`. It does not assume either mode is better, promise a runtime, or award an overall best-fit star across different completed-case populations. Consult each run's population and censoring counts alongside its scores.
 
-| Simulation Mode | CFLD | $L^{traces}$ | NGD 2-Gram | AED (h) | CED (h) | CWD (h) | RED (h) | CAR (h) | CTD (WD) | Cycle MAE | Run Time |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **REAL HISTORICAL** | — | — | — | — | — | — | — | — | *Ground Truth* | — | — |
-| **`hybrid_residual` (ML + Physics)** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | **Lowest** | ~150–200s |
-| `pure_physics` (Contention Only) | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | Higher | ~180–220s |
+## Residual-audit follow-up
 
+Only `ex_ante` extraneous-delay placement is supported. Discovery and simulation reject `ex_post` and `causal_pair` placement, including incompatible saved manifests. Internal causal predecessor/arc information is still used for ex-ante delay estimation and selection.
 
+New provenance files and training metadata record modeling settings. Reusing them after relevant settings change emits a warning recommending a rebuild; this new configuration check does not stop execution. Older files without those settings emit an "unable to check" warning. Existing split/content/schema/feature compatibility errors remain errors. This is a configuration comparison, not a complete fingerprint of every upstream file or software version.
+
+Worker dispatch and shift alarms resolve activity/role calendars even when the global fallback calendar is disabled. Prophet's cache includes the selected activity filter, so changing the filter retrains the forecast. The trace-prefix parser accepts both CSV strings and lists; it does not interpret activity-name conventions such as `W_`.
+
+Delay discovery writes compressed CSV as well as optional Parquet. Without a Parquet engine, the waiting builder reads the CSV copy and validates its provenance. Corrupt files and invalid provenance do not silently fall back. Failed Parquet exports remove older copies so they cannot take precedence over the new CSV.
+
+Prediction caps/floors and timezone behavior are unchanged pending separate decisions. `include_internal_queue_delays` controls extra sampled case delays, not physical worker queues or the separate `human_latency` worker cooldowns.
+
+Case attributes are generic configured payloads: the first attribute is never implicitly a loan amount. Configure each attribute's source column, feature name and type (`continuous` or `categorical`). Numeric-looking category labels retain their text identity. Timing models fit category vocabularies on training cases only and package them in `training_metadata.json`: XGBoost uses fixed categorical levels (unseen values become missing), while LSTM/TCN use one-hot columns and an explicit unknown indicator before scaling. Duration resource identity uses the same encoding contract; waiting prediction still cannot use a future worker. The legacy numeric `requested_amount` API is retained for compatibility, but new domains do not need a `RequestedAmount` attribute.
+
+Execution-event attributes cannot currently be supplied during simulation. Selecting `event_attributes` for timing prediction therefore raises an explicit error at dataset creation, training and predictor loading. Unselected extra log columns are allowed. Rebuild affected datasets and timing candidates/champions to use the new categorical contract; existing caps/floors are unchanged.

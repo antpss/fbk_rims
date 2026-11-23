@@ -1,188 +1,112 @@
 import os
 import argparse
-from collections import defaultdict
 import pm4py
 import pandas as pd
 from pm4py.objects.log.obj import EventLog, Trace, Event
 from config_loader import load_config, PROJECT_ROOT
+from historical_features import execution_instances
+from log_utils import normalize_optional_columns
+
+
+def repair_log(df, net, initial_marking, final_marking, target_acts=()):
+    """Align the completion projection, reconstructing the exact paired work items.
+
+    STARTs accompany retained synchronous completions. Other lifecycle states
+    are not completions and are excluded from this simulator's work-item log.
+    Model moves remain explicitly synthetic, with no invented human START.
+    """
+    df = normalize_optional_columns(pm4py.convert_to_dataframe(df))
+    df['case:concept:name'] = df['case:concept:name'].astype(str)
+    if target_acts:
+        df = df[df['concept:name'].isin(target_acts)].copy()
+    df['_rank'] = df['lifecycle:transition'].map({'START': 0, 'COMPLETE': 1}).fillna(2)
+    df = df.sort_values(['time:timestamp', '_rank'], kind='stable').drop(columns='_rank')
+    items_by_case = {}
+    attrs_by_case = {}
+    first_times = {}
+    log_for_align = EventLog()
+    for cid, grp in df.groupby('case:concept:name', sort=False):
+        items = execution_instances(grp)
+        if not items:
+            continue
+        items_by_case[cid] = items
+        attrs = {'concept:name': cid}
+        attrs.update({c[5:]: grp[c].iloc[0] for c in grp if c.startswith('case:') and c != 'case:concept:name'})
+        attrs_by_case[cid] = attrs
+        first_times[cid] = grp['time:timestamp'].iloc[0]
+        log_for_align.append(Trace([Event({'concept:name': i['act'], 'time:timestamp': i['end']})
+                                    for i in items], attributes={'concept:name': cid}))
+
+    alignments = pm4py.conformance_diagnostics_alignments(log_for_align, net, initial_marking, final_marking) if log_for_align else []
+    if len(alignments) != len(log_for_align):
+        raise ValueError('Alignment results do not match the submitted completion traces')
+    counts = {'sync': 0, 'log': 0, 'model': 0,
+              'other_lifecycle': int((~df['lifecycle:transition'].isin(['START', 'COMPLETE'])).sum())}
+    repaired = EventLog()
+    for trace, result in zip(log_for_align, alignments):
+        cid = trace.attributes['concept:name']
+        if result is None or result.get('alignment') is None:
+            raise ValueError(f'No valid alignment returned for case {cid}')
+        items = items_by_case[cid]
+        idx, curr_time = 0, first_times[cid]
+        events = []
+        for log_move, model_move in result['alignment']:
+            item = None
+            if log_move != '>>':
+                if idx >= len(items) or items[idx]['act'] != log_move:
+                    raise ValueError(f'Alignment/work-item mismatch for case {cid} at completion {idx}')
+                item = items[idx]
+                idx += 1
+            if model_move is None:
+                # Only a null model label denotes an invisible transition.
+                if item is not None:
+                    raise ValueError(f'Unexpected synchronous invisible move for case {cid}')
+                continue
+            if model_move == '>>':
+                counts['log'] += 1
+                continue
+            if item is not None:
+                if model_move != item['act']:
+                    raise ValueError(f'Invalid synchronous labels for case {cid}')
+                counts['sync'] += 1
+                for row in (item['start_row'], item['row']):
+                    if row is not None:
+                        events.append(Event({k: v for k, v in row.items() if not k.startswith('case:') and pd.notna(v)}))
+                curr_time = item['end']
+            else:
+                counts['model'] += 1
+                events.append(Event({'concept:name': model_move, 'lifecycle:transition': 'COMPLETE',
+                                     'time:timestamp': curr_time, 'org:resource': 'SYNTHETIC', 'is_synthetic': 'true'}))
+        if idx != len(items):
+            raise ValueError(f'Alignment did not consume all completions for case {cid}')
+        # Stable ties retain the aligned COMPLETE order, including synthetic moves.
+        events.sort(key=lambda e: (e['time:timestamp'], 0 if e['lifecycle:transition'] == 'START' else 1))
+        repaired.append(Trace(events, attributes=attrs_by_case[cid]))
+    return repaired, counts
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Align traces to Petri net and repair event log lifecycles.")
-    parser.add_argument("--config", "-c", type=str, default=None, help="Path to config.yaml")
+    parser = argparse.ArgumentParser(description='Align traces to Petri net and repair event log lifecycles.')
+    parser.add_argument('--config', '-c', type=str, default=None)
     args = parser.parse_args()
-
     cfg = load_config(args.config)
-    raw_rel = cfg["paths"].get("raw_log", "data/processed/BPI_2012_filtered.xes")
-    input_log_path = raw_rel if os.path.isabs(raw_rel) else os.path.join(PROJECT_ROOT, raw_rel)
+    input_log_path = os.path.join(PROJECT_ROOT, cfg['paths']['raw_log'])
+    input_pnml_path = os.path.join(PROJECT_ROOT, cfg['paths']['petri_net'])
+    output_log_path = os.path.join(PROJECT_ROOT, cfg['paths']['aligned_log'])
     if not os.path.exists(input_log_path):
-        raise FileNotFoundError(f"Raw log not found at: {input_log_path}")
-    input_pnml_path = cfg["paths"].get("petri_net", os.path.join(PROJECT_ROOT, "models/petri_nets/discovered_model_split.pnml"))
-    output_log_path = cfg["paths"].get("aligned_log", os.path.join(PROJECT_ROOT, "data/processed/aligned_BPI_2012.xes"))
-
-    os.makedirs(os.path.dirname(output_log_path), exist_ok=True)
-
-    target_acts = set(cfg.get("target_activities", []))
-
-    print(f"Loading log: {input_log_path}")
+        raise FileNotFoundError(f'Raw log not found at: {input_log_path}')
+    from temporal_split import require_artifact, stamp_artifact
+    require_artifact(cfg, input_pnml_path)
+    print(f'Loading log: {input_log_path}')
     df = pm4py.read_xes(input_log_path)
-    print(f"Loaded {len(df)} events across {df['case:concept:name'].nunique()} cases.")
+    net, im, fm = pm4py.read_pnml(input_pnml_path)
+    repaired, counts = repair_log(df, net, im, fm, cfg.get('target_activities', []))
+    print(f'Alignment summary: {counts}')
+    os.makedirs(os.path.dirname(output_log_path), exist_ok=True)
+    pm4py.write_xes(repaired, output_log_path)
+    stamp_artifact(cfg, output_log_path)
+    print(f'Saved aligned work-item log to {output_log_path}')
 
-    print(f"Loading Petri net model: {input_pnml_path}")
-    net, initial_marking, final_marking = pm4py.read_pnml(input_pnml_path)
 
-    # Isolate COMPLETE events for alignment
-    # PM4Py Petri net transitions correspond to activity completions.
-    print("Preparing control-flow log on COMPLETE events...")
-    if target_acts:
-        if "lifecycle:transition" in df.columns:
-            df_proc_comp = df[(df["concept:name"].isin(target_acts)) & (df["lifecycle:transition"] == "COMPLETE")].copy()
-        else:
-            df_proc_comp = df[df["concept:name"].isin(target_acts)].copy()
-    else:
-        if "lifecycle:transition" in df.columns:
-            df_proc_comp = df[df["lifecycle:transition"] == "COMPLETE"].copy()
-        else:
-            df_proc_comp = df.copy()
-    
-    # Build alignment event log with case:concept:name as trace concept:name
-    log_for_align = EventLog()
-    for cid, grp in df_proc_comp.groupby("case:concept:name", sort=False):
-        grp_sorted = grp.sort_values(by="time:timestamp")
-        events_list = [Event({"concept:name": act, "time:timestamp": ts}) for act, ts in zip(grp_sorted["concept:name"], grp_sorted["time:timestamp"])]
-        log_for_align.append(Trace(events_list, attributes={"concept:name": str(cid)}))
-
-    print(f"Calculating alignments for {len(log_for_align)} process traces...")
-    raw_alignments = pm4py.conformance_diagnostics_alignments(log_for_align, net, initial_marking, final_marking)
-    
-    alignments_by_case = {}
-    for i, trace in enumerate(log_for_align):
-        cid = trace.attributes["concept:name"]
-        alignments_by_case[cid] = raw_alignments[i]["alignment"]
-    print("Alignments calculated successfully.")
-
-    #reconstruct repaired log
-    print("Reconstructing repaired event log preserving START/COMPLETE lifecycles and aligned events...")
-    repaired_log = EventLog()
-    
-    total_model_moves = 0
-    total_log_moves = 0
-    total_sync_moves = 0
-
-    cases_grouped = df.groupby("case:concept:name", sort=False)
-    for cid, grp in cases_grouped:
-        cid_str = str(cid)
-        grp_sorted = grp.copy()
-        if "lifecycle:transition" in grp_sorted.columns:
-            trans_order = {"START": 0, "COMPLETE": 1}
-            grp_sorted["_tr"] = grp_sorted["lifecycle:transition"].astype(str).str.upper().map(trans_order).fillna(2)
-            grp_sorted = grp_sorted.sort_values(by=["time:timestamp", "_tr"]).drop(columns=["_tr"]).reset_index(drop=True)
-        else:
-            grp_sorted = grp_sorted.sort_values(by="time:timestamp").reset_index(drop=True)
-
-        # Extract trace-level case attributes (without 'case:' prefix)
-        trace_attrs = {"concept:name": cid_str}
-        for col in grp_sorted.columns:
-            if col.startswith("case:") and col != "case:concept:name":
-                clean_key = col[5:]
-                trace_attrs[clean_key] = grp_sorted[col].iloc[0]
-
-        # Separate events into work items
-        work_items = []
-        pending_start = defaultdict(list)
-
-        for row in grp_sorted.dropna(axis=1, how="all").to_dict("records"):
-            act = row["concept:name"]
-            trans = str(row.get("lifecycle:transition", "COMPLETE")).upper()
-            row_dict = {k: v for k, v in row.items() if not k.startswith("case:") and pd.notna(v)}
-            evt = Event(row_dict)
-
-            if target_acts and act not in target_acts:
-                continue
-
-            if trans == "START":
-                pending_start[act].append(evt)
-            elif trans == "COMPLETE":
-                start_evt = pending_start[act].pop(0) if pending_start[act] else None
-                wi = {
-                    "act": act,
-                    "start": start_evt,
-                    "complete": evt
-                }
-                work_items.append(wi)
-            else:
-                wi = {
-                    "act": act,
-                    "start": None,
-                    "complete": evt
-                }
-                work_items.append(wi)
-
-        repaired_events = []
-        alignment = alignments_by_case.get(cid_str)
-
-        if alignment and len(work_items) > 0:
-            wi_idx = 0
-            curr_time = grp_sorted["time:timestamp"].iloc[0]
-
-            for step in alignment:
-                log_move = step[0]
-                model_move = step[1]
-
-                # Skip silent tau transitions
-                if model_move is None or str(model_move).startswith("tau") or model_move == "tau":
-                    continue
-
-                if log_move != ">>" and model_move != ">>":
-                    # Sync move: keep real work item with full lifecycle (START + COMPLETE)
-                    total_sync_moves += 1
-                    if wi_idx < len(work_items):
-                        wi = work_items[wi_idx]
-                        wi_idx += 1
-                        if wi["start"] is not None:
-                            repaired_events.append(wi["start"])
-                        repaired_events.append(wi["complete"])
-                        curr_time = wi["complete"]["time:timestamp"]
-
-                elif model_move == ">>":
-                    # Log move: activity violation, skip
-                    total_log_moves += 1
-                    if wi_idx < len(work_items):
-                        wi_idx += 1
-
-                elif log_move == ">>":
-                    # Model move: required by Petri net, insert synthetic event
-                    total_model_moves += 1
-                    fake_evt = Event({
-                        "concept:name": model_move,
-                        "lifecycle:transition": "COMPLETE",
-                        "time:timestamp": curr_time,
-                        "org:resource": "SYNTHETIC",
-                        "is_synthetic": "true"
-                    })
-                    repaired_events.append(fake_evt)
-        else:
-            # For cases without alignment or non-process traces, retain all original work items
-            for wi in work_items:
-                if wi["start"] is not None:
-                    repaired_events.append(wi["start"])
-                repaired_events.append(wi["complete"])
-
-        # Sort all events chronologically (stable sort, START before COMPLETE for equal timestamps)
-        repaired_events.sort(
-            key=lambda e: (e["time:timestamp"], 0 if str(e.get("lifecycle:transition", "")).upper() == "START" else 1)
-        )
-
-        repaired_trace = Trace(repaired_events, attributes=trace_attrs)
-        repaired_log.append(repaired_trace)
-
-    print(f"Alignment Summary:")
-    print(f"  - Synchronous moves: {total_sync_moves}")
-    print(f"  - Log moves dropped: {total_log_moves}")
-    print(f"  - Synthetic model moves: {total_model_moves}")
-
-    print(f"Exporting repaired aligned log to {output_log_path}...")
-    pm4py.write_xes(repaired_log, output_log_path)
-    print("Alignment and log repair completed successfully.")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

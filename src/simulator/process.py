@@ -23,9 +23,13 @@ import simpy
 import pm4py
 
 try:
-    from config_loader import PROJECT_ROOT
+    from config_loader import PROJECT_ROOT, get_role_mapping_path, get_simulation_output_paths
 except ImportError:
-    from src.config_loader import PROJECT_ROOT
+    from src.config_loader import PROJECT_ROOT, get_role_mapping_path, get_simulation_output_paths
+try:
+    from queue_policy import QueuePolicy
+except ImportError:
+    from src.queue_policy import QueuePolicy
 from .calendar import CalendarManager
 from .predictor import ChampionPredictor
 from .arrivals import ArrivalGenerator
@@ -40,8 +44,10 @@ class SharedWorkerPool:
     perform one task at a time across all business activities.
     Supports Kolmogorov-Smirnov fitted refractory latency cooldowns.
     """
-    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None, enable_concurrency_quotas=True):
+    def __init__(self, env, role_mapping_path, latency_cfg=None, calendar=None, enable_concurrency_quotas=True, queue_cfg=None):
         self.env = env
+        self.queue_policy = QueuePolicy(queue_cfg)
+        self._request_sequence = 0
         self.latency_cfg = latency_cfg or {}
         self.calendar = calendar
         self.enable_concurrency_quotas = enable_concurrency_quotas
@@ -50,6 +56,7 @@ class SharedWorkerPool:
 
         self.activity_to_role = data.get("activity_to_role", {})
         self.role_to_workers = data.get("role_to_workers", {})
+        self.role_data = data
         self.role_names = data.get("__role_names__") or list(data.get("roles", {}).keys()) or sorted(list(set(self.activity_to_role.values())))
         self.role_capacities = data.get("role_capacities", {r: 1 for r in self.role_names})
 
@@ -93,18 +100,19 @@ class SharedWorkerPool:
         queue_aware = self.latency_cfg.get("queue_aware", True) if self.latency_cfg else True
         if not queue_aware:
             return None
-        for w in eligible_workers:
+        for w in sorted(eligible_workers):
             if self.worker_in_cooldown.get(w, False):
                 ev = self.worker_cooldown_events.get(w)
                 if ev and not ev.triggered:
                     self.worker_in_cooldown[w] = False
+                    self.worker_cooldown_events.pop(w, None)
                     ev.succeed()
                     return w
         return None
 
     def _is_activity_working_now(self, activity=None):
         """Checks if office is currently open for the specific activity's role (or global fallback)."""
-        if not self.calendar or not getattr(self.calendar, "enabled", False):
+        if self.calendar is None:
             return True
         cal = self.calendar.get_calendar(activity)
         if not cal.enabled:
@@ -114,7 +122,7 @@ class SharedWorkerPool:
 
     def _ensure_shift_alarm(self, activity=None):
         """Arms a non-blocking shift alarm for the activity's role calendar keyed by id(cal)."""
-        if not self.calendar or not getattr(self.calendar, "enabled", False):
+        if self.calendar is None:
             return
         cal = self.calendar.get_calendar(activity)
         if not cal.enabled:
@@ -141,6 +149,8 @@ class SharedWorkerPool:
         Evaluates shift status on a per-request role basis so active shifts are never blocked by off-shift roles.
         Skips scanning exhausted roles where no workers are free to prevent quadratic overhead.
         """
+        if self.queue_policy.type != "fifo":
+            self.pending_requests.sort(key=self.queue_policy.sort_key)
         exhausted_roles = set()
         i = 0
         while i < len(self.pending_requests):
@@ -160,7 +170,7 @@ class SharedWorkerPool:
                 i += 1
                 continue
 
-            free_workers = [w for w in req["eligible"] if self._is_worker_free(w)]
+            free_workers = [w for w in sorted(req["eligible"]) if self._is_worker_free(w)]
             if not free_workers:
                 interrupted = self._interrupt_cooldown_if_eligible(req["eligible"])
                 if interrupted:
@@ -182,74 +192,29 @@ class SharedWorkerPool:
                 i += 1
 
     def get_role_occupancy(self, activities_list=None):
-        """Returns concurrent departmental utilization vector matching Role_*_OC."""
-        if not self.role_names:
-            # Fallback for legacy 1-to-1 activity pools if no roles are defined
-            activities_list = activities_list or list(self.activity_pools.keys())
-            oc = []
-            for act in activities_list:
-                eligible = self.activity_pools.get(act, self.all_workers)
-                busy_on_act = sum(1 for w in eligible if act in self.worker_activities[w])
-                oc.append(busy_on_act / max(1, len(eligible)))
-            return oc
+        """Fraction of occupied nominal work slots, including cross-role work."""
+        from features import capacity_occupancy
+        return capacity_occupancy(self.role_data, self.worker_active_count,
+                                  self.enable_concurrency_quotas)
 
-        oc = []
-        for r in self.role_names:
-            role_workers = self.role_to_workers.get(r, self.all_workers)
-            active_in_role = sum(
-                1 for w in role_workers
-                if any(self.activity_to_role.get(act) == r for act in self.worker_activities[w])
-            )
-            cap = max(1, self.role_capacities.get(r, len(role_workers)))
-            oc.append(min(1.0, active_in_role / cap))
-        return oc
-
-    def request_worker(self, activity):
-        """
-        Routes the task by organizational role and dispatches to an eligible multi-skilled
-        worker using Longest-Idle-First (LIF) without creating worker ubiquity.
-        """
-        # Step 1: Route by Role
+    def request_worker(self, activity, priority=None):
+        """Enqueue every task before dispatch; policies never preempt running work."""
+        if self.queue_policy.type == "priority":
+            priority = self.queue_policy._check_priority(priority)
         role = self.activity_to_role.get(activity)
         if role and role in self.role_to_workers:
             eligible = self.role_to_workers[role]
         else:
             eligible = self.activity_pools.get(activity, self.all_workers)
-
-        free_workers = [w for w in eligible if self._is_worker_free(w)]
-        is_working = self._is_activity_working_now(activity)
-
-        # If no free workers, check if an eligible resting worker can be interrupted
-        if is_working and not free_workers:
-            interrupted = self._interrupt_cooldown_if_eligible(eligible)
-            if interrupted:
-                free_workers = [interrupted]
-
-        if is_working and free_workers:
-            # Longest Idle First: select the worker who has been waiting idle the longest
-            min_idle = min(self.worker_idle_since[w] for w in free_workers)
-            candidates = [w for w in free_workers if self.worker_idle_since[w] == min_idle]
-            chosen = random.choice(candidates) if len(candidates) > 1 else candidates[0]
-
-            self.worker_active_count[chosen] += 1
-            self.worker_busy[chosen] = not self._is_worker_free(chosen)
-            self.worker_activities[chosen].append(activity)
-            self.worker_activity[chosen] = activity
-            ev = self.env.event()
-            ev.succeed(value=chosen)
-            return ev
-        else:
-            ev = self.env.event()
-            self.pending_requests.append({
-                "activity": activity,
-                "role": role,
-                "eligible": set(eligible),
-                "event": ev,
-                "req_time": self.env.now
-            })
-            if not is_working:
-                self._ensure_shift_alarm(activity)
-            return ev
+        event = self.env.event()
+        self.pending_requests.append({
+            "activity": activity, "role": role, "eligible": set(eligible),
+            "event": event, "req_time": self.env.now,
+            "sequence": self._request_sequence, "priority": priority,
+        })
+        self._request_sequence += 1
+        self._dispatch_all_pending()
+        return event
 
     def release_worker(self, worker_id, activity=None):
         """Releases worker; if human latency modeling is active and queue is calm, worker enters refractory buffer."""
@@ -276,8 +241,10 @@ class SharedWorkerPool:
             for req in self.pending_requests
         )
 
-        # Only take coffee break cooldown if no immediate tickets are waiting.
-        if cooldown_enabled and (not queue_aware or not has_pending_work):
+        # A break belongs to an idle worker, not to each released concurrency slot.
+        if (cooldown_enabled and self.worker_active_count[worker_id] == 0
+                and not self.worker_in_cooldown[worker_id]
+                and (not queue_aware or not has_pending_work)):
             cooldown = self._sample_cooldown(worker_id)
             if cooldown > 0:
                 self.worker_in_cooldown[worker_id] = True
@@ -291,24 +258,31 @@ class SharedWorkerPool:
     def _sample_cooldown(self, worker_id):
         profiles = self.latency_cfg.get("per_worker_profiles", {})
         prof = profiles.get(worker_id) or self.latency_cfg
-        dist = prof.get("best_distribution") or prof.get("global_distribution", "lognormal")
-        params = prof.get("distribution_params") or prof.get("global_params", {})
-        max_cd = float(self.latency_cfg.get("max_cooldown_seconds", self.latency_cfg.get("max_cooldown", 1800.0)))
+        dist = prof.get("distribution") or prof.get("best_distribution") or prof.get("global_distribution", "lognormal")
+        params = prof.get("params") or prof.get("distribution_params") or prof.get("global_params", {})
+        max_cd = max(0.0, float(self.latency_cfg.get("max_cooldown_seconds", self.latency_cfg.get("max_cooldown", 1800.0))))
 
         try:
             if dist == "lognormal":
                 val = float(st.lognorm.rvs(params["shape"], loc=params.get("loc", 0.0), scale=params["scale"]))
             elif dist == "gamma":
                 val = float(st.gamma.rvs(params["shape"], loc=params.get("loc", 0.0), scale=params["scale"]))
+            elif dist == "exponential" and "scale" in params:
+                val = float(st.expon.rvs(loc=params.get("loc", 0.0), scale=params["scale"]))
             else:
                 mean_s = float(prof.get("mean_seconds", prof.get("global_mean_seconds", 300.0)))
                 val = float(random.expovariate(1.0 / max(1.0, mean_s)))
-            return min(max(5.0, val), max_cd)
+            if not np.isfinite(val):
+                raise ValueError("Non-finite cooldown sample")
         except Exception:
-            return float(random.expovariate(1.0 / 300.0))
+            val = float(random.expovariate(1.0 / 300.0))
+        # Apply the same bounds to fitted samples and fallback samples.
+        return min(max(5.0, val), max_cd)
 
     def _cooldown_and_dispatch(self, worker_id, cooldown_seconds, cancel_ev):
         yield self.env.timeout(cooldown_seconds) | cancel_ev
+        if self.worker_cooldown_events.get(worker_id) is not cancel_ev:
+            return
         self.worker_in_cooldown[worker_id] = False
         self.worker_cooldown_events.pop(worker_id, None)
         self._complete_release(worker_id)
@@ -331,7 +305,11 @@ class SimulationProcess:
     Manages SimPy environment, resources, calendar shifts, token lifecycles, and evaluation.
     """
     def __init__(self, cfg, num_cases=None, mode=None, arrival_mode=None, export_xes=None, pnml_path=None, duration_days=None, force_retrain_prophet=False):
+        from config_loader import validate_delay_placement
+        validate_delay_placement(cfg.get("simulation", {}).get("extraneous_delays", {}).get("placement", "ex_ante"))
         self.cfg = cfg
+        self.queue_policy = QueuePolicy(cfg.get("simulation", {}).get("queue"))
+        self.queue_policy.validate_features(cfg)
         seed = cfg.get("project", {}).get("random_seed", 42)
         random.seed(seed)
         np.random.seed(seed)
@@ -339,22 +317,15 @@ class SimulationProcess:
         self.num_cases = num_cases
         self.duration_days = duration_days if duration_days is not None else cfg.get("simulation", {}).get("duration_simulation")
         self.duration_seconds = float(self.duration_days * 86400.0) if (self.duration_days and float(self.duration_days) > 0) else None
+        self.max_silent_transitions = int(cfg.get("simulation", {}).get("max_silent_transitions", 500))
+        if self.max_silent_transitions < 1:
+            raise ValueError("max_silent_transitions must be positive")
         self.max_events = cfg.get("simulation", {}).get("max_events_per_case", 80)
         self.target_activities = cfg.get("target_activities", [])
         self.force_retrain_prophet = force_retrain_prophet
 
-        # Output paths
-        self.sim_log_path = os.path.join(
-            PROJECT_ROOT,
-            f"data/generated/csv/simulated_log_{self.mode}.csv" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_log", "data/generated/csv/simulated_log.csv")
-        )
+        self.sim_log_path, self.output_simulated_xes = get_simulation_output_paths(cfg, self.mode)
         self.export_xes = export_xes if export_xes is not None else cfg.get("simulation", {}).get("export_xes", True)
-        self.output_simulated_xes = os.path.join(
-            PROJECT_ROOT,
-            f"data/generated/xes/simulated_log_{self.mode}.xes" if self.mode != "hybrid_residual" else
-            cfg.get("simulation", {}).get("output_simulated_xes", "data/generated/xes/simulated_log.xes")
-        )
 
         # Arrival Mode
         arr_cfg = cfg.get("simulation", {}).get("arrival", {})
@@ -377,7 +348,7 @@ class SimulationProcess:
 
         # Paths
         models_dir_rel = cfg.get("paths", {}).get("models_dir", "models")
-        role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+        role_mapping_path = get_role_mapping_path(cfg)
 
         # Activity Profiles (Human Work Item vs. Automated Task vs. Instant Gateway)
         try:
@@ -430,9 +401,15 @@ class SimulationProcess:
             except Exception as e:
                 print(f"[!] Warning: Failed to load delay manifest: {e}")
 
+        if self.delay_manifest:
+            validate_delay_placement(self.delay_manifest.get("placement", "ex_ante"))
+            for group in ("external_uncoupled_delays", "internal_queue_delays"):
+                for entry in self.delay_manifest.get(group, []):
+                    validate_delay_placement(entry.get("placement", "ex_ante"))
+
         # SimPy Environment & Worker Pool
         self.env = simpy.Environment()
-        role_mapping_path = os.path.join(PROJECT_ROOT, models_dir_rel, "role_mapping.json")
+        role_mapping_path = get_role_mapping_path(cfg)
         latency_cfg = dict(self.delay_manifest.get("human_inter_ticket_latency", {})) if self.delay_manifest else {}
         user_hl = cfg.get("simulation", {}).get("human_latency", {})
         if isinstance(user_hl, dict):
@@ -440,7 +417,7 @@ class SimulationProcess:
         enable_quotas = cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True)
         self.workers = SharedWorkerPool(
             self.env, role_mapping_path, latency_cfg=latency_cfg, calendar=self.calendar,
-            enable_concurrency_quotas=enable_quotas
+            enable_concurrency_quotas=enable_quotas, queue_cfg=cfg.get("simulation", {}).get("queue")
         )
 
         # Runtime Champion Predictor
@@ -572,10 +549,13 @@ class SimulationProcess:
         print(f"Scheduled {len(arrivals):,} cases for simulation.")
 
         # Reference start datetime
-        ref_dt = arrivals[0]["arrival_time"]
+        ref_dt = self.arrivals_generator.origin
+        if ref_dt is None:
+            ref_dt = arrivals[0]["arrival_time"] if arrivals else pd.Timestamp(self.cfg.get("simulation", {}).get("arrival", {}).get("start_timestamp", "2012-01-01 08:00:00"))
         self.calendar.set_ref_dt(ref_dt)
 
         # Launch SimPy Arrival Processes via Token instances
+        tokens = []
         for arr in arrivals:
             offset_seconds = (arr["arrival_time"] - ref_dt).total_seconds()
             token = Token(
@@ -584,8 +564,10 @@ class SimulationProcess:
                 requested_amount=arr.get("requested_amount", 0.0),
                 process=self,
                 inter_arrival_seconds=arr.get("inter_arrival_seconds", 0.0),
-                case_attrs=arr.get("case_attrs", {})
+                case_attrs=arr.get("case_attrs", {}),
+                queue_priority=arr.get("queue_priority")
             )
+            tokens.append(token)
             self.env.process(token.run())
 
         start_exec = time.time()
@@ -598,7 +580,29 @@ class SimulationProcess:
         print(f"\n[✓] Simulation completed in {elapsed:.2f} seconds ({len(self.simulated_records):,} events generated).")
 
         # Save simulated event log (CSV)
-        df_sim = pd.DataFrame(self.simulated_records)
+        columns = ["case_id", "activity", "start_timestamp", "complete_timestamp", "resource_id",
+                   "duration_seconds", "wait_time_seconds", "queue_wait_seconds", "wip"]
+        records = self.simulated_records + [record for token in tokens for record in token.pending_work]
+        df_sim = pd.DataFrame(records, columns=columns)
+        case_status = pd.DataFrame([{
+            "case_id": token.case_id, "arrival": self.calendar.to_datetime(token.arrival_offset),
+            "status": "censored" if token.status in ("running", "scheduled") and self.duration_seconds is not None else token.status,
+            "end": self.calendar.to_datetime(token.finished_at) if token.finished_at is not None else None,
+        } for token in tokens], columns=["case_id", "arrival", "status", "end"])
+        if self.queue_policy.type == "priority":
+            priorities = {token.case_id: token.queue_priority for token in tokens}
+            # PM4Py recognizes case: columns as XES trace attributes.
+            column = "case:" + self.queue_policy.attribute
+            df_sim[column] = df_sim["case_id"].map(priorities)
+            case_status[column] = case_status["case_id"].map(priorities)
+        self.evaluator.case_status = case_status
+        self.evaluator.window_start = pd.to_datetime(ref_dt, utc=True)
+        self.evaluator.window_end = (self.evaluator.window_start + pd.Timedelta(seconds=self.duration_seconds)
+                                     if self.duration_seconds is not None else None)
+        self.evaluator.generation_status = self.arrivals_generator.generation_status
+        case_path = os.path.splitext(self.evaluator.sim_log_path)[0] + "_cases.csv"
+        os.makedirs(os.path.dirname(case_path), exist_ok=True)
+        case_status.to_csv(case_path, index=False)
         self.evaluator.save_csv(df_sim)
 
         # Save simulated event log (Standard IEEE XES)

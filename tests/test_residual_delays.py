@@ -92,10 +92,11 @@ class TestResidualWaitingDelays(unittest.TestCase):
         parquet_path = os.path.join(self.test_dir, "causal_delays_instance_level.parquet")
         csv_path = os.path.join(self.test_dir, "causal_delays_instance_level.csv.gz")
 
-        self.assertTrue(os.path.exists(parquet_path), "causal_delays_instance_level.parquet must exist")
         self.assertTrue(os.path.exists(csv_path), "causal_delays_instance_level.csv.gz must exist")
 
-        df_inst = pd.read_parquet(parquet_path)
+        df_inst = pd.read_csv(csv_path)
+        if os.path.exists(parquet_path):
+            self.assertEqual(len(pd.read_parquet(parquet_path)), len(df_inst))
         self.assertGreater(len(df_inst), 0)
 
         # Check bounds: 0 <= residual_delay <= raw_wait
@@ -134,7 +135,7 @@ class TestResidualWaitingDelays(unittest.TestCase):
             }
         ]
         df_mock = pd.DataFrame(inst_records)
-        df_mock.to_parquet(os.path.join(self.test_dir, "causal_delays_instance_level.parquet"))
+        df_mock.to_csv(os.path.join(self.test_dir, "causal_delays_instance_level.csv.gz"), index=False)
 
         cfg = {
             "paths": {

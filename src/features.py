@@ -65,10 +65,7 @@ def _extract_case_attributes(ctx: FeatureContext) -> Dict[str, Any]:
     res = {}
     if ctx.case_attrs:
         for k, v in ctx.case_attrs.items():
-            try:
-                res[k] = float(v)
-            except (ValueError, TypeError):
-                res[k] = str(v) if v is not None else "UNKNOWN"
+            res[k] = v if v is not None else "UNKNOWN"
     else:
         res["RequestedAmount"] = float(ctx.requested_amount)
     return res
@@ -115,6 +112,15 @@ FEATURE_REGISTRY: Dict[str, Callable[[FeatureContext], Dict[str, Any]]] = {
 }
 
 
+def validate_prediction_inputs(cfg, task):
+    manager = FeatureManager(cfg)
+    if manager.is_feature_active('event_attributes'):
+        raise ValueError(f"{task}: execution-event attributes have no runtime input source; "
+                         "disable event_attributes for timing prediction")
+    if task == 'waiting_time' and manager.is_feature_active('resource_id'):
+        raise ValueError('Waiting prediction cannot use the future worker resource_id')
+
+
 class FeatureManager:
     """
     Manages active feature extractors configured via YAML.
@@ -123,6 +129,11 @@ class FeatureManager:
     """
     def __init__(self, cfg: Optional[Dict[str, Any]] = None):
         self.cfg = cfg or {}
+        try:
+            from queue_policy import QueuePolicy
+        except ImportError:
+            from src.queue_policy import QueuePolicy
+        QueuePolicy(self.cfg.get("simulation", {}).get("queue")).validate_features(self.cfg)
         feat_cfg = self.cfg.get("features", {})
 
         # Priority 1: Explicit selected_features list in YAML
@@ -177,3 +188,18 @@ class FeatureManager:
         """Checks if a feature is enabled in the configuration."""
         return feature_name.lower() in self.selected_features
 
+
+
+def capacity_occupancy(role_data, worker_active, enable_quotas=True):
+    """Occupied nominal work slots in each role's roster, across all assignments."""
+    roles = role_data.get("__role_names__") or list(role_data.get("roles", {})) or sorted(set(role_data.get("activity_to_role", {}).values()))
+    rosters = role_data.get("role_to_workers", {})
+    capacities = role_data.get("worker_concurrencies", {})
+    fallback = role_data.get("__resource_capacities__", {})
+    result = []
+    for role in roles:
+        workers = set(rosters.get(role, role_data.get("__all_resources__", [])))
+        caps = {w: max(1, int(capacities.get(w, fallback.get(w, 1)))) if enable_quotas else 1 for w in workers}
+        occupied = sum(min(max(0, worker_active.get(w, 0)), cap) for w, cap in caps.items())
+        result.append(occupied / sum(caps.values()) if caps else 0.0)
+    return result
