@@ -221,7 +221,8 @@ class Token:
                 dict(self.process.ac_wip), self.process.calendar.to_datetime(self.env.now),
                 self.requested_amount, self.process.workers.get_role_occupancy(self.process.target_activities),
                 worker_id=None, prev_dur=self.prev_dur,
-                trace_history=dict(self.trace_history), case_attrs=dict(self.case_attrs))
+                trace_history=dict(self.trace_history), case_attrs=dict(self.case_attrs),
+                trace_start_dt=self.arrival_dt, last_completion_dt=self.last_event_dt)
             request_options["estimated_duration"] = policy.validate_duration(estimate)
             estimate_metadata["queue_estimated_duration_seconds"] = request_options["estimated_duration"]
         worker_event = self.process.workers.request_worker(act, **request_options)
@@ -242,7 +243,9 @@ class Token:
             worker_id=worker_id,
             prev_dur=self.prev_dur,
             trace_history=dict(self.trace_history),
-            case_attrs=self.case_attrs
+            case_attrs=self.case_attrs,
+            trace_start_dt=self.arrival_dt,
+            last_completion_dt=self.last_event_dt,
         )
 
         actual_dur = self.process.calendar.calculate_calendar_duration(

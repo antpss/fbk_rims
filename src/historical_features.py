@@ -99,6 +99,7 @@ def snapshot_rows(df, cfg, task, manager, calendar, role_data, activity_types,
     active_cases, active_intervals = set(), set()
     workers, ac_wip = defaultdict(int), defaultdict(int)
     prefix, history, previous = defaultdict(list), defaultdict(lambda: defaultdict(int)), defaultdict(float)
+    completed_at = {}
     rows = []
     quotas = cfg.get("resources", {}).get("simulation", {}).get("enable_concurrency_quotas", True)
     for timestamp, _, _, kind, value in sorted(timeline, key=lambda item: item[:3]):
@@ -122,6 +123,7 @@ def snapshot_rows(df, cfg, task, manager, calendar, role_data, activity_types,
             prefix[cid].append(act)
             history[cid][act] += 1
             previous[cid] = inst["duration"]
+            completed_at[cid] = timestamp
         else:
             attrs = {}
             source = case_first[cid] if task == "waiting_time" else (inst["start_row"] or inst["row"])
@@ -134,6 +136,8 @@ def snapshot_rows(df, cfg, task, manager, calendar, role_data, activity_types,
                 attrs[name] = val
             events = {} if task == "waiting_time" else {c: source.get(c, "UNKNOWN") for c in cfg.get("features", {}).get("event_attributes", [])}
             ctx = FeatureContext(target_act=act, wip=len(active_cases), ac_wip=ac_wip,
+                                 task=task, trace_start_dt=bounds.loc[cid, "min"],
+                                 last_completion_dt=completed_at.get(cid),
                                  dt=timestamp, role_oc=capacity_occupancy(role_data, workers, quotas),
                                  prev_dur=previous[cid], trace_history=dict(history[cid]),
                                  tracked_activities=tracked, case_attrs=attrs, event_attrs=events,

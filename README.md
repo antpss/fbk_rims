@@ -228,6 +228,8 @@ features:
     - weekday                     # One-hot weekday indicators Weekday_0..6
     - role_occupancy              # Real-time departmental utilization vector (Role_*_OC)
     - prev_duration               # Processing duration of immediately preceding activity
+    - trace_elapsed               # Duration only: seconds since case arrival
+    - since_last_completion       # Duration only: seconds since latest observed case completion
     - trace_history               # Cumulative past activity presence indicators (has_*)
     - case_attributes             # Domain-specific case payload attributes
     # - resource_id               # Worker identity (optional)

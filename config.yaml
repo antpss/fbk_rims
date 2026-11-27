@@ -63,6 +63,8 @@ features:
   #   - weekday          (One-hot weekday indicators Weekday_0..6)
   #   - role_occupancy   (Concurrent role/activity utilization vector Role_*_OC)
   #   - prev_duration    (Duration of previous activity in trace)
+  #   - trace_elapsed    (Duration only: wall-clock seconds from case arrival to prediction)
+  #   - since_last_completion (Duration only: wall-clock seconds since latest observed case completion)
   #   - trace_history    (Cumulative past activity presence indicators has_*)
   #   - case_attributes  (Domain-specific case attributes, e.g. RequestedAmount)
   #   - resource_id      (Worker/resource identity)
@@ -73,6 +75,8 @@ features:
     - weekday
     - role_occupancy
     - prev_duration
+    - trace_elapsed
+    - since_last_completion
     # - trace_history
     # - case_attributes
     # - resource_id

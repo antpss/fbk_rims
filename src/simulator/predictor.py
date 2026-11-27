@@ -347,8 +347,10 @@ class ChampionPredictor:
 
     def _build_feature_dict(self, target_act, prefix, wip, ac_wip, dt, requested_amount,
                             role_oc_array, worker_id=None, prev_dur=0.0,
-                            trace_history=None, case_attrs=None):
+                            trace_history=None, case_attrs=None, *, task="",
+                            trace_start_dt=None, last_completion_dt=None):
         ctx = FeatureContext(
+            task=task, trace_start_dt=trace_start_dt, last_completion_dt=last_completion_dt,
             target_act=target_act,
             prefix=prefix,
             wip=wip,
@@ -408,7 +410,8 @@ class ChampionPredictor:
 
     def predict_duration(self, activity, prefix, wip, ac_wip, dt, requested_amount=0.0,
                          role_oc_array=None, worker_id=None, prev_dur=0.0,
-                         trace_history=None, case_attrs=None):
+                         trace_history=None, case_attrs=None, *,
+                         trace_start_dt=None, last_completion_dt=None):
         """Predicts activity execution duration in seconds using champion model."""
         act_type = self.activity_profiles.get(activity)
         if act_type in ("AUTOMATED_TASK", "INSTANT_GATEWAY"):
@@ -418,7 +421,9 @@ class ChampionPredictor:
                                  wip, ac_wip, dt, requested_amount,
                                  role_oc_array or [], default_fallback=600.0,
                                  worker_id=worker_id, prev_dur=prev_dur,
-                                 trace_history=trace_history, case_attrs=case_attrs)
+                                 trace_history=trace_history, case_attrs=case_attrs,
+                                 task="duration", trace_start_dt=trace_start_dt,
+                                 last_completion_dt=last_completion_dt)
         cap = self.dur_max_caps.get(activity, self.dur_global_cap)
         return min(val, cap)
 
@@ -440,7 +445,8 @@ class ChampionPredictor:
 
     def _predict_time(self, suite, dispatch_table, activity, prefix, wip, ac_wip, dt,
                       requested_amount, role_oc_array, default_fallback, worker_id=None, prev_dur=0.0,
-                      trace_history=None, case_attrs=None):
+                      trace_history=None, case_attrs=None, *, task="",
+                      trace_start_dt=None, last_completion_dt=None):
         entry = suite["models"].get(activity) or suite["models"].get("__default__")
         if not entry:
             return default_fallback
@@ -451,7 +457,9 @@ class ChampionPredictor:
         f_dict = self._build_feature_dict(activity, prefix, wip, ac_wip, dt, requested_amount,
                                           role_oc_array,
                                           worker_id=worker_id, prev_dur=prev_dur,
-                                          trace_history=trace_history, case_attrs=case_attrs)
+                                          trace_history=trace_history, case_attrs=case_attrs,
+                                          task=task, trace_start_dt=trace_start_dt,
+                                          last_completion_dt=last_completion_dt)
 
         # Waiting and duration observe different times, so use their own fitted bounds.
         for key, ceiling in suite.get("metadata", {}).get("feature_caps", {}).items():

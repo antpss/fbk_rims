@@ -8,6 +8,7 @@ model training, and simulation runtime inference.
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import math
 from typing import Dict, List, Any, Optional, Callable
 
 
@@ -31,6 +32,9 @@ class FeatureContext:
     case_attrs: Dict[str, Any] = field(default_factory=dict)
     event_attrs: Dict[str, Any] = field(default_factory=dict)
     include_counts: bool = False
+    task: str = ""
+    trace_start_dt: Optional[datetime] = None
+    last_completion_dt: Optional[datetime] = None
 
 
 def _extract_wip(ctx: FeatureContext) -> Dict[str, float]:
@@ -59,6 +63,28 @@ def _extract_role_occupancy(ctx: FeatureContext) -> Dict[str, float]:
 
 def _extract_prev_duration(ctx: FeatureContext) -> Dict[str, float]:
     return {"Prev_Proc_Time": float(ctx.prev_dur)}
+
+
+def _elapsed_seconds(now, reference):
+    if now is None or reference is None:
+        raise ValueError("Duration temporal features require prediction and arrival timestamps")
+    seconds = (now - reference).total_seconds()
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ValueError("Duration temporal reference must be valid and not after prediction time")
+    return float(seconds)
+
+
+def _extract_trace_elapsed(ctx: FeatureContext) -> Dict[str, float]:
+    if ctx.task != "duration":
+        return {}
+    return {"Trace_Elapsed_Seconds": _elapsed_seconds(ctx.dt, ctx.trace_start_dt)}
+
+
+def _extract_since_last_completion(ctx: FeatureContext) -> Dict[str, float]:
+    if ctx.task != "duration":
+        return {}
+    reference = ctx.last_completion_dt if ctx.last_completion_dt is not None else ctx.trace_start_dt
+    return {"Since_Last_Completion_Seconds": _elapsed_seconds(ctx.dt, reference)}
 
 
 def _extract_case_attributes(ctx: FeatureContext) -> Dict[str, Any]:
@@ -105,6 +131,8 @@ FEATURE_REGISTRY: Dict[str, Callable[[FeatureContext], Dict[str, Any]]] = {
     "weekday": _extract_weekday,
     "role_occupancy": _extract_role_occupancy,
     "prev_duration": _extract_prev_duration,
+    "trace_elapsed": _extract_trace_elapsed,
+    "since_last_completion": _extract_since_last_completion,
     "trace_history": _extract_trace_history,
     "case_attributes": _extract_case_attributes,
     "event_attributes": _extract_event_attributes,
