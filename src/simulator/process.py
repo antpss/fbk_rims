@@ -598,6 +598,16 @@ class SimulationProcess:
             "status": "censored" if token.status in ("running", "scheduled") and self.duration_seconds is not None else token.status,
             "end": self.calendar.to_datetime(token.finished_at) if token.finished_at is not None else None,
         } for token in tokens], columns=["case_id", "arrival", "status", "end"])
+        # Export the payload actually used by the simulation, under its source
+        # column names. PM4Py promotes case: columns to XES trace attributes.
+        for attr in self.cfg.get("features", {}).get("case_attributes", []):
+            column = "case:" + attr["column"].removeprefix("case:")
+            if column == "case:concept:name":
+                raise ValueError("Case attributes cannot overwrite the exported XES case ID")
+            values = {token.case_id: token.case_attrs.get(attr["feature_name"])
+                      for token in tokens}
+            df_sim[column] = df_sim["case_id"].map(values)
+            case_status[column] = case_status["case_id"].map(values)
         if self.queue_policy.type == "priority":
             priorities = {token.case_id: token.queue_priority for token in tokens}
             # PM4Py recognizes case: columns as XES trace attributes.
